@@ -538,7 +538,7 @@ CRITICAL SECURITY & EXECUTION RULES:
         if (idempRef) {
           const idempSnap = await transaction.get(idempRef);
           if (idempSnap.exists) {
-            const evalRecord = evaluateIdempotencyRecord(idempSnap.data() as any, id, payloadHash);
+            const evalRecord = evaluateIdempotencyRecord(idempSnap.data() as any, id, payloadHash, uid);
             if (evalRecord.status === 'REPLAY') {
               return evalRecord.result;
             }
@@ -627,6 +627,16 @@ CRITICAL SECURITY & EXECUTION RULES:
         const currentVersion = parseInt(parts[1], 10);
         const workoutData = JSON.parse(parts.slice(2).join(":"));
         res.status(409).json({ error: "Conflict: Stale version", currentVersion, workout: workoutData });
+      } else if (
+        e.message && (
+          e.message.startsWith('Invalid ') || 
+          e.message.includes('must be') || 
+          e.message.includes('required') ||
+          e.message.includes('expected an object') ||
+          e.message.includes('Sets must be')
+        )
+      ) {
+        res.status(400).json({ error: scrubSecrets(e.message) });
       } else {
         res.status(500).json({ error: scrubSecrets(e.message) });
       }
@@ -660,7 +670,7 @@ CRITICAL SECURITY & EXECUTION RULES:
         if (idempRef) {
           const idempSnap = await transaction.get(idempRef);
           if (idempSnap.exists) {
-            const evalRecord = evaluateIdempotencyRecord(idempSnap.data() as any, id, payloadHash);
+            const evalRecord = evaluateIdempotencyRecord(idempSnap.data() as any, id, payloadHash, uid);
             if (evalRecord.status === 'REPLAY') return evalRecord.result;
             if (evalRecord.status === 'CONFLICT') throw new Error(`IDEMP_CONFLICT:${evalRecord.error}`);
           }
@@ -753,7 +763,7 @@ CRITICAL SECURITY & EXECUTION RULES:
         if (idempRef) {
           const idempSnap = await transaction.get(idempRef);
           if (idempSnap.exists) {
-            const evalRecord = evaluateIdempotencyRecord(idempSnap.data() as any, id, payloadHash);
+            const evalRecord = evaluateIdempotencyRecord(idempSnap.data() as any, id, payloadHash, uid);
             if (evalRecord.status === 'REPLAY') return evalRecord.result;
             if (evalRecord.status === 'CONFLICT') throw new Error(`IDEMP_CONFLICT:${evalRecord.error}`);
           }
@@ -864,7 +874,7 @@ CRITICAL SECURITY & EXECUTION RULES:
         if (idempRef) {
           const idempSnap = await transaction.get(idempRef);
           if (idempSnap.exists) {
-            const evalRecord = evaluateIdempotencyRecord(idempSnap.data() as any, id, payloadHash);
+            const evalRecord = evaluateIdempotencyRecord(idempSnap.data() as any, id, payloadHash, uid);
             if (evalRecord.status === 'REPLAY') return evalRecord.result;
             if (evalRecord.status === 'CONFLICT') throw new Error(`IDEMP_CONFLICT:${evalRecord.error}`);
           }

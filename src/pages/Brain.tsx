@@ -166,16 +166,12 @@ export default function Brain() {
         setActiveThread(tList[0]);
         threadToActivate = tList[0];
       } else {
-        // Seed initial data if totally empty
-        await seedForgeData(user.uid);
-        const seededWorkouts = await getWorkouts(user.uid);
-        const seededThreads = await getThreads(user.uid);
-        setWorkouts(seededWorkouts);
-        setThreads(seededThreads);
-        if (seededThreads.length > 0) {
-          setActiveThread(seededThreads[0]);
-          threadToActivate = seededThreads[0];
-        }
+        // Chat history is empty (e.g., cleared by user or new thread).
+        // Create a clean conversation thread without touching or clobbering user workouts.
+        const freshThread = await createThread(user.uid, 'Workout Coach Chat');
+        setThreads([freshThread]);
+        setActiveThread(freshThread);
+        threadToActivate = freshThread;
       }
 
       // If autoPrompt was provided and not triggered yet for this navigation

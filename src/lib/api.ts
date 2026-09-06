@@ -768,9 +768,18 @@ export async function savePersonalRecord(record: PersonalRecord): Promise<void> 
 // ==========================================
 
 export async function seedForgeData(userId: string): Promise<void> {
-  // Prevent destructive clobbering: if user already has workouts, don't re-seed base workouts
+  // Prevent destructive clobbering:
+  // 1. If user already has a seeded flag in localStorage, never re-seed
+  if (typeof window !== 'undefined' && localStorage.getItem(`forge_seeded_${userId}`) === 'true') {
+    return;
+  }
+
+  // 2. If user already has existing workouts in Firestore or local cache, mark as seeded and do not overwrite
   const existingWorkouts = await getWorkouts(userId);
   if (existingWorkouts && existingWorkouts.length > 0) {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(`forge_seeded_${userId}`, 'true');
+    }
     return;
   }
 
@@ -846,14 +855,32 @@ export async function seedForgeData(userId: string): Promise<void> {
 
   for (const w of initialWorkouts) {
     try {
-      await setDoc(doc(db, 'workouts', w.id), w);
+      const snap = await getDoc(doc(db, 'workouts', w.id));
+      if (!snap.exists()) {
+        await setDoc(doc(db, 'workouts', w.id), w);
+      }
     } catch (e) {
       console.warn("Could not seed workout to Firestore:", e);
     }
   }
-  localStorage.setItem(`forge_workouts_${userId}`, JSON.stringify(initialWorkouts));
 
-  // Seed default thread & proposal
+  // Safe localStorage update: preserve existing workouts, never clobber
+  if (typeof window !== 'undefined') {
+    const localExisting = localStorage.getItem(`forge_workouts_${userId}`);
+    let currentLocalWorkouts: Workout[] = [];
+    if (localExisting) {
+      try {
+        currentLocalWorkouts = JSON.parse(localExisting);
+      } catch (e) {}
+    }
+    const mergedWorkouts = [
+      ...currentLocalWorkouts,
+      ...initialWorkouts.filter(iw => !currentLocalWorkouts.some(cw => cw.id === iw.id))
+    ];
+    localStorage.setItem(`forge_workouts_${userId}`, JSON.stringify(mergedWorkouts));
+  }
+
+  // Seed default thread & proposal safely
   const threadId = `th_seed_${userId}`;
   const seedProposal: Proposal = {
     id: `prop_seed_${userId}`,
@@ -890,12 +917,19 @@ export async function seedForgeData(userId: string): Promise<void> {
   };
 
   try {
-    await setDoc(doc(db, 'proposals', seedProposal.id), { ...seedProposal, userId });
+    const propSnap = await getDoc(doc(db, 'proposals', seedProposal.id));
+    if (!propSnap.exists()) {
+      await setDoc(doc(db, 'proposals', seedProposal.id), { ...seedProposal, userId });
+    }
   } catch (e) {
     console.warn("Could not seed proposal to Firestore:", e);
   }
-  const existingProps = await getProposals(userId);
-  localStorage.setItem(`forge_proposals_${userId}`, JSON.stringify([seedProposal, ...existingProps.filter(p => p.id !== seedProposal.id)]));
+  if (typeof window !== 'undefined') {
+    const existingProps = await getProposals(userId);
+    if (!existingProps.some(p => p.id === seedProposal.id)) {
+      localStorage.setItem(`forge_proposals_${userId}`, JSON.stringify([seedProposal, ...existingProps]));
+    }
+  }
 
   const seedThread: Thread = {
     id: threadId,
@@ -924,12 +958,19 @@ export async function seedForgeData(userId: string): Promise<void> {
   };
 
   try {
-    await setDoc(doc(db, 'threads', seedThread.id), seedThread);
+    const threadSnap = await getDoc(doc(db, 'threads', seedThread.id));
+    if (!threadSnap.exists()) {
+      await setDoc(doc(db, 'threads', seedThread.id), seedThread);
+    }
   } catch (e) {
     console.warn("Could not seed thread to Firestore:", e);
   }
-  const existingThreads = await getThreads(userId);
-  localStorage.setItem(`forge_threads_${userId}`, JSON.stringify([seedThread, ...existingThreads.filter(t => t.id !== seedThread.id)]));
+  if (typeof window !== 'undefined') {
+    const existingThreads = await getThreads(userId);
+    if (!existingThreads.some(t => t.id === seedThread.id)) {
+      localStorage.setItem(`forge_threads_${userId}`, JSON.stringify([seedThread, ...existingThreads]));
+    }
+  }
 
   // Seed User Permissions only if not already present
   try {
@@ -944,6 +985,10 @@ export async function seedForgeData(userId: string): Promise<void> {
     }
   } catch (e) {
     console.warn("Could not check/seed user permissions:", e);
+  }
+
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(`forge_seeded_${userId}`, 'true');
   }
 
   // Record initial seed mutation audit log

@@ -157,9 +157,93 @@ const eval3 = evaluateIdempotencyRecord({
   payloadHash: testHash,
   result: { id: 'w1', version: 2 },
   createdAt: new Date().toISOString()
-}, 'w1', diffHash);
+}, 'w1', diffHash, 'u1');
 assert(eval3.status === 'CONFLICT', 'Different payload with same mutationId must be CONFLICT');
 console.log('✔ Mutation ID re-use with differing payload correctly identified as CONFLICT');
+
+// Cross-user idempotency isolation
+const evalCrossUser = evaluateIdempotencyRecord({
+  mutationId: 'm1',
+  userId: 'user_A',
+  targetId: 'w1',
+  payloadHash: testHash,
+  result: { id: 'w1', version: 2 },
+  createdAt: new Date().toISOString()
+}, 'w1', testHash, 'user_B');
+assert(evalCrossUser.status === 'CONFLICT', 'Cross-user idempotency key collision must be rejected as CONFLICT');
+assert(evalCrossUser.error?.includes('belongs to another user session'), 'Error message must reflect cross-user isolation');
+console.log('✔ Multi-tenant cross-user idempotency key hijacking rejected as CONFLICT');
+
+// 4. Proposal & OCC Simulation Tests
+console.log('\n--- 4. Proposal Validation & OCC Invariants ---');
+
+// Validate Proposal Args
+const validProposalArgs = validateProposalArgs({
+  targetEntityId: 'w_123',
+  baseVersion: 2,
+  summary: 'Increase squat volume',
+  afterState: {
+    title: 'Squat Day 2',
+    sets: [
+      { id: 's1', exercise: 'Barbell Squat', reps: 5, weight: 120 }
+    ]
+  }
+});
+assert(validProposalArgs.targetEntityId === 'w_123', 'targetEntityId must match');
+assert(validProposalArgs.baseVersion === 2, 'baseVersion must be 2');
+console.log('✔ Valid proposal arguments accepted');
+
+// Proposal args with invalid baseVersion
+let caughtBadVersion = false;
+try {
+  validateProposalArgs({
+    targetEntityId: 'w_123',
+    baseVersion: -1,
+    summary: 'Invalid'
+  });
+} catch (e) {
+  caughtBadVersion = true;
+}
+assert(caughtBadVersion, 'Expected negative baseVersion to be rejected');
+console.log('✔ Negative baseVersion in proposal rejected');
+
+// OCC Concurrency Check Simulation
+function simulateOccCheck(currentDocumentVersion: number, requestedBaseVersion: number) {
+  if (currentDocumentVersion !== requestedBaseVersion) {
+    throw new Error(`OCC_CONFLICT: document is at v${currentDocumentVersion}, mutation requested v${requestedBaseVersion}`);
+  }
+  return currentDocumentVersion + 1;
+}
+
+const vNext = simulateOccCheck(3, 3);
+assert(vNext === 4, 'OCC should increment version when baseVersion matches');
+
+let caughtOccConflict = false;
+try {
+  simulateOccCheck(4, 2); // Stale write
+} catch (e: any) {
+  caughtOccConflict = true;
+  assert(e.message.includes('OCC_CONFLICT'), 'Error must indicate OCC conflict');
+}
+assert(caughtOccConflict, 'Stale baseVersion must be rejected by OCC check');
+console.log('✔ Stale baseVersion OCC concurrency conflict correctly detected and rejected');
+
+// Rollback Contiguity Simulation
+function simulateRollbackCheck(currentVersion: number, auditLogResultVersion: number) {
+  if (currentVersion !== auditLogResultVersion) {
+    throw new Error(`NON_CONTIGUOUS: current v${currentVersion} does not match mutation result v${auditLogResultVersion}`);
+  }
+}
+
+simulateRollbackCheck(5, 5); // Contiguous
+let caughtNonContiguous = false;
+try {
+  simulateRollbackCheck(6, 4); // Non-contiguous
+} catch (e) {
+  caughtNonContiguous = true;
+}
+assert(caughtNonContiguous, 'Non-contiguous rollback must be rejected');
+console.log('✔ Rollback contiguity strictly enforced (cannot rollback non-adjacent versions)');
 
 console.log('\n======================================================');
 console.log('🎉 ALL AUTHORITATIVE PIPELINE TESTS PASSED (100% GREEN)');

@@ -50,10 +50,19 @@ export function hashMutationPayload(targetId: string, payload: any): string {
 export function evaluateIdempotencyRecord(
   existingRecord: IdempotencyRecord | null | undefined,
   currentTargetId: string,
-  currentPayloadHash: string
+  currentPayloadHash: string,
+  currentUserId?: string
 ): IdempotencyEvaluation {
   if (!existingRecord) {
     return { status: 'NEW' };
+  }
+
+  // Cross-user collision or hijack attempt -> 409 CONFLICT
+  if (currentUserId && existingRecord.userId && existingRecord.userId !== currentUserId) {
+    return {
+      status: 'CONFLICT',
+      error: `Idempotency key "${existingRecord.mutationId}" belongs to another user session.`
+    };
   }
 
   // If targetId and payloadHash match exactly -> REPLAY of original successful result
