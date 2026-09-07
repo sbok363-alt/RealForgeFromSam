@@ -161,11 +161,20 @@ export interface Thread {
   messages: ThreadMessage[];
 }
 
+export type ExperienceLevel = 'beginner' | 'intermediate' | 'advanced';
+export type PrimaryGoal = 'strength' | 'hypertrophy' | 'recomp' | 'general';
+export type EquipmentAccess = 'full_gym' | 'home_basic' | 'bodyweight';
+
 export interface UserProfile {
   userId: string;
   name?: string;
-  experience?: 'beginner' | 'intermediate' | 'advanced';
+  experience?: ExperienceLevel;
   goals?: string[];
+  primaryGoal?: PrimaryGoal;
+  daysPerWeek?: number;
+  equipment?: EquipmentAccess;
+  onboardingCompleted?: boolean;
+  onboardingCompletedAt?: number;
   createdAt: number;
 }
 

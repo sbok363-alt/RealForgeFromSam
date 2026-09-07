@@ -86,15 +86,15 @@ export default function Proposals() {
       <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl md:text-3xl font-display font-bold">Proposals & Review</h1>
+            <h1 className="text-2xl md:text-3xl font-display font-bold">Coach Recommendations</h1>
             {pendingCount > 0 && (
               <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-primary text-primary-foreground">
-                {pendingCount} Pending
+                {pendingCount} waiting
               </span>
             )}
           </div>
           <p className="text-muted-foreground text-sm mt-1">
-            Review, approve, or discard AI-generated workout recommendations before anything is committed to your data.
+            FORGE never changes your plan alone. Review each recommendation, then accept or dismiss.
           </p>
         </div>
 
@@ -102,18 +102,18 @@ export default function Proposals() {
           onClick={() => navigate('/brain')}
           className="text-xs font-semibold gap-1.5 shrink-0"
         >
-          <Brain size={15} /> Ask Brain for Proposals
+          <Brain size={15} /> Ask for a new one
         </Button>
       </header>
 
       {/* Filter Tabs */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 border-b border-border text-xs">
         {[
-          { id: 'ALL', label: `All Proposals (${proposals.length})` },
-          { id: 'PENDING_APPROVAL', label: `Pending Approval (${pendingCount})` },
-          { id: 'EXECUTED', label: `Executed (${proposals.filter(p => p.status === 'EXECUTED').length})` },
+          { id: 'ALL', label: `All (${proposals.length})` },
+          { id: 'PENDING_APPROVAL', label: `Needs you (${pendingCount})` },
+          { id: 'EXECUTED', label: `Accepted (${proposals.filter(p => p.status === 'EXECUTED').length})` },
           { id: 'REJECTED_CONFLICT', label: `Conflicts (${conflictCount})` },
-          { id: 'DISCARDED', label: `Discarded (${proposals.filter(p => p.status === 'DISCARDED').length})` }
+          { id: 'DISCARDED', label: `Dismissed (${proposals.filter(p => p.status === 'DISCARDED').length})` }
         ].map(tab => (
           <button
             key={tab.id}

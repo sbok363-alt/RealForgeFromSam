@@ -12,6 +12,15 @@ import { toolDeclarations, executeTool, validatePlanArgs, validateProposalArgs }
 import { validateWorkoutUpdates, validateWorkoutSets, stripImmutableFields } from './src/lib/validation';
 import { ToolLoopGuard } from './src/lib/tool-loop-guard';
 import { evaluateIdempotencyRecord, hashMutationPayload } from './src/lib/idempotency-guard';
+import {
+  LogSetInputSchema,
+  CreateWorkoutSessionSchema,
+  UpdateTargetProgressionSchema,
+  ModifyTrainingPlanSchema,
+  executeSecureMutation,
+  InMemoryMutationStorageAdapter,
+} from './src/domain/mutations';
+import { FirestoreMutationStorageAdapter } from './src/server/mutations/firestore-adapter';
 
 dotenv.config();
 
@@ -978,6 +987,180 @@ CRITICAL SECURITY & EXECUTION RULES:
       } else {
         res.status(500).json({ error: scrubSecrets(e.message) });
       }
+    }
+  });
+
+  // 5. POST /api/mutations/execute
+  // Universal Transactional Mutation Pipeline Gateway
+  app.post("/api/mutations/execute", async (req, res) => {
+    try {
+      const idToken = req.headers.authorization?.split("Bearer ")[1];
+      const uid = await verifyToken(idToken);
+
+      const { mutationType, envelope } = req.body || {};
+
+      if (!mutationType || !envelope) {
+        return res.status(400).json({
+          success: false,
+          error: "mutationType and envelope are required."
+        });
+      }
+
+      let payloadSchema: any;
+      let targetEntityType: string;
+      let defaultTargetId: string | undefined;
+
+      switch (mutationType) {
+        case 'LOG_SET':
+          payloadSchema = LogSetInputSchema;
+          targetEntityType = 'WORKOUT_SET';
+          defaultTargetId = envelope.payload?.workoutId || envelope.payload?.exerciseId;
+          break;
+        case 'CREATE_WORKOUT_SESSION':
+          payloadSchema = CreateWorkoutSessionSchema;
+          targetEntityType = 'WORKOUT';
+          break;
+        case 'UPDATE_TARGET_PROGRESSION':
+          payloadSchema = UpdateTargetProgressionSchema;
+          targetEntityType = 'TARGET_PROGRESSION';
+          defaultTargetId = envelope.payload?.exerciseId;
+          break;
+        case 'MODIFY_TRAINING_PLAN':
+          payloadSchema = ModifyTrainingPlanSchema;
+          targetEntityType = 'TRAINING_PLAN';
+          defaultTargetId = envelope.payload?.planId;
+          break;
+        default:
+          return res.status(400).json({
+            success: false,
+            error: `Unsupported mutationType: ${mutationType}. Allowed: LOG_SET, CREATE_WORKOUT_SESSION, UPDATE_TARGET_PROGRESSION, MODIFY_TRAINING_PLAN.`
+          });
+      }
+
+      const isDemo = idToken === 'demo-token';
+      const dbId = firebaseConfig.firestoreDatabaseId || "(default)";
+      const adminDb = isDemo ? null : getFirestore(dbId);
+      const storageAdapter = isDemo ? new InMemoryMutationStorageAdapter() : new FirestoreMutationStorageAdapter(adminDb);
+
+      const result = await executeSecureMutation({
+        rawEnvelope: envelope,
+        payloadSchema,
+        authenticatedUserId: uid,
+        targetEntityType,
+        targetEntityId: defaultTargetId,
+        storageAdapter,
+        execute: async (validatedPayload: any) => {
+          if (mutationType === 'LOG_SET') {
+            const workoutId = validatedPayload.workoutId;
+            if (workoutId && !isDemo && adminDb) {
+              const workoutRef = adminDb.collection("workouts").doc(workoutId);
+              const snap = await workoutRef.get();
+              if (snap.exists) {
+                const wData = snap.data();
+                const newSet = {
+                  id: `s_${crypto.randomUUID()}`,
+                  exercise: validatedPayload.exerciseId,
+                  weight: validatedPayload.weightKg,
+                  reps: validatedPayload.reps,
+                  rir: validatedPayload.rir,
+                  rpe: validatedPayload.rpe,
+                  completed: true,
+                  setType: validatedPayload.setType || 'N',
+                  notes: validatedPayload.notes
+                };
+                const updatedSets = [...(wData?.sets || []), newSet];
+                await workoutRef.update({
+                  sets: updatedSets,
+                  version: (wData?.version || 1) + 1,
+                  updatedAt: new Date().toISOString()
+                });
+                return { set: newSet, workoutId };
+              }
+            }
+            return { id: `set_${crypto.randomUUID()}`, ...validatedPayload };
+          }
+
+          if (mutationType === 'CREATE_WORKOUT_SESSION') {
+            const sessionId = `w_${crypto.randomUUID()}`;
+            const newWorkout = {
+              id: sessionId,
+              userId: uid,
+              title: validatedPayload.title,
+              scheduledDate: validatedPayload.scheduledDate,
+              status: validatedPayload.status || 'PLANNED',
+              version: 1,
+              sets: (validatedPayload.sets || []).map((s: any, idx: number) => ({
+                id: `s_${idx + 1}_${crypto.randomUUID().slice(0, 8)}`,
+                exercise: s.exerciseId,
+                weight: s.weightKg,
+                reps: s.reps,
+                rir: s.rir,
+                rpe: s.rpe,
+                completed: false,
+                setType: s.setType || 'N',
+                notes: s.notes
+              })),
+              notes: validatedPayload.notes || '',
+              planId: validatedPayload.planId,
+              duration: validatedPayload.durationMinutes || 0,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            };
+            if (!isDemo && adminDb) {
+              await adminDb.collection("workouts").doc(sessionId).set(newWorkout);
+            }
+            return newWorkout;
+          }
+
+          if (mutationType === 'UPDATE_TARGET_PROGRESSION') {
+            const targetId = `target_${uid}_${validatedPayload.exerciseId}`;
+            const targetData = {
+              id: targetId,
+              userId: uid,
+              exerciseId: validatedPayload.exerciseId,
+              targetWeightKg: validatedPayload.targetWeightKg,
+              targetRepsMin: validatedPayload.targetRepsMin,
+              targetRepsMax: validatedPayload.targetRepsMax,
+              suggestedRir: validatedPayload.suggestedRir,
+              action: validatedPayload.action,
+              rationale: validatedPayload.rationale,
+              updatedAt: new Date().toISOString()
+            };
+            if (!isDemo && adminDb) {
+              await adminDb.collection("targets_1rm").doc(targetId).set(targetData, { merge: true });
+            }
+            return targetData;
+          }
+
+          if (mutationType === 'MODIFY_TRAINING_PLAN') {
+            const planData = {
+              id: validatedPayload.planId,
+              userId: uid,
+              name: validatedPayload.name,
+              weeklyFrequency: validatedPayload.weeklyFrequency,
+              isActive: validatedPayload.isActive !== undefined ? validatedPayload.isActive : true,
+              days: validatedPayload.days,
+              updatedAt: new Date().toISOString()
+            };
+            if (!isDemo && adminDb) {
+              await adminDb.collection("plans").doc(validatedPayload.planId).set(planData, { merge: true });
+            }
+            return planData;
+          }
+
+          return validatedPayload;
+        }
+      });
+
+      if (!result.success) {
+        return res.status(400).json(result);
+      }
+      return res.json(result);
+    } catch (err: any) {
+      return res.status(500).json({
+        success: false,
+        error: scrubSecrets(err?.message || "Internal server error")
+      });
     }
   });
 

@@ -343,6 +343,22 @@ export function WorkoutDetailModal({
     }
   };
 
+  /** Gym-friendly quick adjust: weight steps 2.5kg, reps ±1, never negative */
+  const handleQuickAdjust = (index: number, field: 'weight' | 'reps', delta: number) => {
+    if (isEditMode) return;
+    const current = sets[index];
+    if (!current) return;
+    if (field === 'weight') {
+      const next = Math.max(0, Math.round((Number(current.weight || 0) + delta) * 10) / 10);
+      handleUpdateSet(index, 'weight', next);
+    } else {
+      handleUpdateSet(index, 'reps', Math.max(0, Math.round(Number(current.reps || 0) + delta)));
+    }
+    if ('vibrate' in navigator) {
+      try { navigator.vibrate(12); } catch { /* ignore */ }
+    }
+  };
+
   // Handle toggling set completion -> auto triggers rest timer on complete!
   const handleToggleSet = (index: number) => {
     if (isEditMode) return;
@@ -352,8 +368,11 @@ export function WorkoutDetailModal({
     handleUpdateSet(index, 'completed', isCompleted);
 
     if (isCompleted) {
-      // Auto-start rest timer
+      // Auto-start rest timer + light haptic
       handleStartRestTimer(defaultRestDuration);
+      if ('vibrate' in navigator) {
+        try { navigator.vibrate([30, 40, 30]); } catch { /* ignore */ }
+      }
     }
   };
 
@@ -1052,7 +1071,7 @@ export function WorkoutDetailModal({
                             {/* Hevy-Style Sets Table */}
                             <div className="p-2.5 sm:p-3 space-y-1.5">
                               {/* Column Headers */}
-                              <div className="grid grid-cols-[36px_1fr_64px_64px_42px_36px_28px] gap-1.5 sm:gap-2 px-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider items-center">
+                              <div className="grid grid-cols-[36px_minmax(0,1fr)_72px_64px_40px_44px_28px] gap-1 sm:gap-1.5 px-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider items-center">
                                 <div className="text-center">Set</div>
                                 <div>Previous</div>
                                 <div className="text-center">KG</div>
@@ -1067,14 +1086,22 @@ export function WorkoutDetailModal({
                                 const isCompleted = set.completed;
                                 const prevSet = rep?.history?.[0]?.sets?.[i];
                                 const prevText = prevSet 
-                                  ? `${prevSet.weight}kg × ${prevSet.reps}` 
+                                  ? `${prevSet.weight}×${prevSet.reps}` 
                                   : (rep?.nextTarget ? `🎯 ${rep.nextTarget.targetWeight}×${rep.nextTarget.targetRepsMax}` : '-');
+                                const setDeltaPct =
+                                  prevSet && set.weight > 0 && set.reps > 0
+                                    ? Math.round(
+                                        (((set.weight * set.reps) - (prevSet.weight * prevSet.reps)) /
+                                          (prevSet.weight * prevSet.reps || 1)) *
+                                          1000
+                                      ) / 10
+                                    : null;
 
                                 return (
                                   <div 
                                     key={set.id || index}
                                     className={cn(
-                                      "grid grid-cols-[36px_1fr_64px_64px_42px_36px_28px] gap-1.5 sm:gap-2 items-center px-1.5 py-1.5 rounded-xl transition-all duration-200 group border relative",
+                                      "grid grid-cols-[36px_minmax(0,1fr)_72px_64px_40px_44px_28px] gap-1 sm:gap-1.5 items-center px-1.5 py-2 rounded-xl transition-all duration-200 group border relative",
                                       isCompleted 
                                         ? isSetPR(set)
                                           ? "bg-amber-500/15 dark:bg-amber-950/40 border-amber-500/40 text-foreground shadow-[0_0_12px_rgba(245,158,11,0.15)] overflow-hidden"
@@ -1114,6 +1141,18 @@ export function WorkoutDetailModal({
                                       >
                                         {prevText}
                                       </button>
+                                      {setDeltaPct !== null && (
+                                        <span
+                                          className={cn(
+                                            "text-[10px] font-bold px-1 py-0.5 rounded shrink-0",
+                                            setDeltaPct > 0 && "text-emerald-600 dark:text-emerald-400 bg-emerald-500/10",
+                                            setDeltaPct < 0 && "text-amber-600 dark:text-amber-400 bg-amber-500/10",
+                                            setDeltaPct === 0 && "text-muted-foreground bg-secondary"
+                                          )}
+                                        >
+                                          {setDeltaPct > 0 ? `+${setDeltaPct}%` : setDeltaPct < 0 ? `${setDeltaPct}%` : '='}
+                                        </span>
+                                      )}
                                       <AnimatePresence>
                                         {isSetPR(set) && (
                                           <motion.div 
@@ -1331,6 +1370,7 @@ export function WorkoutDetailModal({
         {showCelebration && (
           <WorkoutCelebration 
             workout={{...workout, sets}} 
+            allWorkouts={allUserWorkouts}
             onClose={() => {
               setShowCelebration(false);
               onClose();

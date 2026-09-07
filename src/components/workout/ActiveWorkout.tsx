@@ -4,9 +4,7 @@ import { useAuthStore } from '../../store/useAuthStore';
 import { getExerciseById, ExerciseDef } from '../../lib/exercises';
 import { Button } from '../ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/Card';
-import { Input } from '../ui/Input';
 import { 
-  Check, 
   Timer, 
   Plus, 
   X, 
@@ -14,15 +12,21 @@ import {
   Minus, 
   TrendingDown, 
   HelpCircle, 
-  Target, 
-  Sparkles,
-  ChevronDown,
-  Info
+  Target
 } from 'lucide-react';
-import { saveWorkout, mutateWorkout, getWorkouts, getPreviousPerformance } from '../../lib/api';
+import { saveWorkout, mutateWorkout, getWorkouts } from '../../lib/api';
 import { WorkoutExercise, WorkoutSet, Workout, ProgressionReport } from '../../types';
 import { analyzeExerciseProgression } from '../../lib/progression';
 import ExerciseSelector from './ExerciseSelector';
+import { GymSetRow } from './GymSetRow';
+import { useWakeLock } from '../../hooks/useWakeLock';
+import {
+  compareLiveSet,
+  currentExerciseVolume,
+  volumeDeltaPct,
+  getPreviousExerciseSession,
+} from '../../lib/sessionCompare';
+import { WorkoutCelebration } from '../WorkoutCelebration';
 import { cn } from '../../lib/utils';
 
 export default function ActiveWorkout() {
@@ -44,6 +48,10 @@ export default function ActiveWorkout() {
   const [saving, setSaving] = useState(false);
   const [showSelector, setShowSelector] = useState(false);
   const [allUserWorkouts, setAllUserWorkouts] = useState<Workout[]>([]);
+  const [celebrationWorkout, setCelebrationWorkout] = useState<Workout | null>(null);
+
+  // Keep screen awake while a session is in progress (gym-friendly)
+  useWakeLock(Boolean(activeWorkout));
 
   // Fetch all user workouts to calculate instant deterministic progression
   useEffect(() => {
@@ -189,6 +197,7 @@ export default function ActiveWorkout() {
         }
       }
 
+      setCelebrationWorkout(completedWorkout);
       finishWorkout();
     } catch (e) {
       console.error(e);
@@ -344,110 +353,73 @@ export default function ActiveWorkout() {
                   )}
                 </div>
                 
-                {/* Sets Header */}
-                <div className="grid grid-cols-[28px_1fr_1fr_64px_38px] gap-2 px-4 py-2 text-[11px] font-bold text-muted-foreground uppercase tracking-wider border-b border-border/50 bg-secondary/10">
-                  <div className="text-center">Set</div>
-                  <div className="text-center">kg</div>
-                  <div className="text-center">Reps</div>
-                  <div className="text-center">RIR</div>
-                  <div className="text-center"><Check size={13} className="mx-auto" /></div>
-                </div>
-
-                {/* Sets List */}
-                <div className="divide-y divide-border/30">
-                  {ex.sets.map((set, setIndex) => (
-                    <div 
-                      key={set.id || setIndex} 
-                      className={cn(
-                        "grid grid-cols-[28px_1fr_1fr_64px_38px] gap-2 px-4 py-2 items-center transition-colors",
-                        set.completed ? "bg-primary/5" : "bg-card hover:bg-secondary/20"
-                      )}
-                    >
-                      <div className="text-center text-xs font-bold text-muted-foreground font-mono">
-                        {setIndex + 1}
-                      </div>
-
-                      {/* Weight */}
-                      <div>
-                        <Input 
-                          type="number" 
-                          step="0.5"
-                          min="0"
+                {/* Exercise volume vs last session */}
+                {(() => {
+                  const prev = getPreviousExerciseSession(
+                    allUserWorkouts,
+                    def?.name || ex.exerciseId,
+                    activeWorkout.id
+                  );
+                  const curVol = currentExerciseVolume(ex.sets);
+                  const dPct = prev ? volumeDeltaPct(curVol, prev.sessionVolume) : null;
+                  if (!prev) return null;
+                  return (
+                    <div className="px-3 pt-2 flex items-center justify-between text-[11px]">
+                      <span className="text-muted-foreground font-mono">
+                        Last session vol:{' '}
+                        <span className="text-foreground font-semibold">
+                          {Math.round(prev.sessionVolume).toLocaleString()} kg
+                        </span>
+                      </span>
+                      {dPct !== null && curVol > 0 && (
+                        <span
                           className={cn(
-                            "h-9 text-center text-sm font-mono font-semibold",
-                            set.completed ? "bg-transparent border-transparent text-primary font-bold" : "bg-background"
-                          )} 
-                          value={set.weight !== undefined && set.weight !== 0 ? set.weight : ''}
-                          placeholder="0"
-                          readOnly={set.completed}
-                          onChange={(e) => updateSet(ex.id, set.id, { weight: parseFloat(e.target.value) || 0 })}
-                        />
-                      </div>
-
-                      {/* Reps */}
-                      <div>
-                        <Input 
-                          type="number" 
-                          min="0"
-                          className={cn(
-                            "h-9 text-center text-sm font-mono font-semibold",
-                            set.completed ? "bg-transparent border-transparent text-primary font-bold" : "bg-background"
-                          )} 
-                          value={set.reps !== undefined && set.reps !== 0 ? set.reps : ''}
-                          placeholder="0"
-                          readOnly={set.completed}
-                          onChange={(e) => updateSet(ex.id, set.id, { reps: parseInt(e.target.value) || 0 })}
-                        />
-                      </div>
-
-                      {/* RIR (Optional Effort Tracking) */}
-                      <div>
-                        <Input 
-                          type="number"
-                          min="0"
-                          max="10"
-                          className={cn(
-                            "h-9 text-center text-xs font-mono",
-                            set.completed ? "bg-transparent border-transparent text-muted-foreground font-medium" : "bg-background text-muted-foreground"
+                            'font-bold px-2 py-0.5 rounded-full border',
+                            dPct > 0 && 'bg-emerald-500/15 text-emerald-600 border-emerald-500/30',
+                            dPct < 0 && 'bg-amber-500/15 text-amber-600 border-amber-500/30',
+                            dPct === 0 && 'bg-secondary text-muted-foreground border-border'
                           )}
-                          value={set.rir !== undefined ? set.rir : ''}
-                          placeholder="—"
-                          title="Reps In Reserve (e.g. 0, 1, 2, 3)"
-                          readOnly={set.completed}
-                          onChange={(e) => {
-                            const val = e.target.value === '' ? undefined : parseInt(e.target.value);
-                            updateSet(ex.id, set.id, { rir: val });
-                          }}
-                        />
-                      </div>
-
-                      {/* Complete Checkbox */}
-                      <div className="flex justify-center">
-                        <Button 
-                          size="icon" 
-                          variant={set.completed ? "default" : "secondary"} 
-                          className={cn(
-                            "h-8 w-8 rounded-lg transition-all",
-                            set.completed ? "bg-emerald-600 hover:bg-emerald-700 text-white" : "hover:bg-primary/20"
-                          )}
-                          onClick={() => handleCompleteSet(ex.id, set.id, set.completed, set.weight, set.reps)}
                         >
-                          <Check size={15} />
-                        </Button>
-                      </div>
+                          {dPct > 0 ? `+${dPct}%` : dPct < 0 ? `${dPct}%` : '='} vs last
+                        </span>
+                      )}
                     </div>
-                  ))}
+                  );
+                })()}
+
+                {/* Gym-first set rows: big steppers + full-width complete + vs last */}
+                <div className="p-3 space-y-3">
+                  {ex.sets.map((set, setIndex) => {
+                    const cmp = compareLiveSet(
+                      allUserWorkouts,
+                      def?.name || ex.exerciseId,
+                      setIndex,
+                      { weight: set.weight, reps: set.reps, completed: set.completed },
+                      activeWorkout.id
+                    );
+                    return (
+                      <GymSetRow
+                        key={set.id || setIndex}
+                        setNumber={setIndex + 1}
+                        set={set}
+                        onChange={(updates) => updateSet(ex.id, set.id, updates)}
+                        onComplete={() => handleCompleteSet(ex.id, set.id, set.completed, set.weight, set.reps)}
+                        previousLabel={cmp.label}
+                        deltaPct={cmp.setDeltaPct}
+                      />
+                    );
+                  })}
                 </div>
                 
                 {/* Add Set Button */}
-                <div className="p-2 border-t border-border/40 flex justify-between items-center bg-secondary/5 px-4">
+                <div className="p-3 border-t border-border/40 flex justify-between items-center bg-secondary/5 gap-2">
                   <span className="text-[11px] text-muted-foreground">
-                    RIR = Reps in Reserve (optional)
+                    ±2.5kg · ±1 rep · rest starts on complete
                   </span>
                   <Button 
-                    variant="ghost" 
+                    variant="outline" 
                     size="sm" 
-                    className="text-xs text-primary font-semibold hover:bg-primary/10 h-7"
+                    className="text-xs text-primary font-semibold border-primary/30 h-10 px-3 touch-manipulation"
                     onClick={() => {
                       const lastSet = ex.sets[ex.sets.length - 1];
                       addSet(ex.id, { 
@@ -459,7 +431,7 @@ export default function ActiveWorkout() {
                       });
                     }}
                   >
-                    <Plus size={13} className="mr-1" /> Add Set
+                    <Plus size={14} className="mr-1" /> Add Set
                   </Button>
                 </div>
               </CardContent>
@@ -486,6 +458,14 @@ export default function ActiveWorkout() {
         <ExerciseSelector 
           onClose={() => setShowSelector(false)} 
           onSelect={handleAddExercise} 
+        />
+      )}
+
+      {celebrationWorkout && (
+        <WorkoutCelebration
+          workout={celebrationWorkout}
+          allWorkouts={allUserWorkouts}
+          onClose={() => setCelebrationWorkout(null)}
         />
       )}
     </div>

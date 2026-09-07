@@ -213,7 +213,7 @@ export function RestTimer({
               {/* -30s */}
               <button
                 onClick={() => onAdjustTime(-30)}
-                className="h-8 px-2 rounded-lg bg-background/80 hover:bg-background border border-border/70 text-xs font-mono font-bold text-foreground transition-colors"
+                className="h-10 min-w-[48px] px-2.5 rounded-xl bg-background/80 hover:bg-background border border-border/70 text-xs font-mono font-bold text-foreground transition-colors touch-manipulation active:scale-95"
                 title="Minus 30 seconds"
               >
                 -30s
@@ -222,7 +222,7 @@ export function RestTimer({
               {/* +30s */}
               <button
                 onClick={() => onAdjustTime(30)}
-                className="h-8 px-2 rounded-lg bg-background/80 hover:bg-background border border-border/70 text-xs font-mono font-bold text-foreground transition-colors"
+                className="h-10 min-w-[48px] px-2.5 rounded-xl bg-background/80 hover:bg-background border border-border/70 text-xs font-mono font-bold text-foreground transition-colors touch-manipulation active:scale-95"
                 title="Plus 30 seconds"
               >
                 +30s
@@ -242,7 +242,7 @@ export function RestTimer({
               {/* Skip / Close */}
               <button
                 onClick={onSkipRest}
-                className="h-8 px-2.5 rounded-lg bg-background/80 hover:bg-destructive/10 hover:text-destructive border border-border/70 text-xs font-bold text-muted-foreground transition-colors"
+                className="h-10 px-3 rounded-xl bg-background/80 hover:bg-destructive/10 hover:text-destructive border border-border/70 text-xs font-bold text-muted-foreground transition-colors touch-manipulation active:scale-95"
                 title="Skip Rest Timer"
               >
                 Skip

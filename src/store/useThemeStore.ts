@@ -10,6 +10,7 @@ interface ThemeState {
 
 export const useThemeStore = create<ThemeState>((set) => {
   const getInitialTheme = (): Theme => {
+    if (typeof window === 'undefined') return 'dark';
     const savedTheme = localStorage.getItem('forge_theme') as Theme;
     if (savedTheme) {
       return savedTheme;

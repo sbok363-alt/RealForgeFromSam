@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useWorkoutStore } from '../../store/useWorkoutStore';
 import { useAuthStore } from '../../store/useAuthStore';
 import { mutateWorkout } from '../../lib/api';
+import { getExerciseById } from '../../lib/exercises';
 import { Button } from '../ui/Button';
 import { 
   Play, 
@@ -19,6 +20,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useWakeLock } from '../../hooks/useWakeLock';
 
 export function ActiveWorkoutBottomBar() {
   const { 
@@ -40,6 +42,9 @@ export function ActiveWorkoutBottomBar() {
   const [elapsed, setElapsed] = useState(0);
   const [restRemaining, setRestRemaining] = useState(0);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+
+  // Screen stays on during active gym session
+  useWakeLock(Boolean(activeWorkout));
 
   // Live workout timer tick
   useEffect(() => {
@@ -84,6 +89,12 @@ export function ActiveWorkoutBottomBar() {
 
     const syncInterval = setInterval(async () => {
       try {
+        // Sync whichever schema actually holds the live session data —
+        // `exercises[].sets` for sessions logged via ActiveWorkout.tsx,
+        // falling back to the flat `sets` array. Sending the stale flat
+        // array here would overwrite the server's real progress with an
+        // empty/outdated set list every 45s.
+        const hasExercises = activeWorkout.exercises && activeWorkout.exercises.length > 0;
         const updated = await mutateWorkout(
           activeWorkout.id,
           activeWorkout.version || 1,
@@ -91,7 +102,12 @@ export function ActiveWorkoutBottomBar() {
             title: activeWorkout.title,
             scheduledDate: activeWorkout.scheduledDate,
             status: activeWorkout.status,
-            sets: activeWorkout.sets
+            // Only send the field that actually holds this session's live
+            // data — sending the other, empty/stale one would overwrite
+            // real progress on the server.
+            ...(hasExercises
+              ? { exercises: activeWorkout.exercises }
+              : { sets: activeWorkout.sets })
           },
           elapsed,
           activeWorkout.volume
@@ -119,7 +135,22 @@ export function ActiveWorkoutBottomBar() {
   };
 
   // Progress metrics
-  const sets = activeWorkout?.sets || [];
+  // NOTE: the active session is logged via `activeWorkout.exercises[].sets`
+  // (see ActiveWorkout.tsx), not the legacy flat `activeWorkout.sets` array.
+  // Derive from `exercises` when present so this bar doesn't get stuck at
+  // 0/0 while a workout is actually in progress. Falls back to the flat
+  // schema for older/imported workouts that only populate `sets`.
+  const sets = useMemo(() => {
+    if (!activeWorkout) return [];
+    if (activeWorkout.exercises && activeWorkout.exercises.length > 0) {
+      return activeWorkout.exercises.flatMap((ex) => {
+        const def = getExerciseById(ex.exerciseId);
+        const exerciseName = def?.name || ex.name || ex.exerciseId;
+        return ex.sets.map((s) => ({ ...s, exercise: exerciseName }));
+      });
+    }
+    return activeWorkout.sets || [];
+  }, [activeWorkout]);
   const totalSets = sets.length;
   const completedSets = sets.filter(s => s.completed).length;
   const progressPercent = totalSets > 0 ? Math.round((completedSets / totalSets) * 100) : 0;

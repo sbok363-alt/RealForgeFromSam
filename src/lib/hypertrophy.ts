@@ -61,6 +61,9 @@ export interface HypertrophyAuditResult {
 const STORAGE_KEY = 'forge_hypertrophy_thresholds_v1';
 
 export function getStoredHypertrophyThresholds(): HypertrophyThresholds {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+    return { ...DEFAULT_HYPERTROPHY_THRESHOLDS };
+  }
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
@@ -74,6 +77,9 @@ export function getStoredHypertrophyThresholds(): HypertrophyThresholds {
 }
 
 export function saveStoredHypertrophyThresholds(thresholds: HypertrophyThresholds): void {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+    return;
+  }
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(thresholds));
   } catch (e) {
