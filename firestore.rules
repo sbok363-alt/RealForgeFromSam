@@ -40,12 +40,11 @@ service cloud.firestore {
       allow delete: if isSignedIn() && existing().userId == request.auth.uid;
     }
 
-    // Workouts: updates and deletes are DENIED from client directly.
+    // Workouts: direct client writes are DENIED.
     // Must pass through authoritative server transaction pipeline.
     match /workouts/{workoutId} {
       allow read, list: if isSignedIn() && existing().userId == request.auth.uid;
-      allow create: if isSignedIn() && incoming().userId == request.auth.uid;
-      allow update, delete: if false;
+      allow write: if false;
     }
 
     // Proposals: clients can create or update drafts/discarded, but cannot set EXECUTED or REJECTED_CONFLICT directly.
@@ -60,11 +59,10 @@ service cloud.firestore {
       allow delete: if isSignedIn() && existing().userId == request.auth.uid;
     }
 
-    // Audit logs: append-only for creation, immutable once written (updates and deletes denied).
+    // Audit logs: server-authoritative only. Client writes are completely denied.
     match /mutation_audit_logs/{logId} {
       allow read, list: if isSignedIn() && existing().userId == request.auth.uid;
-      allow create: if isSignedIn() && incoming().userId == request.auth.uid;
-      allow update, delete: if false;
+      allow write: if false;
     }
 
     // Server-only idempotency table

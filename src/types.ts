@@ -119,6 +119,8 @@ export interface Workout {
   completedAt?: number;
   totalVolume?: number;
   volume?: number;
+  duration?: number;
+  createdAt?: string;
   exercises?: WorkoutExercise[];
 }
 

@@ -1,4 +1,4 @@
-import { Workout, WorkoutSetItem, Proposal } from '../types';
+import { Workout, WorkoutSetItem, WorkoutExercise, WorkoutSet, Proposal } from '../types';
 
 export function isFiniteNumber(val: any): val is number {
   return typeof val === 'number' && Number.isFinite(val);
@@ -95,6 +95,176 @@ export function validateWorkoutSets(sets: any): WorkoutSetItem[] {
   return sets.map((s, idx) => validateWorkoutSet(s, idx));
 }
 
+/**
+ * Validates a single nested set within a workout exercise.
+ * Enforces physiological bounds, strict types (booleans as booleans, finite numbers),
+ * and eliminates unexpected arbitrary/prototype fields.
+ */
+export function validateWorkoutExerciseSet(set: any, sIdx: number = 0, eIdx: number = 0): WorkoutSet {
+  if (!set || typeof set !== 'object' || Array.isArray(set)) {
+    throw new Error(`Invalid nested set at exercise ${eIdx}, set ${sIdx}: expected an object`);
+  }
+
+  // Reject prototype-style injection attempts
+  for (const key of Object.keys(set)) {
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+      throw new Error(`Invalid nested set at exercise ${eIdx}, set ${sIdx}: forbidden prototype key "${key}"`);
+    }
+  }
+
+  let id = `s_${eIdx + 1}_${sIdx + 1}_${Math.random().toString(36).slice(2, 7)}`;
+  if (set.id !== undefined && set.id !== null) {
+    if (typeof set.id !== 'string' || !set.id.trim()) {
+      throw new Error(`Invalid nested set at exercise ${eIdx}, set ${sIdx}: set id must be a non-empty string`);
+    }
+    if (set.id.length > 128) {
+      throw new Error(`Invalid nested set at exercise ${eIdx}, set ${sIdx}: set id cannot exceed 128 characters`);
+    }
+    id = set.id.trim();
+  }
+
+  if (typeof set.weight !== 'number' || !isValidWeight(set.weight)) {
+    throw new Error(`Invalid nested set at exercise ${eIdx}, set ${sIdx}: weight must be a finite number between 0 and 1000kg (got ${set.weight})`);
+  }
+
+  if (typeof set.reps !== 'number' || !isValidReps(set.reps)) {
+    throw new Error(`Invalid nested set at exercise ${eIdx}, set ${sIdx}: reps must be an integer between 1 and 200 (got ${set.reps})`);
+  }
+
+  if (typeof set.completed !== 'boolean') {
+    throw new Error(`Invalid nested set at exercise ${eIdx}, set ${sIdx}: completed must be a boolean`);
+  }
+
+  const validated: WorkoutSet = {
+    id,
+    weight: set.weight,
+    reps: set.reps,
+    completed: set.completed
+  };
+
+  if (set.targetWeight !== undefined && set.targetWeight !== null) {
+    if (typeof set.targetWeight !== 'number' || !isValidWeight(set.targetWeight)) {
+      throw new Error(`Invalid nested set at exercise ${eIdx}, set ${sIdx}: targetWeight must be a finite number between 0 and 1000kg`);
+    }
+    validated.targetWeight = set.targetWeight;
+  }
+
+  if (set.targetReps !== undefined && set.targetReps !== null) {
+    if (typeof set.targetReps !== 'number' || !isValidReps(set.targetReps)) {
+      throw new Error(`Invalid nested set at exercise ${eIdx}, set ${sIdx}: targetReps must be an integer between 1 and 200`);
+    }
+    validated.targetReps = set.targetReps;
+  }
+
+  if (set.rir !== undefined && set.rir !== null && set.rir !== '') {
+    if (typeof set.rir !== 'number' || !isValidRir(set.rir)) {
+      throw new Error(`Invalid nested set at exercise ${eIdx}, set ${sIdx}: RIR must be a finite number between 0 and 10`);
+    }
+    validated.rir = set.rir;
+  }
+
+  if (set.rpe !== undefined && set.rpe !== null && set.rpe !== '') {
+    if (typeof set.rpe !== 'number' || !isValidRpe(set.rpe)) {
+      throw new Error(`Invalid nested set at exercise ${eIdx}, set ${sIdx}: RPE must be a finite number between 1 and 10`);
+    }
+    validated.rpe = set.rpe;
+  }
+
+  if (set.notes !== undefined && set.notes !== null) {
+    if (typeof set.notes !== 'string') {
+      throw new Error(`Invalid nested set at exercise ${eIdx}, set ${sIdx}: notes must be a string`);
+    }
+    validated.notes = set.notes.slice(0, 500);
+  }
+
+  if (set.setType !== undefined && set.setType !== null) {
+    const allowed = ['N', 'W', 'D', 'F', 'normal'];
+    if (!allowed.includes(set.setType)) {
+      throw new Error(`Invalid nested set at exercise ${eIdx}, set ${sIdx}: setType must be one of ${allowed.join(', ')}`);
+    }
+    validated.setType = set.setType;
+  }
+
+  return validated;
+}
+
+/**
+ * Validates a single nested exercise within a workout.
+ * Enforces field presence, size bounds, and validates all nested sets.
+ */
+export function validateWorkoutExercise(exercise: any, index: number = 0): WorkoutExercise {
+  if (!exercise || typeof exercise !== 'object' || Array.isArray(exercise)) {
+    throw new Error(`Invalid nested exercise at index ${index}: expected an object`);
+  }
+
+  // Reject prototype-style injection attempts
+  for (const key of Object.keys(exercise)) {
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+      throw new Error(`Invalid nested exercise at index ${index}: forbidden prototype key "${key}"`);
+    }
+  }
+
+  if (typeof exercise.exerciseId !== 'string' || !exercise.exerciseId.trim()) {
+    throw new Error(`Invalid nested exercise at index ${index}: exerciseId is required`);
+  }
+  if (exercise.exerciseId.length > 128) {
+    throw new Error(`Invalid nested exercise at index ${index}: exerciseId cannot exceed 128 characters`);
+  }
+
+  let id = `ex_${index + 1}_${Math.random().toString(36).slice(2, 7)}`;
+  if (exercise.id !== undefined && exercise.id !== null) {
+    if (typeof exercise.id !== 'string' || !exercise.id.trim()) {
+      throw new Error(`Invalid nested exercise at index ${index}: exercise id must be a non-empty string`);
+    }
+    if (exercise.id.length > 128) {
+      throw new Error(`Invalid nested exercise at index ${index}: exercise id cannot exceed 128 characters`);
+    }
+    id = exercise.id.trim();
+  }
+
+  if (!Array.isArray(exercise.sets)) {
+    throw new Error(`Invalid nested exercise at index ${index}: sets must be an array`);
+  }
+
+  const validatedSets = exercise.sets.map((s: any, sIdx: number) => validateWorkoutExerciseSet(s, sIdx, index));
+
+  const validated: WorkoutExercise = {
+    id,
+    exerciseId: exercise.exerciseId.trim(),
+    sets: validatedSets
+  };
+
+  if (exercise.name !== undefined && exercise.name !== null) {
+    if (typeof exercise.name !== 'string') {
+      throw new Error(`Invalid nested exercise at index ${index}: name must be a string`);
+    }
+    validated.name = exercise.name.slice(0, 200);
+  }
+
+  if (exercise.category !== undefined && exercise.category !== null) {
+    if (typeof exercise.category !== 'string') {
+      throw new Error(`Invalid nested exercise at index ${index}: category must be a string`);
+    }
+    validated.category = exercise.category.slice(0, 100);
+  }
+
+  if (exercise.notes !== undefined && exercise.notes !== null) {
+    if (typeof exercise.notes !== 'string') {
+      throw new Error(`Invalid nested exercise at index ${index}: notes must be a string`);
+    }
+    validated.notes = exercise.notes.slice(0, 1000);
+  }
+
+  return validated;
+}
+
+export function validateWorkoutExercises(exercises: any): WorkoutExercise[] {
+  if (!Array.isArray(exercises)) {
+    throw new Error('Workout exercises must be an array');
+  }
+  return exercises.map((ex, idx) => validateWorkoutExercise(ex, idx));
+}
+
 export function validateWorkoutUpdates(updates: any): Partial<Workout> {
   if (!updates || typeof updates !== 'object') {
     throw new Error('Workout updates must be an object');
@@ -131,8 +301,8 @@ export function validateWorkoutUpdates(updates: any): Partial<Workout> {
     result.sets = validateWorkoutSets(clean.sets);
   }
 
-  if (clean.exercises !== undefined && Array.isArray(clean.exercises)) {
-    result.exercises = clean.exercises;
+  if (clean.exercises !== undefined && clean.exercises !== null) {
+    result.exercises = validateWorkoutExercises(clean.exercises);
   }
 
   if (clean.exerciseNotes !== undefined && typeof clean.exerciseNotes === 'object') {
@@ -288,3 +458,292 @@ export function validatePlanArgs(args: any): {
     days: validatedDays
   };
 }
+
+/**
+ * Validates a complete Workout entity against authoritative schema invariants.
+ * Rejects malformed structures, ensures all set metrics are within valid physiological bounds,
+ * and eliminates arbitrary/injected fields.
+ */
+export function validateCompleteWorkout(workout: any): Workout {
+  if (!workout || typeof workout !== 'object' || Array.isArray(workout)) {
+    throw new Error('Workout must be a valid object');
+  }
+
+  const id = typeof workout.id === 'string' ? workout.id.trim() : '';
+  if (!id) {
+    throw new Error('Workout id is required');
+  }
+  if (id.length > 128) {
+    throw new Error('Workout id cannot exceed 128 characters');
+  }
+
+  const userId = typeof workout.userId === 'string' ? workout.userId.trim() : '';
+  if (!userId) {
+    throw new Error('Workout userId is required');
+  }
+  if (userId.length > 128) {
+    throw new Error('Workout userId cannot exceed 128 characters');
+  }
+
+  const title = typeof workout.title === 'string' ? workout.title.trim() : '';
+  if (!title) {
+    throw new Error('Workout title must be a non-empty string');
+  }
+  if (title.length > 200) {
+    throw new Error('Workout title cannot exceed 200 characters');
+  }
+
+  if (typeof workout.scheduledDate !== 'string' || !/^\d{4}-\d{2}-\d{2}/.test(workout.scheduledDate)) {
+    throw new Error('Workout scheduledDate must be a valid date string (YYYY-MM-DD)');
+  }
+
+  const validStatuses = ['PLANNED', 'IN_PROGRESS', 'COMPLETED', 'SKIPPED', 'planned', 'in-progress', 'completed', 'skipped'];
+  if (!workout.status || !validStatuses.includes(String(workout.status))) {
+    throw new Error(`Invalid workout status: ${workout.status}`);
+  }
+
+  const version = Number(workout.version);
+  if (!isFiniteNumber(version) || !Number.isInteger(version) || version < 1) {
+    throw new Error('Workout version must be a positive integer');
+  }
+
+  // Authoritative set validation (bounds on weight, reps, RIR, RPE)
+  const sets = validateWorkoutSets(workout.sets || []);
+
+  const result: Workout = {
+    id,
+    userId,
+    title,
+    scheduledDate: workout.scheduledDate.slice(0, 10),
+    status: String(workout.status).toUpperCase() as any,
+    version,
+    sets,
+    updatedAt: typeof workout.updatedAt === 'string' ? workout.updatedAt : new Date().toISOString()
+  };
+
+  if (typeof workout.notes === 'string') {
+    result.notes = workout.notes.slice(0, 2000);
+  }
+
+  if (workout.exerciseNotes && typeof workout.exerciseNotes === 'object' && !Array.isArray(workout.exerciseNotes)) {
+    result.exerciseNotes = { ...workout.exerciseNotes };
+  }
+
+  if (workout.exercises !== undefined && workout.exercises !== null) {
+    result.exercises = validateWorkoutExercises(workout.exercises);
+  }
+
+  if (isFiniteNumber(workout.duration) && workout.duration >= 0) {
+    result.duration = workout.duration;
+  }
+
+  if (isFiniteNumber(workout.volume) && workout.volume >= 0) {
+    result.volume = workout.volume;
+  }
+
+  if (isFiniteNumber(workout.totalVolume) && workout.totalVolume >= 0) {
+    result.totalVolume = workout.totalVolume;
+  }
+
+  if (typeof workout.planId === 'string' && workout.planId.trim()) {
+    result.planId = workout.planId.trim();
+  }
+
+  if (typeof workout.createdAt === 'string') {
+    result.createdAt = workout.createdAt;
+  }
+
+  if (isFiniteNumber(workout.startedAt)) {
+    result.startedAt = workout.startedAt;
+  }
+
+  if (isFiniteNumber(workout.completedAt)) {
+    result.completedAt = workout.completedAt;
+  }
+
+  return result;
+}
+
+export interface DeleteCreationRollback {
+  action: 'DELETE';
+  targetEntityId: string;
+}
+
+export type RollbackValidationResult = (Workout & { action?: 'RESTORE' }) | DeleteCreationRollback;
+
+/**
+ * Authoritative boundary validation for workout rollback (P0-4, P0-5, P0-6, Phase 0.75).
+ * Enforces cross-tenant isolation, references to target workout, contiguity,
+ * safe creation rollback semantics, schema validation of inverseDelta,
+ * and complete resulting workout invariant checks.
+ */
+export function executeRollbackValidation(
+  authenticatedUid: string,
+  workoutId: string,
+  workoutData: any,
+  auditLogData: any
+): RollbackValidationResult {
+  if (!authenticatedUid || typeof authenticatedUid !== 'string') {
+    throw new Error("UNAUTHORIZED");
+  }
+
+  if (!workoutId || typeof workoutId !== 'string') {
+    throw new Error("Workout ID is required");
+  }
+
+  if (!workoutData || typeof workoutData !== 'object') {
+    throw new Error("NOT_FOUND");
+  }
+
+  // P0-5 & P0-6: Verify workout ownership against authenticated UID
+  if (workoutData.userId !== authenticatedUid) {
+    throw new Error("UNAUTHORIZED");
+  }
+
+  if (workoutData.id !== workoutId) {
+    throw new Error("WORKOUT_ID_MISMATCH");
+  }
+
+  if (!auditLogData || typeof auditLogData !== 'object') {
+    throw new Error("AUDIT_LOG_NOT_FOUND");
+  }
+
+  // P0-5: Verify audit log ownership against authenticated UID
+  if (auditLogData.userId !== authenticatedUid) {
+    throw new Error("UNAUTHORIZED");
+  }
+
+  // P0-4 & P0-6: Verify audit log targets the requested workout
+  if (auditLogData.targetEntityId !== workoutId) {
+    throw new Error("INVALID_AUDIT_LOG_TARGET: Audit log does not belong to the requested workout");
+  }
+
+  if (auditLogData.targetEntityType && auditLogData.targetEntityType !== 'WORKOUT') {
+    throw new Error("INVALID_AUDIT_LOG_TYPE: Target entity is not a workout");
+  }
+
+  // Contiguity check: live workout must be at log.resultVersion
+  if (workoutData.version !== auditLogData.resultVersion) {
+    throw new Error(`NON_CONTIGUOUS:Workout is at v${workoutData?.version}, but mutation resulted in v${auditLogData?.resultVersion}`);
+  }
+
+  if (typeof auditLogData.baseVersion !== 'number' || auditLogData.baseVersion < 0) {
+    throw new Error("INVALID_ROLLBACK_TARGET: Missing or invalid baseVersion in audit log");
+  }
+
+  // P0-4: Validate inverseDelta using the authoritative workout updates schema
+  if (!auditLogData.inverseDelta || typeof auditLogData.inverseDelta !== 'object') {
+    throw new Error("INVALID_INVERSE_DELTA: inverseDelta must be an object");
+  }
+
+  // Check deletion / creation rollback semantics (Phase 0.75 - Part 1)
+  const hasDeletedFlag = auditLogData.inverseDelta.deleted === true;
+  const deltaKeys = Object.keys(auditLogData.inverseDelta);
+
+  if (hasDeletedFlag) {
+    // PART 1B: Reject structurally ambiguous combinations (e.g. { deleted: true, sets: [...] })
+    if (deltaKeys.length > 1) {
+      throw new Error("STRUCTURALLY_AMBIGUOUS_INVERSE_DELTA: Cannot combine deleted=true with other workout state fields");
+    }
+
+    // PART 1A: Only legitimate server-generated creation audit entries may trigger creation rollback
+    const isAuthoritativeCreation =
+      (auditLogData.action === 'CREATE' || auditLogData.mutationType === 'CREATE_WORKOUT') &&
+      auditLogData.baseVersion === 0 &&
+      auditLogData.resultVersion === 1;
+
+    if (!isAuthoritativeCreation) {
+      throw new Error("FORGED_DELETION_AUDIT_LOG: Audit record with deleted=true is not a legitimate server-generated creation log");
+    }
+
+    return {
+      action: 'DELETE',
+      targetEntityId: workoutId
+    };
+  }
+
+  // If action is CREATE, it MUST have inverseDelta.deleted === true
+  if (auditLogData.action === 'CREATE' || auditLogData.mutationType === 'CREATE_WORKOUT') {
+    throw new Error("STRUCTURALLY_AMBIGUOUS_AUDIT_LOG: Creation audit entry must have inverseDelta with deleted=true");
+  }
+
+  // If inverseDelta has deleted defined as false or any other value, reject ambiguity
+  if ('deleted' in auditLogData.inverseDelta) {
+    throw new Error("STRUCTURALLY_AMBIGUOUS_INVERSE_DELTA: Update rollback cannot contain deleted flag");
+  }
+
+  const validatedDelta = validateWorkoutUpdates(auditLogData.inverseDelta);
+
+  const nextVersion = (workoutData.version || 0) + 1;
+
+  // Construct candidate restored workout using strictly explicit field mapping
+  // Immutable fields: id, userId (from authenticatedUid), version, createdAt
+  const candidateRestored: Record<string, any> = {
+    id: workoutData.id,
+    userId: authenticatedUid, // Strictly authoritative identity
+    title: validatedDelta.title !== undefined ? validatedDelta.title : workoutData.title,
+    scheduledDate: validatedDelta.scheduledDate !== undefined ? validatedDelta.scheduledDate : workoutData.scheduledDate,
+    status: validatedDelta.status !== undefined ? validatedDelta.status : (workoutData.status || 'PLANNED'),
+    sets: validatedDelta.sets !== undefined ? validatedDelta.sets : (workoutData.sets || []),
+    version: nextVersion,
+    updatedAt: new Date().toISOString(),
+    createdAt: workoutData.createdAt || workoutData.updatedAt || new Date().toISOString(),
+  };
+
+  if (validatedDelta.exercises !== undefined) {
+    candidateRestored.exercises = validatedDelta.exercises;
+  } else if (workoutData.exercises !== undefined) {
+    candidateRestored.exercises = workoutData.exercises;
+  }
+
+  if (validatedDelta.notes !== undefined) {
+    candidateRestored.notes = validatedDelta.notes;
+  } else if (workoutData.notes !== undefined) {
+    candidateRestored.notes = workoutData.notes;
+  }
+
+  if (validatedDelta.exerciseNotes !== undefined) {
+    candidateRestored.exerciseNotes = validatedDelta.exerciseNotes;
+  } else if (workoutData.exerciseNotes !== undefined) {
+    candidateRestored.exerciseNotes = workoutData.exerciseNotes;
+  }
+
+  if (validatedDelta.completedAt !== undefined) {
+    candidateRestored.completedAt = validatedDelta.completedAt;
+  } else if (workoutData.completedAt !== undefined) {
+    candidateRestored.completedAt = workoutData.completedAt;
+  }
+
+  if (validatedDelta.startedAt !== undefined) {
+    candidateRestored.startedAt = validatedDelta.startedAt;
+  } else if (workoutData.startedAt !== undefined) {
+    candidateRestored.startedAt = workoutData.startedAt;
+  }
+
+  if (validatedDelta.totalVolume !== undefined) {
+    candidateRestored.totalVolume = validatedDelta.totalVolume;
+  } else if (workoutData.totalVolume !== undefined) {
+    candidateRestored.totalVolume = workoutData.totalVolume;
+  }
+
+  if (validatedDelta.volume !== undefined) {
+    candidateRestored.volume = validatedDelta.volume;
+  } else if (workoutData.volume !== undefined) {
+    candidateRestored.volume = workoutData.volume;
+  }
+
+  if (validatedDelta.duration !== undefined) {
+    candidateRestored.duration = validatedDelta.duration;
+  } else if (workoutData.duration !== undefined) {
+    candidateRestored.duration = workoutData.duration;
+  }
+
+  if (workoutData.planId) {
+    candidateRestored.planId = workoutData.planId;
+  }
+
+  // Validate the COMPLETE resulting workout against authoritative invariants
+  const completeWorkout = validateCompleteWorkout(candidateRestored);
+  return Object.assign(completeWorkout, { action: 'RESTORE' as const });
+}
+

@@ -9,7 +9,9 @@ import { getFirestore } from 'firebase-admin/firestore';
 import fs from 'fs';
 import { fetchUserDocs, fetchUserDoc, createDoc, updateDoc } from './src/lib/firestore-rest';
 import { toolDeclarations, executeTool, validatePlanArgs, validateProposalArgs } from './src/lib/server-tools';
-import { validateWorkoutUpdates, validateWorkoutSets, stripImmutableFields } from './src/lib/validation';
+import { validateWorkoutUpdates, validateWorkoutSets, stripImmutableFields, validateCompleteWorkout, executeRollbackValidation } from './src/lib/validation';
+import { Workout } from './src/types';
+import { isDemoAuthAllowed } from './src/lib/auth-util';
 import { ToolLoopGuard } from './src/lib/tool-loop-guard';
 import { evaluateIdempotencyRecord, hashMutationPayload } from './src/lib/idempotency-guard';
 import {
@@ -19,6 +21,7 @@ import {
   ModifyTrainingPlanSchema,
   executeSecureMutation,
   InMemoryMutationStorageAdapter,
+  MutationExecutionContext,
 } from './src/domain/mutations';
 import { FirestoreMutationStorageAdapter } from './src/server/mutations/firestore-adapter';
 
@@ -41,6 +44,15 @@ try {
   adminAuth = getAuth(adminApp);
 } catch (e) {
   console.warn("Firebase admin initialization notice:", e);
+}
+
+export function setAdminAuthForTesting(mock: any) {
+  adminAuth = mock;
+}
+
+let testAdminDb: any = null;
+export function setAdminDbForTesting(mock: any) {
+  testAdminDb = mock;
 }
 
 export function scrubSecrets(input: string): string {
@@ -117,16 +129,440 @@ async function generateContentWithFallback(
   throw lastError || new Error("Failed to generate response across all models.");
 }
 
-async function verifyToken(idToken: string | undefined): Promise<string> {
-  if (!idToken) throw new Error("Missing ID token");
+export const DEMO_UID = 'demo-athlete-forge';
+
+export async function validateAIAccess(idToken: string | undefined, customKey: string | undefined): Promise<string> {
+  const uid = await verifyToken(idToken);
+  if (uid === DEMO_UID && !customKey) {
+    const err: any = new Error("Demo users must provide their own Gemini API key to use AI features.");
+    err.status = 403;
+    throw err;
+  }
+  return uid;
+}
+
+export async function verifyToken(idToken: string | undefined): Promise<string> {
+  if (!idToken) {
+    const err: any = new Error("Missing ID token");
+    err.status = 401;
+    throw err;
+  }
   if (idToken === 'demo-token') {
-    return 'demo-athlete-forge';
+    if (!isDemoAuthAllowed()) {
+      const err: any = new Error("UNAUTHORIZED: Demo authentication is disabled in this environment");
+      err.status = 401;
+      throw err;
+    }
+    return DEMO_UID;
   }
   if (!adminAuth) {
-    throw new Error("Authentication service is unavailable");
+    const err: any = new Error("Authentication service is unavailable");
+    err.status = 503;
+    throw err;
   }
   const decodedToken = await adminAuth.verifyIdToken(idToken);
   return decodedToken.uid;
+}
+
+export async function handleMutationsExecute(req: any, res: any) {
+  try {
+    const idToken = req.headers.authorization?.split("Bearer ")[1];
+    const uid = await verifyToken(idToken);
+
+    const { mutationType, envelope } = req.body || {};
+
+    if (!mutationType || !envelope) {
+      return res.status(400).json({
+        success: false,
+        error: "mutationType and envelope are required."
+      });
+    }
+
+    let payloadSchema: any;
+    let targetEntityType: string;
+    let defaultTargetId: string | undefined;
+
+    switch (mutationType) {
+      case 'LOG_SET':
+        payloadSchema = LogSetInputSchema;
+        targetEntityType = envelope.payload?.workoutId ? 'workouts' : 'WORKOUT_SET';
+        defaultTargetId = envelope.payload?.workoutId || envelope.payload?.exerciseId;
+        break;
+      case 'CREATE_WORKOUT_SESSION':
+        payloadSchema = CreateWorkoutSessionSchema;
+        targetEntityType = 'WORKOUT';
+        break;
+      case 'UPDATE_TARGET_PROGRESSION':
+        payloadSchema = UpdateTargetProgressionSchema;
+        targetEntityType = 'TARGET_PROGRESSION';
+        defaultTargetId = envelope.payload?.exerciseId;
+        break;
+      case 'MODIFY_TRAINING_PLAN':
+        payloadSchema = ModifyTrainingPlanSchema;
+        targetEntityType = 'TRAINING_PLAN';
+        defaultTargetId = envelope.payload?.planId;
+        break;
+      default:
+        return res.status(400).json({
+          success: false,
+          error: `Unsupported mutationType: ${mutationType}. Allowed: LOG_SET, CREATE_WORKOUT_SESSION, UPDATE_TARGET_PROGRESSION, MODIFY_TRAINING_PLAN.`
+        });
+    }
+
+    const isDemo = idToken === 'demo-token';
+    if (isDemo && !isDemoAuthAllowed()) {
+      return res.status(401).json({ error: "UNAUTHORIZED: Demo authentication is disabled" });
+    }
+    const dbId = firebaseConfig.firestoreDatabaseId || "(default)";
+    const adminDb = isDemo ? null : getFirestore(dbId);
+    const storageAdapter = (req as any).storageAdapter || (isDemo ? new InMemoryMutationStorageAdapter() : new FirestoreMutationStorageAdapter(adminDb));
+
+    const result = await executeSecureMutation({
+      rawEnvelope: envelope,
+      payloadSchema,
+      authenticatedUserId: uid,
+      targetEntityType,
+      targetEntityId: defaultTargetId,
+      storageAdapter,
+      execute: async (validatedPayload: any, ctx: MutationExecutionContext) => {
+        if (mutationType === 'LOG_SET') {
+          const workoutId = validatedPayload.workoutId;
+          if (workoutId) {
+            const existingWorkout = ctx.existingEntity || await ctx.storage.findExistingEntity('workouts', workoutId);
+            if (!existingWorkout) {
+              throw new Error("NOT_FOUND");
+            }
+            if (existingWorkout.userId !== ctx.authenticatedUserId) {
+              throw new Error("UNAUTHORIZED");
+            }
+            const newSet = {
+              id: `s_${crypto.randomUUID()}`,
+              exercise: validatedPayload.exerciseId,
+              weight: validatedPayload.weightKg,
+              reps: validatedPayload.reps,
+              rir: validatedPayload.rir,
+              rpe: validatedPayload.rpe,
+              completed: true,
+              setType: validatedPayload.setType || 'N',
+              notes: validatedPayload.notes
+            };
+            const updatedSets = [...(existingWorkout.sets || []), newSet];
+            const updatedVersion = (existingWorkout.version || 1) + 1;
+            const now = new Date().toISOString();
+            await ctx.storage.commitMutation('workouts', workoutId, {
+              sets: updatedSets,
+              version: updatedVersion,
+              updatedAt: now
+            });
+            return { set: newSet, workoutId };
+          }
+          return { id: `set_${crypto.randomUUID()}`, ...validatedPayload };
+        }
+
+        if (mutationType === 'CREATE_WORKOUT_SESSION') {
+          const sessionId = `w_${crypto.randomUUID()}`;
+          const newWorkout = {
+            id: sessionId,
+            userId: uid,
+            title: validatedPayload.title,
+            scheduledDate: validatedPayload.scheduledDate,
+            status: validatedPayload.status || 'PLANNED',
+            version: 1,
+            sets: (validatedPayload.sets || []).map((s: any, idx: number) => ({
+              id: `s_${idx + 1}_${crypto.randomUUID().slice(0, 8)}`,
+              exercise: s.exerciseId,
+              weight: s.weightKg,
+              reps: s.reps,
+              rir: s.rir,
+              rpe: s.rpe,
+              completed: false,
+              setType: s.setType || 'N',
+              notes: s.notes
+            })),
+            notes: validatedPayload.notes || '',
+            planId: validatedPayload.planId,
+            duration: validatedPayload.durationMinutes || 0,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          };
+          if (!isDemo && adminDb) {
+            await adminDb.collection("workouts").doc(sessionId).set(newWorkout);
+          }
+          return newWorkout;
+        }
+
+        if (mutationType === 'UPDATE_TARGET_PROGRESSION') {
+          const targetId = `target_${uid}_${validatedPayload.exerciseId}`;
+          const targetData = {
+            id: targetId,
+            userId: uid,
+            exerciseId: validatedPayload.exerciseId,
+            targetWeightKg: validatedPayload.targetWeightKg,
+            targetRepsMin: validatedPayload.targetRepsMin,
+            targetRepsMax: validatedPayload.targetRepsMax,
+            suggestedRir: validatedPayload.suggestedRir,
+            action: validatedPayload.action,
+            rationale: validatedPayload.rationale,
+            updatedAt: new Date().toISOString()
+          };
+          if (!isDemo && adminDb) {
+            await adminDb.collection("targets_1rm").doc(targetId).set(targetData, { merge: true });
+          }
+          return targetData;
+        }
+
+        if (mutationType === 'MODIFY_TRAINING_PLAN') {
+          const planData = {
+            id: validatedPayload.planId,
+            userId: uid,
+            name: validatedPayload.name,
+            weeklyFrequency: validatedPayload.weeklyFrequency,
+            isActive: validatedPayload.isActive !== undefined ? validatedPayload.isActive : true,
+            days: validatedPayload.days,
+            updatedAt: new Date().toISOString()
+          };
+          if (!isDemo && adminDb) {
+            await adminDb.collection("plans").doc(validatedPayload.planId).set(planData, { merge: true });
+          }
+          return planData;
+        }
+
+        return validatedPayload;
+      }
+    });
+
+    if (!result.success) {
+      if (
+        result.error?.includes("Authorization failed") ||
+        result.error === "UNAUTHORIZED" ||
+        result.error?.includes("Unauthorized") ||
+        result.error?.includes("does not own target entity")
+      ) {
+        return res.status(403).json({ success: false, error: "Unauthorized" });
+      }
+      if (result.error === "NOT_FOUND" || result.error?.includes("not found") || result.error === "Workout not found") {
+        return res.status(404).json({ success: false, error: "Workout not found" });
+      }
+      return res.status(400).json(result);
+    }
+    return res.json(result);
+  } catch (err: any) {
+    if (err?.status === 401 || err?.message?.includes("Missing ID token") || err?.message?.includes("UNAUTHORIZED")) {
+      return res.status(401).json({ success: false, error: "Unauthorized" });
+    }
+    return res.status(500).json({
+      success: false,
+      error: scrubSecrets(err?.message || "Internal server error")
+    });
+  }
+}
+
+export async function handleWorkoutRollback(req: any, res: any) {
+  try {
+    const idToken = req.headers.authorization?.split("Bearer ")[1];
+    const uid = await verifyToken(idToken);
+    const { id } = req.params;
+    const { auditLogId, mutationId } = req.body || {};
+
+    if (!id || !auditLogId) {
+      return res.status(400).json({ error: "Workout ID and auditLogId are required" });
+    }
+
+    const payloadHash = hashMutationPayload(id, { auditLogId });
+
+    if (idToken === 'demo-token') {
+      if (!isDemoAuthAllowed()) {
+        return res.status(401).json({ error: "UNAUTHORIZED: Demo authentication is disabled" });
+      }
+      return res.json({ success: true, message: "Rollback simulated for demo token" });
+    }
+
+    const dbId = firebaseConfig.firestoreDatabaseId || "(default)";
+    const adminDb = testAdminDb || getFirestore(dbId);
+    const workoutRef = adminDb.collection("workouts").doc(id);
+    const auditLogRef = adminDb.collection("mutation_audit_logs").doc(auditLogId);
+    const idempRef = mutationId ? adminDb.collection("mutation_ids").doc(mutationId) : null;
+
+    const outcome = await adminDb.runTransaction(async (transaction: any) => {
+      if (idempRef) {
+        const idempSnap = await transaction.get(idempRef);
+        if (idempSnap.exists) {
+          const evalRecord = evaluateIdempotencyRecord(idempSnap.data() as any, id, payloadHash, uid);
+          if (evalRecord.status === 'REPLAY') return evalRecord.result;
+          if (evalRecord.status === 'CONFLICT') throw new Error(`IDEMP_CONFLICT:${evalRecord.error}`);
+        }
+      }
+
+      const logSnap = await transaction.get(auditLogRef);
+      if (!logSnap.exists) throw new Error("AUDIT_LOG_NOT_FOUND");
+      const logData = logSnap.data();
+
+      const workoutSnap = await transaction.get(workoutRef);
+      if (!workoutSnap.exists) throw new Error("NOT_FOUND");
+      const workoutData = workoutSnap.data();
+
+      // Authoritative validation boundary (P0-4, P0-5, P0-6, Phase 0.75)
+      const decision = executeRollbackValidation(uid, id, workoutData, logData);
+
+      if ('action' in decision && decision.action === 'DELETE') {
+        // Legitimate creation rollback: delete workout document atomically in transaction
+        transaction.delete(workoutRef);
+
+        const newAuditRef = adminDb.collection("mutation_audit_logs").doc();
+        transaction.set(newAuditRef, {
+          id: newAuditRef.id,
+          mutationId: mutationId || crypto.randomUUID(),
+          userId: uid,
+          actor: 'USER',
+          action: 'ROLLBACK_CREATION',
+          mutationType: 'ROLLBACK_CREATION',
+          targetEntityType: 'WORKOUT',
+          targetEntityId: id,
+          baseVersion: workoutData?.version || 1,
+          resultVersion: 0,
+          summary: `Rollback of workout creation: deleted workout "${workoutData?.title || id}"`,
+          inverseDelta: {
+            title: workoutData?.title,
+            scheduledDate: workoutData?.scheduledDate,
+            status: workoutData?.status,
+            sets: workoutData?.sets || [],
+            exercises: workoutData?.exercises || [],
+            version: workoutData?.version
+          },
+          createdAt: new Date().toISOString()
+        });
+
+        const finalResult = {
+          success: true,
+          deleted: true,
+          id,
+          message: "Workout creation rolled back: workout deleted."
+        };
+
+        if (idempRef) {
+          transaction.set(idempRef, {
+            mutationId,
+            userId: uid,
+            targetId: id,
+            payloadHash,
+            result: finalResult,
+            createdAt: new Date().toISOString()
+          });
+        }
+
+        return finalResult;
+      } else {
+        const restored = decision as Workout;
+        transaction.set(workoutRef, restored);
+
+        const newAuditRef = adminDb.collection("mutation_audit_logs").doc();
+        transaction.set(newAuditRef, {
+          id: newAuditRef.id,
+          mutationId: mutationId || crypto.randomUUID(),
+          userId: uid,
+          actor: 'USER',
+          action: 'ROLLBACK_UPDATE',
+          mutationType: 'ROLLBACK_UPDATE',
+          targetEntityType: 'WORKOUT',
+          targetEntityId: id,
+          baseVersion: workoutData?.version,
+          resultVersion: restored.version,
+          summary: `Rollback of mutation: restored state from v${logData?.baseVersion}`,
+          inverseDelta: {
+            title: workoutData?.title,
+            scheduledDate: workoutData?.scheduledDate,
+            status: workoutData?.status,
+            sets: workoutData?.sets || [],
+            exercises: workoutData?.exercises || [],
+            version: workoutData?.version
+          },
+          createdAt: new Date().toISOString()
+        });
+
+        const finalResult = {
+          success: true,
+          workout: restored
+        };
+
+        if (idempRef) {
+          transaction.set(idempRef, {
+            mutationId,
+            userId: uid,
+            targetId: id,
+            payloadHash,
+            result: finalResult,
+            createdAt: new Date().toISOString()
+          });
+        }
+
+        return finalResult;
+      }
+    });
+
+    res.json(outcome);
+  } catch (e: any) {
+    if (e.message === "NOT_FOUND" || e.message === "AUDIT_LOG_NOT_FOUND") {
+      res.status(404).json({ error: e.message });
+    } else if (e.message === "UNAUTHORIZED" || e.status === 401 || e.status === 403) {
+      res.status(403).json({ error: "Unauthorized" });
+    } else if (e.message?.startsWith("FORGED_")) {
+      res.status(403).json({ error: scrubSecrets(e.message) });
+    } else if (e.message?.startsWith("NON_CONTIGUOUS:")) {
+      res.status(409).json({ error: e.message.slice(15) });
+    } else if (e.message?.startsWith("IDEMP_CONFLICT:")) {
+      res.status(409).json({ error: e.message.slice(15) });
+    } else if (
+      e.message && (
+        e.message.startsWith("INVALID_") ||
+        e.message.startsWith("STRUCTURALLY_AMBIGUOUS_") ||
+        e.message.startsWith("WORKOUT_ID_MISMATCH") ||
+        e.message.startsWith("Invalid ") ||
+        e.message.includes("must be") ||
+        e.message.includes("required") ||
+        e.message.includes("cannot exceed") ||
+        e.message.includes("expected an object")
+      )
+    ) {
+      res.status(400).json({ error: scrubSecrets(e.message) });
+    } else {
+      res.status(500).json({ error: scrubSecrets(e.message) });
+    }
+  }
+}
+
+export async function handleTestGeminiKey(req: any, res: any) {
+  try {
+    const idToken = req.headers.authorization?.split('Bearer ')[1];
+    await verifyToken(idToken);
+
+    const { apiKey } = req.body || {};
+    const keyToTest = (typeof apiKey === 'string' && apiKey.trim()) ? apiKey.trim() : process.env.GEMINI_API_KEY;
+    if (!keyToTest) {
+      return res.status(400).json({ success: false, error: "API key is required" });
+    }
+
+    const client = new GoogleGenAI({
+      apiKey: keyToTest,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        }
+      }
+    });
+    
+    const response = await generateContentWithFallback(client, {
+      contents: "ping",
+    });
+
+    res.json({ success: true, text: response.text });
+  } catch (err: any) {
+    const safeMessage = scrubSecrets(err.message || "Failed to validate Gemini API key");
+    res.status(400).json({ 
+      success: false, 
+      error: safeMessage,
+      status: err.status || 400
+    });
+  }
 }
 
 async function startServer() {
@@ -137,40 +573,7 @@ async function startServer() {
   app.use(express.json({ limit: '1mb' }));
 
   // Authenticated Gemini Key Validation
-  app.post("/api/test-gemini-key", async (req, res) => {
-    try {
-      const idToken = req.headers.authorization?.split('Bearer ')[1];
-      await verifyToken(idToken);
-
-      const { apiKey } = req.body;
-      const keyToTest = (typeof apiKey === 'string' && apiKey.trim()) ? apiKey.trim() : process.env.GEMINI_API_KEY;
-      if (!keyToTest) {
-        return res.status(400).json({ success: false, error: "API key is required" });
-      }
-
-      const client = new GoogleGenAI({
-        apiKey: keyToTest,
-        httpOptions: {
-          headers: {
-            'User-Agent': 'aistudio-build',
-          }
-        }
-      });
-      
-      const response = await generateContentWithFallback(client, {
-        contents: "ping",
-      });
-
-      res.json({ success: true, text: response.text });
-    } catch (err: any) {
-      const safeMessage = scrubSecrets(err.message || "Failed to validate Gemini API key");
-      res.status(400).json({ 
-        success: false, 
-        error: safeMessage,
-        status: err.status || 400
-      });
-    }
-  });
+  app.post("/api/test-gemini-key", handleTestGeminiKey);
 
   // AI Brain Endpoint
   app.post("/api/forge-brain", async (req, res) => {
@@ -184,17 +587,17 @@ async function startServer() {
       const idToken = req.headers.authorization?.split('Bearer ')[1];
       
       if (!idToken) {
-        res.write(JSON.stringify({ type: 'error', error: "Unauthorized: Missing ID token" }) + '\n');
+        res.status(401).write(JSON.stringify({ type: 'error', error: "Unauthorized: Missing ID token" }) + '\n');
         res.end();
         return;
       }
 
-      // 1. Verify Identity
+      // 1 & 2. Verify Identity and BYOK Check
       let uid: string;
       try {
-        uid = await verifyToken(idToken);
+        uid = await validateAIAccess(idToken, customKey);
       } catch (err: any) {
-        res.write(JSON.stringify({ type: 'error', error: `Unauthorized: ${scrubSecrets(err.message)}` }) + '\n');
+        res.status(err.status || 401).write(JSON.stringify({ type: 'error', error: `Unauthorized: ${scrubSecrets(err.message)}` }) + '\n');
         res.end();
         return;
       }
@@ -412,11 +815,22 @@ CRITICAL SECURITY & EXECUTION RULES:
   app.post("/api/optimize-workout", async (req, res) => {
     try {
       const idToken = req.headers.authorization?.split('Bearer ')[1];
-      await verifyToken(idToken);
-      
       const { workout, strategy, geminiApiKey } = req.body;
       const customKey = (req.headers['x-gemini-api-key'] as string) || geminiApiKey;
-      const ai = getGenAIClient(customKey);
+
+      let uid: string;
+      try {
+        uid = await validateAIAccess(idToken, customKey);
+      } catch (err: any) {
+        return res.status(err.status || 401).json({ error: `Unauthorized: ${scrubSecrets(err.message)}` });
+      }
+      
+      let ai;
+      try {
+        ai = getGenAIClient(customKey);
+      } catch (keyErr: any) {
+        return res.status(400).json({ error: scrubSecrets(keyErr.message) });
+      }
 
       const prompt = `
         You are a strength and conditioning AI. The user is in the middle of a workout.
@@ -504,6 +918,118 @@ CRITICAL SECURITY & EXECUTION RULES:
   // AUTHORITATIVE MUTATION ENDPOINTS (TRANSACTIONAL)
   // ==========================================
 
+  // 0. POST /api/workouts (Server-authoritative workout creation - P0-2)
+  app.post("/api/workouts", async (req, res) => {
+    try {
+      const idToken = req.headers.authorization?.split("Bearer ")[1];
+      const uid = await verifyToken(idToken);
+
+      const { workout, actor, summary, mutationId } = req.body || {};
+      if (!workout || typeof workout !== 'object') {
+        return res.status(400).json({ error: "Workout payload is required" });
+      }
+
+      const workoutId = (typeof workout.id === 'string' && workout.id.trim())
+        ? workout.id.trim()
+        : `w_${crypto.randomUUID()}`;
+
+      // Server enforces authenticated UID and initial version: 1
+      const candidate = {
+        ...workout,
+        id: workoutId,
+        userId: uid,
+        version: 1,
+        updatedAt: new Date().toISOString(),
+        createdAt: new Date().toISOString()
+      };
+
+      const validatedWorkout = validateCompleteWorkout(candidate);
+
+      if (idToken === 'demo-token') {
+        if (!isDemoAuthAllowed()) {
+          return res.status(401).json({ error: "UNAUTHORIZED: Demo authentication is disabled" });
+        }
+        return res.json({ success: true, workout: validatedWorkout });
+      }
+
+      const payloadHash = hashMutationPayload(workoutId, { workout: validatedWorkout, actor, summary });
+      const dbId = firebaseConfig.firestoreDatabaseId || "(default)";
+      const adminDb = testAdminDb || getFirestore(dbId);
+      const workoutRef = adminDb.collection("workouts").doc(workoutId);
+      const idempRef = mutationId ? adminDb.collection("mutation_ids").doc(mutationId) : null;
+
+      const result = await adminDb.runTransaction(async (transaction) => {
+        if (idempRef) {
+          const idempSnap = await transaction.get(idempRef);
+          if (idempSnap.exists) {
+            const evalRecord = evaluateIdempotencyRecord(idempSnap.data() as any, workoutId, payloadHash, uid);
+            if (evalRecord.status === 'REPLAY') return evalRecord.result;
+            if (evalRecord.status === 'CONFLICT') throw new Error(`IDEMP_CONFLICT:${evalRecord.error}`);
+          }
+        }
+
+        const existingSnap = await transaction.get(workoutRef);
+        if (existingSnap.exists) {
+          throw new Error("ALREADY_EXISTS: Workout already exists. Use mutate endpoint to update.");
+        }
+
+        transaction.set(workoutRef, validatedWorkout);
+
+        const auditRef = adminDb.collection("mutation_audit_logs").doc();
+        transaction.set(auditRef, {
+          id: auditRef.id,
+          mutationId: mutationId || crypto.randomUUID(),
+          userId: uid,
+          actor: actor || 'USER',
+          action: 'CREATE',
+          mutationType: 'CREATE_WORKOUT',
+          targetEntityType: 'WORKOUT',
+          targetEntityId: workoutId,
+          baseVersion: 0,
+          resultVersion: 1,
+          summary: summary || `Created workout routine: ${validatedWorkout.title}`,
+          inverseDelta: { deleted: true },
+          createdAt: new Date().toISOString()
+        });
+
+        if (idempRef) {
+          transaction.set(idempRef, {
+            mutationId,
+            userId: uid,
+            targetId: workoutId,
+            payloadHash,
+            result: validatedWorkout,
+            createdAt: new Date().toISOString()
+          });
+        }
+
+        return validatedWorkout;
+      });
+
+      res.json({ success: true, workout: result });
+    } catch (e: any) {
+      if (e.message?.startsWith("ALREADY_EXISTS:")) {
+        res.status(409).json({ error: e.message.slice(15) });
+      } else if (e.message?.startsWith("IDEMP_CONFLICT:")) {
+        res.status(409).json({ error: e.message.slice(15) });
+      } else if (e.status === 401 || e.message?.includes("UNAUTHORIZED") || e.message?.includes("Missing ID token")) {
+        res.status(401).json({ error: scrubSecrets(e.message) });
+      } else if (
+        e.message && (
+          e.message.startsWith('Invalid ') || 
+          e.message.includes('must be') || 
+          e.message.includes('required') ||
+          e.message.includes('cannot exceed') ||
+          e.message.includes('expected an object')
+        )
+      ) {
+        res.status(400).json({ error: scrubSecrets(e.message) });
+      } else {
+        res.status(500).json({ error: scrubSecrets(e.message) });
+      }
+    }
+  });
+
   // 1. POST /api/workouts/:id/mutate
   app.post("/api/workouts/:id/mutate", async (req, res) => {
     try {
@@ -525,6 +1051,9 @@ CRITICAL SECURITY & EXECUTION RULES:
       const payloadHash = hashMutationPayload(id, { baseVersion, updates: validatedUpdates, duration, volume });
 
       if (idToken === 'demo-token') {
+        if (!isDemoAuthAllowed()) {
+          return res.status(401).json({ error: "UNAUTHORIZED: Demo authentication is disabled" });
+        }
         const syntheticWorkout = {
           id,
           userId: uid,
@@ -667,6 +1196,9 @@ CRITICAL SECURITY & EXECUTION RULES:
       const payloadHash = hashMutationPayload(id, { action: 'DELETE' });
 
       if (idToken === 'demo-token') {
+        if (!isDemoAuthAllowed()) {
+          return res.status(401).json({ error: "UNAUTHORIZED: Demo authentication is disabled" });
+        }
         return res.json({ success: true, deletedId: id });
       }
 
@@ -744,117 +1276,8 @@ CRITICAL SECURITY & EXECUTION RULES:
     }
   });
 
-  // 3. POST /api/workouts/:id/rollback
-  app.post("/api/workouts/:id/rollback", async (req, res) => {
-    try {
-      const idToken = req.headers.authorization?.split("Bearer ")[1];
-      const uid = await verifyToken(idToken);
-      const { id } = req.params;
-      const { auditLogId, mutationId } = req.body;
-
-      if (!id || !auditLogId) {
-        return res.status(400).json({ error: "Workout ID and auditLogId are required" });
-      }
-
-      const payloadHash = hashMutationPayload(id, { auditLogId });
-
-      if (idToken === 'demo-token') {
-        return res.json({ success: true, message: "Rollback simulated for demo token" });
-      }
-
-      const dbId = firebaseConfig.firestoreDatabaseId || "(default)";
-      const adminDb = getFirestore(dbId);
-      const workoutRef = adminDb.collection("workouts").doc(id);
-      const auditLogRef = adminDb.collection("mutation_audit_logs").doc(auditLogId);
-      const idempRef = mutationId ? adminDb.collection("mutation_ids").doc(mutationId) : null;
-
-      const restoredWorkout = await adminDb.runTransaction(async (transaction) => {
-        if (idempRef) {
-          const idempSnap = await transaction.get(idempRef);
-          if (idempSnap.exists) {
-            const evalRecord = evaluateIdempotencyRecord(idempSnap.data() as any, id, payloadHash, uid);
-            if (evalRecord.status === 'REPLAY') return evalRecord.result;
-            if (evalRecord.status === 'CONFLICT') throw new Error(`IDEMP_CONFLICT:${evalRecord.error}`);
-          }
-        }
-
-        const logSnap = await transaction.get(auditLogRef);
-        if (!logSnap.exists) throw new Error("AUDIT_LOG_NOT_FOUND");
-        const logData = logSnap.data();
-        if (logData?.userId !== uid) throw new Error("UNAUTHORIZED");
-
-        const workoutSnap = await transaction.get(workoutRef);
-        if (!workoutSnap.exists) throw new Error("NOT_FOUND");
-        const workoutData = workoutSnap.data();
-        if (workoutData?.userId !== uid) throw new Error("UNAUTHORIZED");
-
-        // Contiguity check: workout must currently be at log.resultVersion
-        if (workoutData?.version !== logData?.resultVersion) {
-          throw new Error(`NON_CONTIGUOUS:Workout is at v${workoutData?.version}, but mutation resulted in v${logData?.resultVersion}`);
-        }
-
-        const newVersion = (workoutData?.version || 0) + 1;
-        const restored = {
-          ...workoutData,
-          ...logData?.inverseDelta,
-          id,
-          userId: uid,
-          version: newVersion,
-          updatedAt: new Date().toISOString()
-        };
-
-        transaction.set(workoutRef, restored);
-
-        const newAuditRef = adminDb.collection("mutation_audit_logs").doc();
-        transaction.set(newAuditRef, {
-          id: newAuditRef.id,
-          mutationId: mutationId || crypto.randomUUID(),
-          userId: uid,
-          actor: 'USER',
-          targetEntityType: 'WORKOUT',
-          targetEntityId: id,
-          baseVersion: workoutData?.version,
-          resultVersion: newVersion,
-          summary: `Rollback of mutation: restored state from v${logData?.baseVersion}`,
-          inverseDelta: {
-            title: workoutData?.title,
-            scheduledDate: workoutData?.scheduledDate,
-            status: workoutData?.status,
-            sets: workoutData?.sets || [],
-            version: workoutData?.version
-          },
-          createdAt: new Date().toISOString()
-        });
-
-        if (idempRef) {
-          transaction.set(idempRef, {
-            mutationId,
-            userId: uid,
-            targetId: id,
-            payloadHash,
-            result: restored,
-            createdAt: new Date().toISOString()
-          });
-        }
-
-        return restored;
-      });
-
-      res.json({ success: true, workout: restoredWorkout });
-    } catch (e: any) {
-      if (e.message === "NOT_FOUND" || e.message === "AUDIT_LOG_NOT_FOUND") {
-        res.status(404).json({ error: e.message });
-      } else if (e.message === "UNAUTHORIZED") {
-        res.status(403).json({ error: "Unauthorized" });
-      } else if (e.message.startsWith("NON_CONTIGUOUS:")) {
-        res.status(409).json({ error: e.message.slice(15) });
-      } else if (e.message.startsWith("IDEMP_CONFLICT:")) {
-        res.status(409).json({ error: e.message.slice(15) });
-      } else {
-        res.status(500).json({ error: scrubSecrets(e.message) });
-      }
-    }
-  });
+  // 3. POST /api/workouts/:id/rollback (Hardened against forged audit data - P0-4, P0-5, P0-6, Phase 0.75)
+  app.post("/api/workouts/:id/rollback", handleWorkoutRollback);
 
   // 4. POST /api/proposals/:id/execute
   app.post("/api/proposals/:id/execute", async (req, res) => {
@@ -871,6 +1294,9 @@ CRITICAL SECURITY & EXECUTION RULES:
       const payloadHash = hashMutationPayload(id, { action: 'EXECUTE' });
 
       if (idToken === 'demo-token') {
+        if (!isDemoAuthAllowed()) {
+          return res.status(401).json({ error: "UNAUTHORIZED: Demo authentication is disabled" });
+        }
         return res.json({ success: true, message: "Proposal execution simulated for demo token" });
       }
 
@@ -992,177 +1418,7 @@ CRITICAL SECURITY & EXECUTION RULES:
 
   // 5. POST /api/mutations/execute
   // Universal Transactional Mutation Pipeline Gateway
-  app.post("/api/mutations/execute", async (req, res) => {
-    try {
-      const idToken = req.headers.authorization?.split("Bearer ")[1];
-      const uid = await verifyToken(idToken);
-
-      const { mutationType, envelope } = req.body || {};
-
-      if (!mutationType || !envelope) {
-        return res.status(400).json({
-          success: false,
-          error: "mutationType and envelope are required."
-        });
-      }
-
-      let payloadSchema: any;
-      let targetEntityType: string;
-      let defaultTargetId: string | undefined;
-
-      switch (mutationType) {
-        case 'LOG_SET':
-          payloadSchema = LogSetInputSchema;
-          targetEntityType = 'WORKOUT_SET';
-          defaultTargetId = envelope.payload?.workoutId || envelope.payload?.exerciseId;
-          break;
-        case 'CREATE_WORKOUT_SESSION':
-          payloadSchema = CreateWorkoutSessionSchema;
-          targetEntityType = 'WORKOUT';
-          break;
-        case 'UPDATE_TARGET_PROGRESSION':
-          payloadSchema = UpdateTargetProgressionSchema;
-          targetEntityType = 'TARGET_PROGRESSION';
-          defaultTargetId = envelope.payload?.exerciseId;
-          break;
-        case 'MODIFY_TRAINING_PLAN':
-          payloadSchema = ModifyTrainingPlanSchema;
-          targetEntityType = 'TRAINING_PLAN';
-          defaultTargetId = envelope.payload?.planId;
-          break;
-        default:
-          return res.status(400).json({
-            success: false,
-            error: `Unsupported mutationType: ${mutationType}. Allowed: LOG_SET, CREATE_WORKOUT_SESSION, UPDATE_TARGET_PROGRESSION, MODIFY_TRAINING_PLAN.`
-          });
-      }
-
-      const isDemo = idToken === 'demo-token';
-      const dbId = firebaseConfig.firestoreDatabaseId || "(default)";
-      const adminDb = isDemo ? null : getFirestore(dbId);
-      const storageAdapter = isDemo ? new InMemoryMutationStorageAdapter() : new FirestoreMutationStorageAdapter(adminDb);
-
-      const result = await executeSecureMutation({
-        rawEnvelope: envelope,
-        payloadSchema,
-        authenticatedUserId: uid,
-        targetEntityType,
-        targetEntityId: defaultTargetId,
-        storageAdapter,
-        execute: async (validatedPayload: any) => {
-          if (mutationType === 'LOG_SET') {
-            const workoutId = validatedPayload.workoutId;
-            if (workoutId && !isDemo && adminDb) {
-              const workoutRef = adminDb.collection("workouts").doc(workoutId);
-              const snap = await workoutRef.get();
-              if (snap.exists) {
-                const wData = snap.data();
-                const newSet = {
-                  id: `s_${crypto.randomUUID()}`,
-                  exercise: validatedPayload.exerciseId,
-                  weight: validatedPayload.weightKg,
-                  reps: validatedPayload.reps,
-                  rir: validatedPayload.rir,
-                  rpe: validatedPayload.rpe,
-                  completed: true,
-                  setType: validatedPayload.setType || 'N',
-                  notes: validatedPayload.notes
-                };
-                const updatedSets = [...(wData?.sets || []), newSet];
-                await workoutRef.update({
-                  sets: updatedSets,
-                  version: (wData?.version || 1) + 1,
-                  updatedAt: new Date().toISOString()
-                });
-                return { set: newSet, workoutId };
-              }
-            }
-            return { id: `set_${crypto.randomUUID()}`, ...validatedPayload };
-          }
-
-          if (mutationType === 'CREATE_WORKOUT_SESSION') {
-            const sessionId = `w_${crypto.randomUUID()}`;
-            const newWorkout = {
-              id: sessionId,
-              userId: uid,
-              title: validatedPayload.title,
-              scheduledDate: validatedPayload.scheduledDate,
-              status: validatedPayload.status || 'PLANNED',
-              version: 1,
-              sets: (validatedPayload.sets || []).map((s: any, idx: number) => ({
-                id: `s_${idx + 1}_${crypto.randomUUID().slice(0, 8)}`,
-                exercise: s.exerciseId,
-                weight: s.weightKg,
-                reps: s.reps,
-                rir: s.rir,
-                rpe: s.rpe,
-                completed: false,
-                setType: s.setType || 'N',
-                notes: s.notes
-              })),
-              notes: validatedPayload.notes || '',
-              planId: validatedPayload.planId,
-              duration: validatedPayload.durationMinutes || 0,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString()
-            };
-            if (!isDemo && adminDb) {
-              await adminDb.collection("workouts").doc(sessionId).set(newWorkout);
-            }
-            return newWorkout;
-          }
-
-          if (mutationType === 'UPDATE_TARGET_PROGRESSION') {
-            const targetId = `target_${uid}_${validatedPayload.exerciseId}`;
-            const targetData = {
-              id: targetId,
-              userId: uid,
-              exerciseId: validatedPayload.exerciseId,
-              targetWeightKg: validatedPayload.targetWeightKg,
-              targetRepsMin: validatedPayload.targetRepsMin,
-              targetRepsMax: validatedPayload.targetRepsMax,
-              suggestedRir: validatedPayload.suggestedRir,
-              action: validatedPayload.action,
-              rationale: validatedPayload.rationale,
-              updatedAt: new Date().toISOString()
-            };
-            if (!isDemo && adminDb) {
-              await adminDb.collection("targets_1rm").doc(targetId).set(targetData, { merge: true });
-            }
-            return targetData;
-          }
-
-          if (mutationType === 'MODIFY_TRAINING_PLAN') {
-            const planData = {
-              id: validatedPayload.planId,
-              userId: uid,
-              name: validatedPayload.name,
-              weeklyFrequency: validatedPayload.weeklyFrequency,
-              isActive: validatedPayload.isActive !== undefined ? validatedPayload.isActive : true,
-              days: validatedPayload.days,
-              updatedAt: new Date().toISOString()
-            };
-            if (!isDemo && adminDb) {
-              await adminDb.collection("plans").doc(validatedPayload.planId).set(planData, { merge: true });
-            }
-            return planData;
-          }
-
-          return validatedPayload;
-        }
-      });
-
-      if (!result.success) {
-        return res.status(400).json(result);
-      }
-      return res.json(result);
-    } catch (err: any) {
-      return res.status(500).json({
-        success: false,
-        error: scrubSecrets(err?.message || "Internal server error")
-      });
-    }
-  });
+  app.post("/api/mutations/execute", handleMutationsExecute);
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
@@ -1184,4 +1440,6 @@ CRITICAL SECURITY & EXECUTION RULES:
   });
 }
 
-startServer();
+if (!process.argv[1]?.includes('test') && !process.env.VITEST) {
+  startServer();
+}

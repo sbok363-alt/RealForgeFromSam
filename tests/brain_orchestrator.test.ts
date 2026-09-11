@@ -33,8 +33,8 @@ async function runBrainOrchestratorTests() {
       status: 'COMPLETED',
       version: 1,
       sets: [
-        { exercise: 'Bench Press', weight: 100, reps: 8, completed: true, rir: 2 },
-        { exercise: 'Bench Press', weight: 100, reps: 8, completed: true, rir: 2 },
+        { id: 's1_1', exercise: 'Bench Press', weight: 100, reps: 8, completed: true, rir: 2 },
+        { id: 's1_2', exercise: 'Bench Press', weight: 100, reps: 8, completed: true, rir: 2 },
       ]
     },
     {
@@ -44,8 +44,8 @@ async function runBrainOrchestratorTests() {
       status: 'COMPLETED',
       version: 1,
       sets: [
-        { exercise: 'Bench Press', weight: 100, reps: 8, completed: true, rir: 2 },
-        { exercise: 'Bench Press', weight: 100, reps: 8, completed: true, rir: 2 },
+        { id: 's2_1', exercise: 'Bench Press', weight: 100, reps: 8, completed: true, rir: 2 },
+        { id: 's2_2', exercise: 'Bench Press', weight: 100, reps: 8, completed: true, rir: 2 },
       ]
     },
     {
@@ -55,8 +55,8 @@ async function runBrainOrchestratorTests() {
       status: 'COMPLETED',
       version: 1,
       sets: [
-        { exercise: 'Bench Press', weight: 100, reps: 8, completed: true, rir: 2 },
-        { exercise: 'Bench Press', weight: 100, reps: 8, completed: true, rir: 2 },
+        { id: 's3_1', exercise: 'Bench Press', weight: 100, reps: 8, completed: true, rir: 2 },
+        { id: 's3_2', exercise: 'Bench Press', weight: 100, reps: 8, completed: true, rir: 2 },
       ]
     }
   ];

@@ -128,49 +128,39 @@ export async function saveWorkout(
   actor: 'USER' | 'AI_BRAIN' | 'SYSTEM_AUTONOMOUS' = 'USER',
   summary: string = 'Created initial workout routine'
 ): Promise<Workout> {
-  const current = await getWorkout(workout.id, workout.userId || 'default');
-  if (current) {
-    throw new Error("saveWorkout is create-only. Existing workouts must be updated via mutateWorkout.");
-  }
+  const token = (await auth.currentUser?.getIdToken()) || 'demo-token';
+  const mutationId = crypto.randomUUID();
 
-  const newWorkout: Workout = {
-    ...workout,
-    version: 1,
-    updatedAt: new Date().toISOString()
-  };
-
-  // 1. Write workout to Firestore
-  try {
-    await setDoc(doc(db, 'workouts', workout.id), newWorkout);
-  } catch (e) {
-    console.warn("Firestore saveWorkout failed, saving locally:", e);
-  }
-
-  // 2. Update localStorage cache
-  if (workout.userId) {
-    const all = await getWorkouts(workout.userId);
-    const nextList = [newWorkout, ...all.filter(w => w.id !== workout.id)];
-    localStorage.setItem(`forge_workouts_${workout.userId}`, JSON.stringify(nextList));
-  }
-
-  // 3. Create initial Mutation Audit Log
-  if (workout.userId) {
-    await recordMutationAuditLog({
-      id: crypto.randomUUID(),
-      mutationId: crypto.randomUUID(),
-      userId: workout.userId,
+  // P0-2: Workouts must be created via the authoritative server API
+  const res = await fetch('/api/workouts', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({
+      workout,
       actor,
-      targetEntityType: 'WORKOUT',
-      targetEntityId: workout.id,
-      baseVersion: 0,
-      resultVersion: 1,
       summary,
-      inverseDelta: { deleted: true },
-      createdAt: new Date().toISOString()
-    });
+      mutationId
+    })
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || 'Failed to create workout on server');
   }
 
-  return newWorkout;
+  const created: Workout = data.workout;
+
+  // Update localStorage cache
+  if (created.userId) {
+    const all = await getWorkouts(created.userId);
+    const nextList = [created, ...all.filter(w => w.id !== created.id)];
+    localStorage.setItem(`forge_workouts_${created.userId}`, JSON.stringify(nextList));
+  }
+
+  return created;
 }
 
 export async function deleteWorkout(
@@ -369,12 +359,7 @@ export async function getMutationAuditLogs(userId: string, targetEntityId?: stri
 }
 
 export async function recordMutationAuditLog(log: MutationAuditLog): Promise<void> {
-  try {
-    await setDoc(doc(db, 'mutation_audit_logs', log.id), log);
-  } catch (e) {
-    console.warn("Could not record audit log to Firestore:", e);
-  }
-
+  // P0-1: mutation_audit_logs is strictly server-authoritative. Direct client Firestore writes are denied.
   if (log.userId) {
     const list = await getMutationAuditLogs(log.userId);
     const updated = [log, ...list.filter(l => l.id !== log.id)];
@@ -857,10 +842,10 @@ export async function seedForgeData(userId: string): Promise<void> {
     try {
       const snap = await getDoc(doc(db, 'workouts', w.id));
       if (!snap.exists()) {
-        await setDoc(doc(db, 'workouts', w.id), w);
+        await saveWorkout(w, 'SYSTEM_AUTONOMOUS', 'Initial sample workout seed');
       }
     } catch (e) {
-      console.warn("Could not seed workout to Firestore:", e);
+      console.warn("Could not seed workout via server API:", e);
     }
   }
 
