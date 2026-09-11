@@ -509,9 +509,11 @@ export default function Brain() {
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 sm:gap-2">
-              <h1 className="text-base sm:text-2xl font-display font-bold truncate">FORGE Brain</h1>
-              <span className="text-[9px] sm:text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
-                Copilot
+              <h1 className="text-base sm:text-2xl font-display font-black truncate tracking-widest text-cyan-500 drop-shadow-[0_0_10px_rgba(6,182,212,0.8)]">
+                FORGE AI TERMINAL
+              </h1>
+              <span className="text-[9px] sm:text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                Active
               </span>
             </div>
             <div className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
@@ -542,9 +544,9 @@ export default function Brain() {
       </header>
 
       {/* Main Chat & Copilot Canvas */}
-      <Card className="flex-1 min-h-0 flex flex-col overflow-hidden bg-card/60 border-primary/20 shadow-lg rounded-2xl">
+      <Card className="flex-1 min-h-0 flex flex-col overflow-hidden bg-black/60 backdrop-blur-xl border-cyan-500/20 shadow-[0_0_30px_rgba(6,182,212,0.1)] rounded-2xl">
         {/* Active Thread Meta Strip */}
-        <div className="px-2.5 py-1.5 sm:px-4 sm:py-2 bg-secondary/30 border-b border-border/40 flex items-center justify-between text-xs shrink-0">
+        <div className="px-2.5 py-1.5 sm:px-4 sm:py-2 bg-black/40 border-b border-cyan-500/30 flex items-center justify-between text-xs shrink-0">
           <div className="flex items-center gap-2 min-w-0">
             <div className="relative">
               <button 
@@ -666,10 +668,10 @@ export default function Brain() {
             return (
               <div key={msg.id || i} className={cn("flex flex-col gap-2", isUser ? "items-end" : "items-start")}>
                 <div className={cn(
-                  "max-w-[88%] md:max-w-[80%] rounded-2xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-xs sm:text-sm leading-relaxed shadow-2xs whitespace-pre-wrap",
+                  "max-w-[88%] md:max-w-[80%] rounded-2xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-xs sm:text-sm leading-relaxed shadow-2xl whitespace-pre-wrap transition-all",
                   isUser 
                     ? "bg-primary text-primary-foreground rounded-tr-xs" 
-                    : "bg-secondary/70 text-secondary-foreground rounded-tl-xs border border-border/40"
+                    : "bg-black/80 text-cyan-400 font-mono rounded-tl-xs border border-cyan-500/50 shadow-[0_0_15px_rgba(6,182,212,0.15)]"
                 )}>
                   {isUser ? (
                     msg.content
@@ -697,9 +699,12 @@ export default function Brain() {
           {/* Real-time Tool Status Indicator */}
           {loading && (
             <div className="flex justify-start">
-              <div className="max-w-[85%] sm:max-w-[80%] rounded-2xl px-3 py-2 sm:px-4 sm:py-3 text-xs bg-secondary/80 text-secondary-foreground rounded-tl-xs border border-primary/20 flex items-center gap-2 shadow-sm animate-pulse">
-                <BrainIcon size={14} className="text-primary animate-spin shrink-0" />
-                <span className="font-medium text-foreground">{toolStatus || "FORGE Brain is formulating proposal..."}</span>
+              <div className="max-w-[85%] sm:max-w-[80%] rounded-2xl px-3 py-2 sm:px-4 sm:py-3 text-xs bg-black/80 text-cyan-400 font-mono rounded-tl-xs border border-cyan-500/50 shadow-[0_0_15px_rgba(6,182,212,0.15)] flex items-center gap-2">
+                <BrainIcon size={14} className="text-cyan-400 animate-spin shrink-0" />
+                <span>
+                  {toolStatus || "> FORGE AI IS PROCESSING..."}
+                  <span className="inline-block w-1.5 h-3.5 bg-cyan-400 ml-1 align-middle animate-pulse" />
+                </span>
               </div>
             </div>
           )}

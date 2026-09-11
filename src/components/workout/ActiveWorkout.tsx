@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useWorkoutStore } from '../../store/useWorkoutStore';
 import { useAuthStore } from '../../store/useAuthStore';
+import { soundFx } from '../../lib/soundFx';
 import { getExerciseById, ExerciseDef } from '../../lib/exercises';
 import { Button } from '../ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/Card';
@@ -106,6 +107,7 @@ export default function ActiveWorkout() {
     }
     updateSet(exId, setId, { completed: !currentStatus });
     if (!currentStatus) {
+      soundFx.playHeavyLock();
       setRestTimer(90); // default 90s
     }
   };

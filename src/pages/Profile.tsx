@@ -4,14 +4,16 @@ import { useAuthStore } from '../store/useAuthStore';
 import { useThemeStore } from '../store/useThemeStore';
 import { auth } from '../lib/firebase';
 import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
-import { LogOut, Moon, Sun, Sparkles, ShieldCheck, RefreshCw, AlertCircle } from 'lucide-react';
+import { LogOut, Moon, Sun, Sparkles, ShieldCheck, RefreshCw, AlertCircle, Volume2, VolumeX } from 'lucide-react';
 import { Card, CardContent } from '../components/ui/Card';
+import { soundFx } from '../lib/soundFx';
 
 export default function Profile() {
   const { user, setUser } = useAuthStore();
   const { theme, toggleTheme } = useThemeStore();
   const [connectingGoogle, setConnectingGoogle] = useState(false);
   const [googleError, setGoogleError] = useState<string | null>(null);
+  const [soundEnabled, setSoundEnabled] = useState(soundFx.isEnabled());
 
   const handleSignOut = async () => {
     localStorage.removeItem('forge_demo_session');
@@ -133,14 +135,34 @@ export default function Profile() {
       
       {/* Preferences Card */}
       <Card>
-        <CardContent className="p-6 flex items-center justify-between">
-          <div className="flex flex-col">
-            <span className="font-semibold">Appearance Theme</span>
-            <span className="text-sm text-muted-foreground">Switch between light and dark visual presentation</span>
+        <CardContent className="p-6 flex flex-col gap-6">
+          <div className="flex items-center justify-between">
+            <div className="flex flex-col">
+              <span className="font-semibold">Appearance Theme</span>
+              <span className="text-sm text-muted-foreground">Switch between light and dark visual presentation</span>
+            </div>
+            <Button variant="outline" size="icon" onClick={toggleTheme}>
+              {theme === 'dark' ? <Moon size={20} /> : <Sun size={20} />}
+            </Button>
           </div>
-          <Button variant="outline" size="icon" onClick={toggleTheme}>
-            {theme === 'dark' ? <Moon size={20} /> : <Sun size={20} />}
-          </Button>
+          
+          <div className="flex items-center justify-between">
+            <div className="flex flex-col">
+              <span className="font-semibold text-cyan-500">Cyber-Forge Haptics</span>
+              <span className="text-sm text-muted-foreground">Synthesized cybernetic feedback & metallic lock sounds</span>
+            </div>
+            <Button 
+              variant="outline" 
+              size="icon" 
+              className={soundEnabled ? 'text-cyan-500 border-cyan-500/50 hover:bg-cyan-500/10' : ''}
+              onClick={() => {
+                const newState = soundFx.toggle();
+                setSoundEnabled(newState);
+              }}
+            >
+              {soundEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
+            </Button>
+          </div>
         </CardContent>
       </Card>
       

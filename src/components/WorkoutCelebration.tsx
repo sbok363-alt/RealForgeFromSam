@@ -1,9 +1,12 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { Button } from './ui/Button';
 import { CheckCircle2, TrendingUp, Zap, Brain, Target, ArrowRight } from 'lucide-react';
 import { Workout } from '../types';
 import { analyzeExerciseProgression } from '../lib/progression';
+import { ParticleEmbers } from './ui/ParticleEmbers';
+import { AnimatedNumber } from './ui/AnimatedNumber';
+import { soundFx } from '../lib/soundFx';
 import {
   getPreviousExerciseSession,
   currentExerciseVolume,
@@ -20,6 +23,10 @@ interface WorkoutCelebrationProps {
 
 export function WorkoutCelebration({ workout, allWorkouts = [], onClose }: WorkoutCelebrationProps) {
   const navigate = useNavigate();
+
+  useEffect(() => {
+    soundFx.playHum();
+  }, []);
 
   const stats = useMemo(() => {
     const sets = (workout.sets || []).filter((s) => s.weight > 0 && s.reps > 0);
@@ -112,15 +119,18 @@ export function WorkoutCelebration({ workout, allWorkouts = [], onClose }: Worko
   }, [workout, allWorkouts]);
 
   return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.9 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.9 }}
-      transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-      className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-background/95 backdrop-blur-md"
-    >
-      <div className="bg-card w-full max-w-md p-6 sm:p-8 rounded-3xl border border-border shadow-[0_0_50px_-12px_rgba(16,185,129,0.3)] flex flex-col relative overflow-hidden max-h-[90vh] overflow-y-auto">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-emerald-500/20 blur-3xl rounded-full pointer-events-none" />
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-background/90 backdrop-blur-md transition-opacity" onClick={onClose} />
+      <ParticleEmbers />
+      
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.9 }}
+        transition={{ type: 'spring', damping: 25, stiffness: 400 }}
+        className="relative z-10 bg-card w-full max-w-md p-6 sm:p-8 rounded-3xl border border-border shadow-[0_0_50px_-12px_rgba(255,100,0,0.3)] flex flex-col overflow-hidden max-h-[90vh] overflow-y-auto"
+      >
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-orange-500/20 blur-3xl rounded-full pointer-events-none" />
 
         <div className="flex flex-col items-center text-center relative">
           <motion.div
@@ -143,9 +153,9 @@ export function WorkoutCelebration({ workout, allWorkouts = [], onClose }: Worko
         {/* Metrics */}
         <div className="grid grid-cols-3 gap-2 mb-5 relative">
           {[
-            { label: 'Volume', value: `${stats.totalVolume.toLocaleString()}`, unit: 'kg' },
-            { label: 'Sets', value: String(stats.totalSets), unit: '' },
-            { label: 'Lifts', value: String(stats.exerciseCount), unit: '' },
+            { label: 'Volume', value: stats.totalVolume, unit: 'kg' },
+            { label: 'Sets', value: stats.totalSets, unit: '' },
+            { label: 'Lifts', value: stats.exerciseCount, unit: '' },
           ].map((m) => (
             <div
               key={m.label}
@@ -155,7 +165,7 @@ export function WorkoutCelebration({ workout, allWorkouts = [], onClose }: Worko
                 {m.label}
               </span>
               <span className="text-lg font-mono font-black text-foreground">
-                {m.value}
+                <AnimatedNumber value={m.value} format={(v) => Math.round(v).toLocaleString()} />
                 {m.unit && (
                   <span className="text-xs font-sans font-medium text-muted-foreground"> {m.unit}</span>
                 )}
@@ -229,7 +239,7 @@ export function WorkoutCelebration({ workout, allWorkouts = [], onClose }: Worko
             Done <ArrowRight size={16} />
           </Button>
         </div>
-      </div>
-    </motion.div>
+      </motion.div>
+    </div>
   );
 }

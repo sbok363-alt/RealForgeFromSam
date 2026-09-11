@@ -29,6 +29,9 @@ import { WorkoutDetailModal } from '../components/WorkoutDetailModal';
 import { MutationAuditModal } from '../components/MutationAuditModal';
 import { useNavigate } from 'react-router-dom';
 
+import { AmbientBackground } from '../components/ui/AmbientBackground';
+import { soundFx } from '../lib/soundFx';
+
 export function Layout() {
   const { user } = useAuthStore();
   const location = useLocation();
@@ -108,7 +111,8 @@ export function Layout() {
   ];
 
   return (
-    <div className="flex h-[100dvh] max-h-[100dvh] bg-background text-foreground flex-col md:flex-row pb-16 md:pb-0 overflow-hidden">
+    <div className="flex h-[100dvh] max-h-[100dvh] bg-background/50 text-foreground flex-col md:flex-row pb-16 md:pb-0 overflow-hidden relative">
+      <AmbientBackground />
       {/* Mobile Top Bar */}
       <header className="md:hidden flex items-center justify-between px-3 py-2 border-b border-border bg-background/95 backdrop-blur-md z-10 shrink-0">
         <div className="flex items-center gap-2">
@@ -192,28 +196,40 @@ export function Layout() {
                 <NavLink
                   key={item.path}
                   to={item.path}
+                  onClick={() => soundFx.playClick(1200)}
                   className={({ isActive }) =>
                     cn(
-                      "flex items-center justify-between rounded-xl px-3.5 py-2.5 text-sm font-medium transition-all",
+                      "relative flex items-center justify-between rounded-xl px-3.5 py-2.5 text-sm font-medium transition-colors overflow-hidden",
                       isActive 
-                        ? "bg-primary text-primary-foreground font-semibold shadow-xs" 
-                        : "text-muted-foreground hover:bg-secondary hover:text-foreground",
+                        ? "text-primary-foreground font-semibold shadow-xs" 
+                        : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
                       item.highlight && !isActive && "text-accent hover:text-accent font-bold"
                     )
                   }
                 >
-                  <div className="flex items-center gap-3">
-                    <Icon className="h-4 w-4" />
-                    <span>{item.name}</span>
-                  </div>
+                  {({ isActive }) => (
+                    <>
+                      {isActive && (
+                        <motion.div
+                          layoutId="desktopNavActivePill"
+                          className="absolute inset-0 bg-primary rounded-xl -z-10 shadow-[0_0_15px_rgba(6,182,212,0.25)]"
+                          transition={{ type: "spring", stiffness: 400, damping: 25 }}
+                        />
+                      )}
+                      <div className="flex items-center gap-3 relative z-10">
+                        <Icon className="h-4 w-4" />
+                        <span>{item.name}</span>
+                      </div>
 
-                  {item.badge !== undefined && (
-                    <span className={cn(
-                      "px-2 py-0.5 rounded-full text-[10px] font-bold",
-                      item.badgeColor ? item.badgeColor : "bg-primary-foreground text-primary"
-                    )}>
-                      {item.badge}
-                    </span>
+                      {item.badge !== undefined && (
+                        <span className={cn(
+                          "px-2 py-0.5 rounded-full text-[10px] font-bold relative z-10",
+                          item.badgeColor ? item.badgeColor : "bg-primary-foreground text-primary"
+                        )}>
+                          {item.badge}
+                        </span>
+                      )}
+                    </>
                   )}
                 </NavLink>
               );
@@ -242,10 +258,10 @@ export function Layout() {
           <AnimatePresence mode="wait">
             <motion.div
               key={location.pathname}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.2 }}
+              initial={{ opacity: 0, y: 8, scale: 0.99 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -8, scale: 0.99 }}
+              transition={{ type: "spring", stiffness: 400, damping: 25 }}
               className="h-full flex-1 flex flex-col min-h-0"
             >
               <Outlet />
@@ -264,6 +280,7 @@ export function Layout() {
               <NavLink
                 key={item.path}
                 to={item.path}
+                onClick={() => soundFx.playClick(1200)}
                 className={({ isActive }) =>
                   cn(
                     "flex flex-col items-center justify-center py-1 px-1 text-[11px] font-medium transition-all relative h-full",

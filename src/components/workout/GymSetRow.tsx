@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Check, Minus, Plus, TrendingUp, TrendingDown, Minus as EqualIcon } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { WorkoutSet } from '../../types';
+import { soundFx } from '../../lib/soundFx';
+import { ForgeSparkBurst } from '../ui/ForgeSparkBurst';
 
 interface GymSetRowProps {
   key?: React.Key;
@@ -30,16 +32,26 @@ export function GymSetRow({
   deltaPct,
 }: GymSetRowProps) {
   const done = Boolean(set.completed);
+  const [showBurst, setShowBurst] = useState(false);
 
   const bumpWeight = (dir: 1 | -1) => {
     if (done) return;
+    soundFx.playClick(dir > 0 ? 1200 : 900);
     const next = Math.max(0, Math.round(((set.weight || 0) + dir * weightStep) * 10) / 10);
     onChange({ weight: next });
   };
 
   const bumpReps = (dir: 1 | -1) => {
     if (done) return;
+    soundFx.playClick(dir > 0 ? 1200 : 900);
     onChange({ reps: Math.max(0, (set.reps || 0) + dir) });
+  };
+
+  const handleCompleteWithBurst = () => {
+    if (!done) {
+      setShowBurst(true);
+    }
+    onComplete();
   };
 
   const hasDelta = typeof deltaPct === 'number';
@@ -198,20 +210,23 @@ export function GymSetRow({
         </div>
       </div>
 
-      {/* Complete — full width thumb target */}
-      <button
-        type="button"
-        onClick={onComplete}
-        className={cn(
-          'w-full h-14 rounded-xl font-bold text-sm flex items-center justify-center gap-2 touch-manipulation active:scale-[0.98] transition-all',
-          done
-            ? 'bg-emerald-600 text-white shadow-[0_0_16px_rgba(16,185,129,0.35)]'
-            : 'bg-primary text-primary-foreground shadow-md'
-        )}
-      >
-        <Check size={20} strokeWidth={2.5} />
-        {done ? 'Completed — tap to undo' : 'Complete set'}
-      </button>
+      {/* Complete — full width thumb target with tactile burst */}
+      <div className="relative">
+        <ForgeSparkBurst active={showBurst} onComplete={() => setShowBurst(false)} />
+        <button
+          type="button"
+          onClick={handleCompleteWithBurst}
+          className={cn(
+            'w-full h-14 rounded-xl font-bold text-sm flex items-center justify-center gap-2 touch-manipulation active:scale-[0.98] transition-all relative z-10',
+            done
+              ? 'bg-emerald-600 text-white shadow-[0_0_16px_rgba(16,185,129,0.35)]'
+              : 'bg-primary text-primary-foreground shadow-md'
+          )}
+        >
+          <Check size={20} strokeWidth={2.5} />
+          {done ? 'Completed — tap to undo' : 'Complete set'}
+        </button>
+      </div>
     </div>
   );
 }

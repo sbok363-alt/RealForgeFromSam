@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { Card, CardContent } from './ui/Card';
 import { Button } from './ui/Button';
+import { AnimatedNumber } from './ui/AnimatedNumber';
 import { Workout, Proposal } from '../types';
 import { useNavigate } from 'react-router-dom';
 import { 
@@ -158,7 +159,7 @@ export function TodayBriefing({ workouts, proposals, userName, onJustGo }: Today
             <div className="flex flex-col items-center justify-center px-3 py-2 rounded-xl bg-warning/10 border border-warning/20 shrink-0">
               <div className="flex items-center gap-1 text-warning">
                 <Flame size={16} className="fill-current" />
-                <span className="text-lg font-bold font-mono leading-none">{briefing.streak}</span>
+                <AnimatedNumber value={briefing.streak} className="text-lg font-bold font-mono leading-none" />
               </div>
               <span className="text-[10px] font-semibold uppercase tracking-wider text-warning/80 mt-0.5">
                 day streak

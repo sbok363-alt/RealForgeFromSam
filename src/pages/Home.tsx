@@ -17,6 +17,7 @@ import { WeeklyRecapCard } from '../components/WeeklyRecapCard';
 import { JustGoSheet } from '../components/JustGoSheet';
 import { ProgressionRulesCard } from '../components/ProgressionRulesCard';
 import { DeloadCard } from '../components/DeloadCard';
+import { DashboardMuscleHeatmap } from '../components/DashboardMuscleHeatmap';
 import { 
   Brain, 
   Calendar, 
@@ -146,6 +147,12 @@ export default function Home() {
     return Math.round(vol);
   }, [workouts]);
 
+  const todayWorkout = React.useMemo(() => {
+    const planned = workouts.filter(w => w.status === 'PLANNED' || w.status === 'planned');
+    const todayStr = new Date().toISOString().split('T')[0];
+    return planned.find(w => w.scheduledDate === todayStr) || planned[0] || null;
+  }, [workouts]);
+
   const volumeTarget = 30000; // can later come from user profile
   const volumePct = Math.min(100, Math.round((weeklyVolume / volumeTarget) * 100));
 
@@ -225,6 +232,12 @@ export default function Home() {
         onJustGo={() => setShowJustGo(true)}
       />
 
+      {/* Kinetic Muscle Heatmap — live workout targeting & anatomical stress */}
+      <DashboardMuscleHeatmap
+        workouts={workouts}
+        todayWorkout={todayWorkout}
+      />
+
       {/* Weekly recap — only until dismissed */}
       {showRecap && weeklyRecap && user && completedCount >= 1 && (
         <WeeklyRecapCard
@@ -284,9 +297,9 @@ export default function Home() {
         </Card>
       )}
 
-      {/* Compact real metrics */}
+      {/* Compact real metrics with dark glassmorphism */}
       <section className="grid grid-cols-3 gap-3">
-        <Card className="border border-border/70 bg-card">
+        <Card className="border border-border/70 dark:border-cyan-500/20 bg-card/80 dark:bg-black/60 backdrop-blur-xl hover:border-cyan-500/40 hover:shadow-[0_0_15px_rgba(6,182,212,0.1)] transition-all duration-300">
           <CardContent className="p-3.5 flex flex-col justify-between h-full space-y-1">
             <div className="flex items-center gap-1.5 text-muted-foreground text-[10px] font-semibold uppercase tracking-wider">
               <Flame size={12} className="text-warning" />
@@ -298,7 +311,7 @@ export default function Home() {
           </CardContent>
         </Card>
 
-        <Card className="border border-border/70 bg-card">
+        <Card className="border border-border/70 dark:border-cyan-500/20 bg-card/80 dark:bg-black/60 backdrop-blur-xl hover:border-cyan-500/40 hover:shadow-[0_0_15px_rgba(6,182,212,0.1)] transition-all duration-300">
           <CardContent className="p-3.5 flex flex-col justify-between h-full space-y-1">
             <div className="flex items-center gap-1.5 text-muted-foreground text-[10px] font-semibold uppercase tracking-wider">
               <Dumbbell size={12} className="text-primary" />
@@ -310,7 +323,7 @@ export default function Home() {
           </CardContent>
         </Card>
 
-        <Card className="border border-border/70 bg-card">
+        <Card className="border border-border/70 dark:border-cyan-500/20 bg-card/80 dark:bg-black/60 backdrop-blur-xl hover:border-cyan-500/40 hover:shadow-[0_0_15px_rgba(6,182,212,0.1)] transition-all duration-300">
           <CardContent className="p-3.5 flex flex-col justify-between h-full space-y-1">
             <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider">
               <div className="flex items-center gap-1.5 text-muted-foreground">
