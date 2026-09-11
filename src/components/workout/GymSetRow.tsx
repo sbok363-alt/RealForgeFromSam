@@ -118,7 +118,7 @@ export function GymSetRow({
               disabled={done}
               onClick={() => bumpWeight(-1)}
               className={cn(
-                'h-12 w-12 rounded-xl border flex items-center justify-center shrink-0 touch-manipulation',
+                'h-11 w-10 sm:h-12 sm:w-12 rounded-xl border flex items-center justify-center shrink-0 touch-manipulation',
                 'active:scale-95 transition-transform',
                 done
                   ? 'opacity-40 border-border bg-secondary/30'
@@ -137,7 +137,7 @@ export function GymSetRow({
               placeholder="0"
               onChange={(e) => onChange({ weight: parseFloat(e.target.value) || 0 })}
               className={cn(
-                'flex-1 h-12 min-w-0 text-center font-mono font-bold text-base rounded-xl border bg-background focus:outline-none focus:ring-2 focus:ring-primary',
+                'flex-1 h-11 sm:h-12 min-w-0 text-center font-mono font-bold text-base rounded-xl border bg-background focus:outline-none focus:ring-2 focus:ring-primary',
                 done && 'border-transparent bg-transparent text-emerald-700 dark:text-emerald-400'
               )}
             />
@@ -146,7 +146,7 @@ export function GymSetRow({
               disabled={done}
               onClick={() => bumpWeight(1)}
               className={cn(
-                'h-12 w-12 rounded-xl border flex items-center justify-center shrink-0 touch-manipulation',
+                'h-11 w-10 sm:h-12 sm:w-12 rounded-xl border flex items-center justify-center shrink-0 touch-manipulation',
                 'active:scale-95 transition-transform',
                 done
                   ? 'opacity-40 border-border bg-secondary/30'
@@ -169,7 +169,7 @@ export function GymSetRow({
               disabled={done}
               onClick={() => bumpReps(-1)}
               className={cn(
-                'h-12 w-12 rounded-xl border flex items-center justify-center shrink-0 touch-manipulation',
+                'h-11 w-10 sm:h-12 sm:w-12 rounded-xl border flex items-center justify-center shrink-0 touch-manipulation',
                 'active:scale-95 transition-transform',
                 done
                   ? 'opacity-40 border-border bg-secondary/30'
@@ -187,7 +187,7 @@ export function GymSetRow({
               placeholder="0"
               onChange={(e) => onChange({ reps: parseInt(e.target.value) || 0 })}
               className={cn(
-                'flex-1 h-12 min-w-0 text-center font-mono font-bold text-base rounded-xl border bg-background focus:outline-none focus:ring-2 focus:ring-primary',
+                'flex-1 h-11 sm:h-12 min-w-0 text-center font-mono font-bold text-base rounded-xl border bg-background focus:outline-none focus:ring-2 focus:ring-primary',
                 done && 'border-transparent bg-transparent text-emerald-700 dark:text-emerald-400'
               )}
             />
@@ -196,7 +196,7 @@ export function GymSetRow({
               disabled={done}
               onClick={() => bumpReps(1)}
               className={cn(
-                'h-12 w-12 rounded-xl border flex items-center justify-center shrink-0 touch-manipulation',
+                'h-11 w-10 sm:h-12 sm:w-12 rounded-xl border flex items-center justify-center shrink-0 touch-manipulation',
                 'active:scale-95 transition-transform',
                 done
                   ? 'opacity-40 border-border bg-secondary/30'
@@ -217,7 +217,7 @@ export function GymSetRow({
           type="button"
           onClick={handleCompleteWithBurst}
           className={cn(
-            'w-full h-14 rounded-xl font-bold text-sm flex items-center justify-center gap-2 touch-manipulation active:scale-[0.98] transition-all relative z-10',
+            'w-full h-12 sm:h-13 rounded-xl font-bold text-sm flex items-center justify-center gap-2 touch-manipulation active:scale-[0.98] transition-all relative z-10',
             done
               ? 'bg-emerald-600 text-white shadow-[0_0_16px_rgba(16,185,129,0.35)]'
               : 'bg-primary text-primary-foreground shadow-md'

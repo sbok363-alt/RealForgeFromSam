@@ -142,7 +142,7 @@ export function Layout() {
       </header>
 
       {/* Desktop Sidebar */}
-      <aside className="hidden md:flex flex-col w-64 border-r border-border bg-card/40 p-4 sticky top-0 h-screen justify-between shrink-0">
+      <aside className="hidden md:flex flex-col w-64 border-r border-border bg-card/40 p-4 h-full justify-between shrink-0">
         <div>
           {/* Logo & System Badge */}
           <div className="mb-6 px-3">
@@ -258,11 +258,11 @@ export function Layout() {
           <AnimatePresence mode="wait">
             <motion.div
               key={location.pathname}
-              initial={{ opacity: 0, y: 8, scale: 0.99 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -8, scale: 0.99 }}
-              transition={{ type: "spring", stiffness: 400, damping: 25 }}
-              className="h-full flex-1 flex flex-col min-h-0"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.16, ease: "easeOut" }}
+              className={cn("w-full", isBrainPage ? "h-full flex-1 flex flex-col min-h-0" : "flex-1")}
             >
               <Outlet />
             </motion.div>

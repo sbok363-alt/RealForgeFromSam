@@ -17,7 +17,6 @@ import { WeeklyRecapCard } from '../components/WeeklyRecapCard';
 import { JustGoSheet } from '../components/JustGoSheet';
 import { ProgressionRulesCard } from '../components/ProgressionRulesCard';
 import { DeloadCard } from '../components/DeloadCard';
-import { DashboardMuscleHeatmap } from '../components/DashboardMuscleHeatmap';
 import { 
   Brain, 
   Calendar, 
@@ -147,12 +146,6 @@ export default function Home() {
     return Math.round(vol);
   }, [workouts]);
 
-  const todayWorkout = React.useMemo(() => {
-    const planned = workouts.filter(w => w.status === 'PLANNED' || w.status === 'planned');
-    const todayStr = new Date().toISOString().split('T')[0];
-    return planned.find(w => w.scheduledDate === todayStr) || planned[0] || null;
-  }, [workouts]);
-
   const volumeTarget = 30000; // can later come from user profile
   const volumePct = Math.min(100, Math.round((weeklyVolume / volumeTarget) * 100));
 
@@ -213,16 +206,18 @@ export default function Home() {
       )}
 
       {/* Primary action — always first after welcome */}
-      <Button
-        onClick={() => setShowJustGo(true)}
-        className="w-full h-14 text-base font-bold gap-2 shadow-[0_0_24px_rgba(6,182,212,0.25)]"
-      >
-        <Zap size={20} className="fill-current" />
-        Just Go
-      </Button>
-      <p className="text-[11px] text-center text-muted-foreground -mt-3">
-        Readiness → today’s session → accept & train
-      </p>
+      <div className="space-y-1.5">
+        <Button
+          onClick={() => setShowJustGo(true)}
+          className="w-full h-12 text-sm sm:text-base font-bold gap-2 shadow-[0_0_20px_rgba(6,182,212,0.18)]"
+        >
+          <Zap size={18} className="fill-current" />
+          Just Go
+        </Button>
+        <p className="text-[11px] text-center text-muted-foreground">
+          Readiness → today’s session → accept & train
+        </p>
+      </div>
 
       {/* Daily context */}
       <TodayBriefing 
@@ -230,12 +225,6 @@ export default function Home() {
         proposals={proposals}
         userName={user?.displayName || undefined}
         onJustGo={() => setShowJustGo(true)}
-      />
-
-      {/* Kinetic Muscle Heatmap — live workout targeting & anatomical stress */}
-      <DashboardMuscleHeatmap
-        workouts={workouts}
-        todayWorkout={todayWorkout}
       />
 
       {/* Weekly recap — only until dismissed */}
@@ -298,44 +287,44 @@ export default function Home() {
       )}
 
       {/* Compact real metrics with dark glassmorphism */}
-      <section className="grid grid-cols-3 gap-3">
+      <section className="grid grid-cols-3 gap-2 sm:gap-3">
         <Card className="border border-border/70 dark:border-cyan-500/20 bg-card/80 dark:bg-black/60 backdrop-blur-xl hover:border-cyan-500/40 hover:shadow-[0_0_15px_rgba(6,182,212,0.1)] transition-all duration-300">
-          <CardContent className="p-3.5 flex flex-col justify-between h-full space-y-1">
-            <div className="flex items-center gap-1.5 text-muted-foreground text-[10px] font-semibold uppercase tracking-wider">
-              <Flame size={12} className="text-warning" />
+          <CardContent className="p-2.5 sm:p-3.5 flex flex-col justify-between h-full space-y-1">
+            <div className="flex items-center gap-1.5 text-muted-foreground text-[9px] sm:text-[10px] font-semibold uppercase tracking-wider">
+              <Flame size={12} className="text-warning shrink-0" />
               <span>Streak</span>
             </div>
-            <div className="text-xl font-bold font-mono">
-              {realStreak} <span className="text-xs font-sans text-muted-foreground">days</span>
+            <div className="text-base sm:text-xl font-bold font-mono">
+              {realStreak} <span className="text-[10px] sm:text-xs font-sans text-muted-foreground">days</span>
             </div>
           </CardContent>
         </Card>
 
         <Card className="border border-border/70 dark:border-cyan-500/20 bg-card/80 dark:bg-black/60 backdrop-blur-xl hover:border-cyan-500/40 hover:shadow-[0_0_15px_rgba(6,182,212,0.1)] transition-all duration-300">
-          <CardContent className="p-3.5 flex flex-col justify-between h-full space-y-1">
-            <div className="flex items-center gap-1.5 text-muted-foreground text-[10px] font-semibold uppercase tracking-wider">
-              <Dumbbell size={12} className="text-primary" />
+          <CardContent className="p-2.5 sm:p-3.5 flex flex-col justify-between h-full space-y-1">
+            <div className="flex items-center gap-1.5 text-muted-foreground text-[9px] sm:text-[10px] font-semibold uppercase tracking-wider">
+              <Dumbbell size={12} className="text-primary shrink-0" />
               <span>Logged</span>
             </div>
-            <div className="text-xl font-bold font-mono">
-              {completedCount} <span className="text-xs font-sans text-muted-foreground">total</span>
+            <div className="text-base sm:text-xl font-bold font-mono">
+              {completedCount} <span className="text-[10px] sm:text-xs font-sans text-muted-foreground">total</span>
             </div>
           </CardContent>
         </Card>
 
         <Card className="border border-border/70 dark:border-cyan-500/20 bg-card/80 dark:bg-black/60 backdrop-blur-xl hover:border-cyan-500/40 hover:shadow-[0_0_15px_rgba(6,182,212,0.1)] transition-all duration-300">
-          <CardContent className="p-3.5 flex flex-col justify-between h-full space-y-1">
-            <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider">
-              <div className="flex items-center gap-1.5 text-muted-foreground">
-                <TrendingUp size={12} className="text-emerald-500" />
-                <span>7d Vol</span>
+          <CardContent className="p-2.5 sm:p-3.5 flex flex-col justify-between h-full space-y-1">
+            <div className="flex items-center justify-between text-[9px] sm:text-[10px] font-semibold uppercase tracking-wider gap-1">
+              <div className="flex items-center gap-1 text-muted-foreground min-w-0">
+                <TrendingUp size={12} className="text-emerald-500 shrink-0" />
+                <span className="truncate">7d Vol</span>
               </div>
-              <span className={volumePct >= 80 ? "text-emerald-500" : "text-muted-foreground"}>
+              <span className={cn("shrink-0", volumePct >= 80 ? "text-emerald-500" : "text-muted-foreground")}>
                 {volumePct}%
               </span>
             </div>
             <div className="space-y-1">
-              <div className="text-sm font-bold font-mono leading-none">
+              <div className="text-xs sm:text-sm font-bold font-mono leading-tight truncate">
                 {weeklyVolume.toLocaleString()} <span className="text-[10px] font-sans text-muted-foreground">kg</span>
               </div>
               <div className="h-1 w-full bg-secondary rounded-full overflow-hidden">
@@ -353,24 +342,24 @@ export default function Home() {
       <section className="flex gap-2">
         <Button 
           variant="outline"
-          className="flex-1 h-11 text-xs font-semibold gap-1.5"
+          className="flex-1 h-10 sm:h-11 px-2 text-[11px] sm:text-xs font-semibold gap-1 sm:gap-1.5 whitespace-nowrap"
           onClick={() => navigate('/workout')}
         >
-          <Calendar size={14} /> All Workouts
+          <Calendar size={14} className="shrink-0" /> All Workouts
         </Button>
         <Button 
           variant="outline"
-          className="flex-1 h-11 text-xs font-semibold gap-1.5"
+          className="flex-1 h-10 sm:h-11 px-2 text-[11px] sm:text-xs font-semibold gap-1 sm:gap-1.5 whitespace-nowrap"
           onClick={() => navigate('/brain')}
         >
-          <Brain size={14} /> Open Brain
+          <Brain size={14} className="shrink-0" /> Open Brain
         </Button>
         <Button 
           variant="outline"
-          className="flex-1 h-11 text-xs font-semibold gap-1.5"
+          className="flex-1 h-10 sm:h-11 px-2 text-[11px] sm:text-xs font-semibold gap-1 sm:gap-1.5 whitespace-nowrap"
           onClick={() => navigate('/progress')}
         >
-          <Activity size={14} /> Progress
+          <Activity size={14} className="shrink-0" /> Progress
         </Button>
       </section>
 
