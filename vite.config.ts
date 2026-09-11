@@ -9,6 +9,8 @@ export default defineConfig(() => {
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
+        'MuscleMapJS': path.resolve(__dirname, './src/lib/muscle-map/index.ts'),
+        '@abdofallah/musclemap-js': path.resolve(__dirname, './src/lib/muscle-map/index.ts'),
       },
     },
     server: {

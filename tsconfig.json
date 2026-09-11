@@ -18,6 +18,12 @@
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "MuscleMapJS": [
+        "./src/lib/muscle-map/index.ts"
+      ],
+      "@abdofallah/musclemap-js": [
+        "./src/lib/muscle-map/index.ts"
       ]
     },
     "allowImportingTsExtensions": true,

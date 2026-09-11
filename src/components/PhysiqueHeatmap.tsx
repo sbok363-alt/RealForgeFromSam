@@ -1,7 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Workout } from '../types';
-import { MuscleGroup, MUSCLE_COLORS, EXERCISE_DATABASE } from '../lib/exercises';
+import { MuscleGroup, EXERCISE_DATABASE } from '../lib/exercises';
 import { 
   calculatePhysiqueHypertrophyVolume, 
   getStoredHypertrophyThresholds, 
@@ -12,7 +12,6 @@ import {
 } from '../lib/hypertrophy';
 import { 
   AlertTriangle, 
-  Info, 
   Sliders, 
   Flame, 
   CheckCircle2, 
@@ -26,9 +25,7 @@ import {
   Scale,
   Zap,
   Dumbbell,
-  Eye,
   Clock,
-  HelpCircle,
   Scan,
   Radar
 } from 'lucide-react';
@@ -36,8 +33,6 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/Card';
 import { Button } from './ui/Button';
 import { cn } from '../lib/utils';
 import { useThemeStore } from '../store/useThemeStore';
-import { AnteriorPhysiqueSvg, MuscleSvgStyle } from './heatmap/AnteriorPhysiqueSvg';
-import { PosteriorPhysiqueSvg } from './heatmap/PosteriorPhysiqueSvg';
 import { SymmetryBalanceCard } from './heatmap/SymmetryBalanceCard';
 import { soundFx } from '../lib/soundFx';
 import { RadarChart } from './heatmap/RadarChart';
@@ -46,8 +41,83 @@ import { VolumeAudioToggle } from './heatmap/VolumeAudioToggle';
 import { StimulusSimulator, SimulatedVolumeDelta } from './heatmap/StimulusSimulator';
 import { KineticSynergyBadge } from './heatmap/KineticSynergyBadge';
 
+// Import MuscleMapJS Canvas2D Widget & Legend
+import { 
+  MuscleMapWidget, 
+  HeatmapLegend, 
+  Muscle, 
+  MuscleSide, 
+  MUSCLE_DISPLAY_NAMES 
+} from 'MuscleMapJS';
+
 export type HeatmapMetricMode = 'HYPERTROPHY_PCT' | 'RAW_VOLUME' | 'RECOVERY_READINESS';
 export type BodyFocusRegion = 'ALL' | 'UPPER' | 'LOWER';
+
+/**
+ * Mapping from FORGE's internal MuscleGroup to MuscleMapJS's 36 anatomical muscles.
+ */
+export const MUSCLE_GROUP_TO_MUSCLES: Record<MuscleGroup, Muscle[]> = {
+  CHEST: ['chest', 'upper-chest', 'lower-chest'],
+  BACK: ['upper-back', 'lower-back', 'trapezius', 'rhomboids', 'rotator-cuff', 'upper-trapezius', 'lower-trapezius'],
+  SHOULDERS: ['deltoids', 'front-deltoid', 'rear-deltoid'],
+  LEGS: ['quadriceps', 'hamstring', 'gluteal', 'calves', 'tibialis', 'knees', 'inner-quad', 'outer-quad', 'hip-flexors', 'adductors', 'ankles', 'feet'],
+  ARMS: ['biceps', 'triceps', 'forearm', 'hands'],
+  CORE: ['abs', 'obliques', 'serratus', 'upper-abs', 'lower-abs'],
+  FULL_BODY: ['chest', 'upper-back', 'deltoids', 'quadriceps', 'hamstring', 'biceps', 'triceps', 'abs']
+};
+
+/**
+ * Reverse mapping from MuscleMapJS muscle to FORGE internal MuscleGroup for interactive selection.
+ */
+export const MUSCLE_TO_GROUP: Record<string, MuscleGroup> = {
+  // Chest
+  'chest': 'CHEST',
+  'upper-chest': 'CHEST',
+  'lower-chest': 'CHEST',
+
+  // Back & Traps
+  'upper-back': 'BACK',
+  'lower-back': 'BACK',
+  'trapezius': 'BACK',
+  'upper-trapezius': 'BACK',
+  'lower-trapezius': 'BACK',
+  'rhomboids': 'BACK',
+  'rotator-cuff': 'BACK',
+  'neck': 'BACK',
+  'head': 'BACK',
+
+  // Shoulders
+  'deltoids': 'SHOULDERS',
+  'front-deltoid': 'SHOULDERS',
+  'rear-deltoid': 'SHOULDERS',
+
+  // Legs & Lower Body
+  'quadriceps': 'LEGS',
+  'inner-quad': 'LEGS',
+  'outer-quad': 'LEGS',
+  'hip-flexors': 'LEGS',
+  'adductors': 'LEGS',
+  'hamstring': 'LEGS',
+  'gluteal': 'LEGS',
+  'calves': 'LEGS',
+  'tibialis': 'LEGS',
+  'knees': 'LEGS',
+  'ankles': 'LEGS',
+  'feet': 'LEGS',
+
+  // Arms
+  'biceps': 'ARMS',
+  'triceps': 'ARMS',
+  'forearm': 'ARMS',
+  'hands': 'ARMS',
+
+  // Core
+  'abs': 'CORE',
+  'upper-abs': 'CORE',
+  'lower-abs': 'CORE',
+  'obliques': 'CORE',
+  'serratus': 'CORE'
+};
 
 interface PhysiqueHeatmapProps {
   workouts: Workout[];
@@ -60,6 +130,7 @@ export const PhysiqueHeatmap: React.FC<PhysiqueHeatmapProps> = ({
   className,
   onNavigateToWorkout 
 }) => {
+  // View & Filter States
   const [viewMode, setViewMode] = useState<'FRONT' | 'BACK' | 'BOTH'>('BOTH');
   const [focusRegion, setFocusRegion] = useState<BodyFocusRegion>('ALL');
   const [selectedMuscle, setSelectedMuscle] = useState<MuscleGroup | null>(null);
@@ -77,6 +148,14 @@ export const PhysiqueHeatmap: React.FC<PhysiqueHeatmapProps> = ({
   const [showRadarChart, setShowRadarChart] = useState(false);
   const [mouseTilt, setMouseTilt] = useState({ x: 0, y: 0 });
 
+  // 1. Canvas Container Setup: React refs for Front and Back Canvas2D mounts
+  const frontRef = useRef<HTMLDivElement>(null);
+  const backRef = useRef<HTMLDivElement>(null);
+  const frontWidgetRef = useRef<MuscleMapWidget | null>(null);
+  const backWidgetRef = useRef<MuscleMapWidget | null>(null);
+  const legendRef = useRef<HTMLDivElement>(null);
+  const heatmapLegendRef = useRef<HeatmapLegend | null>(null);
+
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width - 0.5;
@@ -88,11 +167,11 @@ export const PhysiqueHeatmap: React.FC<PhysiqueHeatmapProps> = ({
     setMouseTilt({ x: 0, y: 0 });
   };
 
-  // App Theme state for dual-tone rendering
+  // App Theme state
   const { theme } = useThemeStore();
   const isDark = theme === 'dark';
 
-  // Local state for user-defined thresholds
+  // User-defined thresholds
   const [thresholds, setThresholds] = useState<HypertrophyThresholds>(() => getStoredHypertrophyThresholds());
 
   // Effective workout dataset (real workouts or demo preview + simulated delta)
@@ -133,9 +212,214 @@ export const PhysiqueHeatmap: React.FC<PhysiqueHeatmapProps> = ({
 
   const { muscles, deficientMuscles, hasTwoWeekDeficit, totalDeficientMusclesCount, symmetry } = auditResult;
 
-  // Selected muscle data
+  // Selected & Hovered muscle data
   const activeMuscleData: MuscleVolumeWeekly | null = selectedMuscle ? muscles[selectedMuscle] : null;
   const hoveredMuscleData: MuscleVolumeWeekly | null = hoveredMuscle ? muscles[hoveredMuscle] : null;
+
+  // 3. Intensity & Heatmap Application: Convert dataset into key-value pairs matching MuscleMapJS muscle keys
+  const intensityMap = useMemo<Partial<Record<Muscle, number>>>(() => {
+    const map: Partial<Record<Muscle, number>> = {};
+
+    for (const [groupKey, subMuscles] of Object.entries(MUSCLE_GROUP_TO_MUSCLES)) {
+      const group = groupKey as MuscleGroup;
+      if (group === 'FULL_BODY') continue;
+      const item = muscles[group];
+      if (!item) continue;
+
+      let sets = item.week1Sets;
+      if (timePerspective === 'WEEK2') sets = item.week2Sets;
+      if (timePerspective === 'AVERAGE') sets = (item.week1Sets + item.week2Sets) / 2;
+
+      const isDeficit = !!item.isTwoWeekDeficit;
+      const target = item.targetThreshold || 10;
+      let level = 0;
+
+      if (focusDeficitsOnly) {
+        level = isDeficit && hasTwoWeekDeficit ? 4 : 0;
+      } else if (metricMode === 'HYPERTROPHY_PCT') {
+        if (isDeficit && hasTwoWeekDeficit) {
+          level = 4; // High intensity for deficit
+        } else if (sets === 0) {
+          level = 0;
+        } else {
+          const ratio = sets / target;
+          if (ratio >= 1.25) level = 4;
+          else if (ratio >= 1.0) level = 3.5;
+          else if (ratio >= 0.75) level = 3;
+          else if (ratio >= 0.5) level = 2;
+          else if (ratio >= 0.25) level = 1;
+          else level = 0.5;
+        }
+      } else if (metricMode === 'RAW_VOLUME') {
+        level = Math.min(4, Math.max(0, (sets / 16) * 4));
+      } else if (metricMode === 'RECOVERY_READINESS') {
+        const status = item.recoveryStatus || 'RESTED';
+        if (status === 'FATIGUED') level = 4;
+        else if (status === 'RECOVERING') level = 2;
+        else if (status === 'PRIMED') level = 3.5;
+        else level = 1;
+      }
+
+      for (const m of subMuscles) {
+        map[m] = level;
+      }
+    }
+
+    return map;
+  }, [muscles, timePerspective, metricMode, focusDeficitsOnly, hasTwoWeekDeficit]);
+
+  // 2. Instance Initialization & 4. Click Events & 5. Cleanup:
+  useEffect(() => {
+    if (!frontRef.current || !backRef.current) return;
+
+    frontRef.current.innerHTML = '';
+    backRef.current.innerHTML = '';
+
+    // Instantiate two Canvas2D widgets: Front and Back views
+    const frontWidget = new MuscleMapWidget(frontRef.current, { 
+      gender: 'male', 
+      side: 'front', 
+      style: 'default',
+      showSubGroups: true,
+      fillHoles: true,
+    });
+
+    const backWidget = new MuscleMapWidget(backRef.current, { 
+      gender: 'male', 
+      side: 'back', 
+      style: 'default',
+      showSubGroups: true,
+      fillHoles: true,
+    });
+
+    frontWidgetRef.current = frontWidget;
+    backWidgetRef.current = backWidget;
+
+    // Attach click listeners to preserve volume inspector logic
+    frontWidget.on('muscleClick', (muscle: Muscle, side: MuscleSide) => {
+      const group = MUSCLE_TO_GROUP[muscle];
+      if (group) {
+        soundFx.playTargetLock();
+        setSelectedMuscle(prev => prev === group ? null : group);
+      }
+    });
+
+    backWidget.on('muscleClick', (muscle: Muscle, side: MuscleSide) => {
+      const group = MUSCLE_TO_GROUP[muscle];
+      if (group) {
+        soundFx.playTargetLock();
+        setSelectedMuscle(prev => prev === group ? null : group);
+      }
+    });
+
+    // Tooltip overlays
+    frontWidget.enableTooltip((muscle: Muscle) => {
+      const group = MUSCLE_TO_GROUP[muscle] || 'CHEST';
+      const data = muscles[group];
+      const displayName = MUSCLE_DISPLAY_NAMES[muscle] || muscle;
+      if (!data) return `<strong>${displayName}</strong>`;
+      const sets = timePerspective === 'WEEK2' ? data.week2Sets : data.week1Sets;
+      const pct = timePerspective === 'WEEK2' ? data.week2Percentage : data.week1Percentage;
+      const deficitLabel = data.isTwoWeekDeficit ? ' <span style="color:#f43f5e;font-weight:bold;">[2-Wk Deficit]</span>' : '';
+      return `<div style="text-align:left;font-size:12px;line-height:1.4;"><strong>${displayName}</strong> (${group})<br/><span style="color:#00e5ff;font-family:monospace;font-weight:bold;">${sets} / ${data.targetThreshold} sets (${pct}%)</span>${deficitLabel}</div>`;
+    });
+
+    backWidget.enableTooltip((muscle: Muscle) => {
+      const group = MUSCLE_TO_GROUP[muscle] || 'BACK';
+      const data = muscles[group];
+      const displayName = MUSCLE_DISPLAY_NAMES[muscle] || muscle;
+      if (!data) return `<strong>${displayName}</strong>`;
+      const sets = timePerspective === 'WEEK2' ? data.week2Sets : data.week1Sets;
+      const pct = timePerspective === 'WEEK2' ? data.week2Percentage : data.week1Percentage;
+      const deficitLabel = data.isTwoWeekDeficit ? ' <span style="color:#f43f5e;font-weight:bold;">[2-Wk Deficit]</span>' : '';
+      return `<div style="text-align:left;font-size:12px;line-height:1.4;"><strong>${displayName}</strong> (${group})<br/><span style="color:#00e5ff;font-family:monospace;font-weight:bold;">${sets} / ${data.targetThreshold} sets (${pct}%)</span>${deficitLabel}</div>`;
+    });
+
+    // Hover feedback
+    frontWidget.on('muscleEnter', (muscle: Muscle) => {
+      const group = MUSCLE_TO_GROUP[muscle];
+      if (group) {
+        soundFx.playHoverTick();
+        setHoveredMuscle(group);
+      }
+    });
+    frontWidget.on('muscleLeave', () => setHoveredMuscle(null));
+
+    backWidget.on('muscleEnter', (muscle: Muscle) => {
+      const group = MUSCLE_TO_GROUP[muscle];
+      if (group) {
+        soundFx.playHoverTick();
+        setHoveredMuscle(group);
+      }
+    });
+    backWidget.on('muscleLeave', () => setHoveredMuscle(null));
+
+    // Apply initial intensity data using widget.setIntensities(intensityMap, { colorScale: 'workout', gradientFill: true })
+    frontWidget.setIntensities(intensityMap, { colorScale: 'workout', gradientFill: true });
+    backWidget.setIntensities(intensityMap, { colorScale: 'workout', gradientFill: true });
+
+    // 5. Cleanup: Destroy widgets on unmount to prevent canvas memory leaks
+    return () => {
+      frontWidget.destroy();
+      backWidget.destroy();
+      frontWidgetRef.current = null;
+      backWidgetRef.current = null;
+      if (frontRef.current) frontRef.current.innerHTML = '';
+      if (backRef.current) backRef.current.innerHTML = '';
+    };
+  }, []);
+
+  // Update intensities & selections when intensityMap or selectedMuscle changes
+  useEffect(() => {
+    const frontWidget = frontWidgetRef.current;
+    const backWidget = backWidgetRef.current;
+    if (!frontWidget || !backWidget) return;
+
+    frontWidget.setIntensities(intensityMap, { colorScale: 'workout', gradientFill: true });
+    backWidget.setIntensities(intensityMap, { colorScale: 'workout', gradientFill: true });
+
+    if (selectedMuscle) {
+      const subMuscles = MUSCLE_GROUP_TO_MUSCLES[selectedMuscle] || [];
+      frontWidget.clearSelection();
+      frontWidget.selectMany(subMuscles);
+      frontWidget.enablePulse(1.5, 0.7, 1.0);
+
+      backWidget.clearSelection();
+      backWidget.selectMany(subMuscles);
+      backWidget.enablePulse(1.5, 0.7, 1.0);
+    } else {
+      frontWidget.clearSelection();
+      frontWidget.disablePulse();
+      backWidget.clearSelection();
+      backWidget.disablePulse();
+    }
+  }, [intensityMap, selectedMuscle]);
+
+  // Mount HeatmapLegend underneath the canvas views
+  useEffect(() => {
+    if (!legendRef.current) return;
+    legendRef.current.innerHTML = '';
+
+    const labelMin = metricMode === 'RAW_VOLUME' ? '0 sets' : '0% (Untargeted)';
+    const labelMax = metricMode === 'RAW_VOLUME' ? '18+ sets' : 'Optimal / High Stimulus';
+
+    const legend = new HeatmapLegend(legendRef.current, {
+      colorScale: 'workout',
+      interpolation: { type: 'easeInOut' },
+      orientation: 'horizontal',
+      barThickness: 10,
+      labelMin,
+      labelMax,
+      steps: 48
+    });
+    heatmapLegendRef.current = legend;
+
+    return () => {
+      legend.destroy();
+      heatmapLegendRef.current = null;
+      if (legendRef.current) legendRef.current.innerHTML = '';
+    };
+  }, [metricMode]);
 
   const handleUpdateThreshold = (muscle: MuscleGroup, value: number) => {
     const updated = { ...thresholds, [muscle]: Math.max(1, value) };
@@ -172,130 +456,32 @@ export const PhysiqueHeatmap: React.FC<PhysiqueHeatmapProps> = ({
     saveStoredHypertrophyThresholds(defaults);
   };
 
-  // Helper to dynamically color muscles based on selected metric mode (DUAL-TONE SYSTEM)
-  const getMuscleStyle = (muscle: MuscleGroup): MuscleSvgStyle => {
-    const item = muscles[muscle];
-
-    // Determine relevant sets based on active time perspective
-    let sets = item ? item.week1Sets : 0;
-    if (timePerspective === 'WEEK2' && item) sets = item.week2Sets;
-    if (timePerspective === 'AVERAGE' && item) sets = item ? (item.week1Sets + item.week2Sets) / 2 : 0;
-
-    const isDeficit = !!item?.isTwoWeekDeficit;
-    // Active only if sets have been recorded or an active deficit has been identified
-    const isActive = sets > 0 || (isDeficit && hasTwoWeekDeficit);
-
-    // =========================================================================
-    // DUAL-TONE UNTARGETED LAYER:
-    // Untargeted muscles have a faint, semi-transparent base outline/fill
-    // (light muted grey/pink #f1e4e8 in light mode, translucent in dark mode)
-    // with clean white dividing seams separating each anatomical muscle head!
-    // =========================================================================
-    if (!isActive) {
-      return {
-        fill: isDark ? 'rgba(244, 226, 232, 0.12)' : '#f1e4e8',
-        opacity: isDark ? 0.7 : 0.9,
-        stroke: isDark ? 'rgba(255, 255, 255, 0.22)' : '#ffffff',
-        strokeWidth: 1.2,
-        isDeficit: false,
-        isActive: false
-      };
-    }
-
-    // If user clicked "Focus Deficits", dim any muscle that is not in active deficit
-    if (focusDeficitsOnly && !isDeficit) {
-      return {
-        fill: isDark ? 'rgba(30, 41, 59, 0.4)' : '#e2e8f0',
-        opacity: 0.35,
-        stroke: isDark ? '#334155' : '#ffffff',
-        strokeWidth: 1,
-        isDeficit: false,
-        isActive: false
-      };
-    }
-
-    // =========================================================================
-    // ACTIVE MUSCLE STIMULUS LAYER:
-    // Only active muscles light up with the dynamic stimulus colors
-    // (Optimal emerald, High cyan, Maintenance amber, Deficit red)
-    // =========================================================================
-    const target = item?.targetThreshold || 10;
-    const pct = Math.min(150, Math.round((sets / target) * 100));
-    const activeStroke = isDark ? 'rgba(255, 255, 255, 0.85)' : '#ffffff';
-    const activeStrokeWidth = 1.3;
-
-    // MODE 1: HYPERTROPHY PERCENTAGE (Default Evidence-Based Model)
-    if (metricMode === 'HYPERTROPHY_PCT') {
-      if (isDeficit) {
-        return { 
-          fill: '#e11d48', // Radiant deep red like Photo 2
-          opacity: 0.95, 
-          isDeficit: true,
-          stroke: '#ffffff',
-          strokeWidth: 1.8,
-          isActive: true
-        };
-      }
-      if (pct >= 100) {
-        // Optimal Hypertrophy (100%+)
-        return { fill: '#10b981', opacity: 0.95, isDeficit: false, stroke: activeStroke, strokeWidth: activeStrokeWidth, isOptimal: true, isActive: true };
-      }
-      if (pct >= 75) {
-        // High Stimulus (75-99%)
-        return { fill: '#06b6d4', opacity: 0.92, isDeficit: false, stroke: activeStroke, strokeWidth: activeStrokeWidth, isActive: true };
-      }
-      if (pct >= 50) {
-        // Maintenance Volume (50-74%)
-        return { fill: '#f59e0b', opacity: 0.9, isDeficit: false, stroke: activeStroke, strokeWidth: activeStrokeWidth, isActive: true };
-      }
-      // Sub-optimal / Below threshold (<50% but active sets > 0)
-      return { fill: '#f43f5e', opacity: 0.85, isDeficit: false, stroke: activeStroke, strokeWidth: activeStrokeWidth, isActive: true };
-    }
-
-    // MODE 2: RAW SET VOLUME
-    if (metricMode === 'RAW_VOLUME') {
-      if (sets >= 15) {
-        return { fill: '#8b5cf6', opacity: 0.95, isDeficit: false, stroke: activeStroke, strokeWidth: activeStrokeWidth, isActive: true };
-      }
-      if (sets >= 10) {
-        return { fill: '#10b981', opacity: 0.95, isDeficit: false, stroke: activeStroke, strokeWidth: activeStrokeWidth, isActive: true };
-      }
-      if (sets >= 6) {
-        return { fill: '#06b6d4', opacity: 0.9, isDeficit: false, stroke: activeStroke, strokeWidth: activeStrokeWidth, isActive: true };
-      }
-      return { fill: '#3b82f6', opacity: 0.8, isDeficit: false, stroke: activeStroke, strokeWidth: activeStrokeWidth, isActive: true };
-    }
-
-    // MODE 3: RECOVERY & READINESS
-    if (metricMode === 'RECOVERY_READINESS') {
-      const status = item?.recoveryStatus || 'RESTED';
-      if (status === 'FATIGUED') {
-        return { fill: '#f43f5e', opacity: 0.92, isDeficit: false, stroke: activeStroke, strokeWidth: activeStrokeWidth, isActive: true };
-      }
-      if (status === 'RECOVERING') {
-        return { fill: '#f59e0b', opacity: 0.9, isDeficit: false, stroke: activeStroke, strokeWidth: activeStrokeWidth, isActive: true };
-      }
-      if (status === 'PRIMED') {
-        return { fill: '#10b981', opacity: 0.95, isDeficit: false, stroke: activeStroke, strokeWidth: activeStrokeWidth, isOptimal: true, isActive: true };
-      }
-      return { fill: '#0ea5e9', opacity: 0.8, isDeficit: false, stroke: activeStroke, strokeWidth: activeStrokeWidth, isActive: true };
-    }
-
-    return { 
-      fill: isDark ? 'rgba(244, 226, 232, 0.12)' : '#f1e4e8', 
-      opacity: 0.85, 
-      stroke: activeStroke, 
-      strokeWidth: 1.2, 
-      isDeficit: false, 
-      isActive: false 
-    };
-  };
-
-  // List of recommended exercises when a muscle is selected
   const recommendedExercises = useMemo(() => {
     if (!selectedMuscle) return [];
     return EXERCISE_DATABASE.filter(ex => ex.primaryMuscle === selectedMuscle).slice(0, 4);
   }, [selectedMuscle]);
+
+  // Zoom style transform for Upper/Lower body focus
+  const zoomStyle = useMemo(() => {
+    if (focusRegion === 'UPPER') {
+      return { 
+        transform: 'scale(1.4) translateY(12%)', 
+        transformOrigin: 'top center', 
+        transition: 'transform 300ms cubic-bezier(0.16, 1, 0.3, 1)' 
+      };
+    }
+    if (focusRegion === 'LOWER') {
+      return { 
+        transform: 'scale(1.4) translateY(-16%)', 
+        transformOrigin: 'bottom center', 
+        transition: 'transform 300ms cubic-bezier(0.16, 1, 0.3, 1)' 
+      };
+    }
+    return { 
+      transform: 'scale(1)', 
+      transition: 'transform 300ms cubic-bezier(0.16, 1, 0.3, 1)' 
+    };
+  }, [focusRegion]);
 
   return (
     <div id="physique-heatmap" className={cn("space-y-4", className)}>
@@ -326,7 +512,7 @@ export const PhysiqueHeatmap: React.FC<PhysiqueHeatmapProps> = ({
                 </div>
                 
                 <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed max-w-2xl">
-                  Stimulus has remained below your target threshold for <strong>two consecutive weeks</strong> ({auditResult.week2RangeStr} and {auditResult.week1RangeStr}). Muscle groups in deficit are flashing with beacon markers on the heatmap.
+                  Stimulus has remained below your target threshold for <strong>two consecutive weeks</strong> ({auditResult.week2RangeStr} and {auditResult.week1RangeStr}). Deficient muscle groups are highlighted with peak thermal intensity on the muscle map.
                 </p>
 
                 {/* Badges of affected muscle groups */}
@@ -362,7 +548,7 @@ export const PhysiqueHeatmap: React.FC<PhysiqueHeatmapProps> = ({
               </Button>
 
               <Button 
-                size="sm"
+                size="sm" 
                 className="text-xs bg-rose-600 hover:bg-rose-500 text-white gap-1.5 h-8 font-semibold shadow-sm"
                 onClick={() => setIsThresholdModalOpen(true)}
               >
@@ -390,7 +576,7 @@ export const PhysiqueHeatmap: React.FC<PhysiqueHeatmapProps> = ({
               <div className="flex items-center gap-2">
                 <CardTitle className="text-base sm:text-lg font-bold flex items-center gap-2">
                   <Activity size={18} className="text-primary" />
-                  Physique Hypertrophy Heatmap
+                  MuscleMapJS Physique Heatmap
                 </CardTitle>
                 {hasTwoWeekDeficit && (
                   <span className="inline-flex items-center gap-1 text-[11px] font-extrabold px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30 animate-pulse">
@@ -404,7 +590,7 @@ export const PhysiqueHeatmap: React.FC<PhysiqueHeatmapProps> = ({
                 )}
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Interactive anatomical stimulus auditor tracking weekly set volume, muscle recovery, and 2-week hypertrophy deficits.
+                High-resolution Canvas2D anatomical stimulus auditor powered by MuscleMapJS. Tracks weekly set volume, recovery, and hypertrophy deficits.
               </p>
             </div>
 
@@ -533,7 +719,7 @@ export const PhysiqueHeatmap: React.FC<PhysiqueHeatmapProps> = ({
                 <span className="hidden lg:inline">{useDemoData ? 'Exit Demo' : 'Demo Mode'}</span>
               </Button>
 
-              {/* High-Tech SFX Audio Toggle */}
+              {/* Audio Toggle */}
               <VolumeAudioToggle />
             </div>
           </div>
@@ -558,7 +744,15 @@ export const PhysiqueHeatmap: React.FC<PhysiqueHeatmapProps> = ({
               return (
                 <button
                   key={muscle}
-                  onClick={() => setSelectedMuscle(isSelected ? null : muscle)}
+                  onClick={() => {
+                    if (isSelected) {
+                      soundFx.playClick(600);
+                      setSelectedMuscle(null);
+                    } else {
+                      soundFx.playTargetLock();
+                      setSelectedMuscle(muscle);
+                    }
+                  }}
                   className={cn(
                     "px-2.5 py-0.5 rounded-full text-xs font-medium shrink-0 transition-all border flex items-center gap-1.5",
                     isSelected 
@@ -590,7 +784,7 @@ export const PhysiqueHeatmap: React.FC<PhysiqueHeatmapProps> = ({
             onApplyToWorkout={onNavigateToWorkout}
           />
 
-          {/* SYMMETRY & BALANCE DRAWER (Optional Collapsible Panel) */}
+          {/* SYMMETRY & BALANCE DRAWER */}
           <AnimatePresence>
             {showSymmetryPanel && (
               <motion.div
@@ -610,7 +804,7 @@ export const PhysiqueHeatmap: React.FC<PhysiqueHeatmapProps> = ({
             <div 
               onMouseMove={handleMouseMove}
               onMouseLeave={handleMouseLeave}
-              className="lg:col-span-7 flex flex-col items-center justify-center p-4 rounded-2xl bg-secondary/15 border border-border/60 relative min-h-[410px] overflow-hidden group perspective-1000"
+              className="lg:col-span-7 flex flex-col items-center justify-center p-4 rounded-2xl bg-secondary/15 border border-border/60 relative min-h-[440px] overflow-hidden group perspective-1000"
             >
               {/* CYBERNETIC HOLOGRAPHIC SCANNER OVERLAY */}
               <HoloScannerOverlay
@@ -662,9 +856,9 @@ export const PhysiqueHeatmap: React.FC<PhysiqueHeatmapProps> = ({
                   </button>
                 </div>
 
-                {/* View Mode & Focus Region Selectors */}
+                {/* View Angle & Focus Selectors */}
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  {/* View Angle */}
+                  {/* View Angle: Front / Back / Both */}
                   <div className="flex items-center rounded-lg bg-background/80 p-0.5 border border-border/60 text-[11px] shadow-xs backdrop-blur-xs">
                     <button
                       onClick={() => {
@@ -715,7 +909,7 @@ export const PhysiqueHeatmap: React.FC<PhysiqueHeatmapProps> = ({
                       title="180° Turntable Flip"
                     >
                       <RotateCcw size={11} className="text-cyan-400" />
-                      <span>180° Flip</span>
+                      <span>180°</span>
                     </button>
                   )}
 
@@ -764,85 +958,13 @@ export const PhysiqueHeatmap: React.FC<PhysiqueHeatmapProps> = ({
                 </div>
               </div>
 
-              {/* DYNAMIC LEGEND BAR */}
-              <div className="w-full flex items-center justify-between text-[11px] text-muted-foreground font-mono bg-background/70 px-3 py-1.5 rounded-lg border border-border/40 backdrop-blur-xs mb-4 relative z-10">
-                {metricMode === 'HYPERTROPHY_PCT' && (
-                  <div className="flex items-center gap-2.5 flex-wrap">
-                    <span className="font-semibold text-foreground">Stimulus:</span>
-                    <span className="inline-flex items-center gap-1 font-semibold text-emerald-500">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-xs" /> Optimal (100%+)
-                    </span>
-                    <span className="inline-flex items-center gap-1 font-semibold text-cyan-500">
-                      <span className="w-2 h-2 rounded-full bg-cyan-500" /> High (75-99%)
-                    </span>
-                    <span className="inline-flex items-center gap-1 font-semibold text-amber-500">
-                      <span className="w-2 h-2 rounded-full bg-amber-500" /> Maintenance
-                    </span>
-                    <span className="inline-flex items-center gap-1 font-semibold text-rose-500">
-                      <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" /> 2-Wk Deficit
-                    </span>
-                    <span className="inline-flex items-center gap-1 font-medium text-muted-foreground">
-                      <span className="w-2 h-2 rounded-full bg-[#f1e4e8] dark:bg-rose-950/40 border border-muted-foreground/30" /> Untargeted (Base)
-                    </span>
-                  </div>
-                )}
-
-                {metricMode === 'RAW_VOLUME' && (
-                  <div className="flex items-center gap-2.5 flex-wrap">
-                    <span className="font-semibold text-foreground">Weekly Sets:</span>
-                    <span className="inline-flex items-center gap-1 text-purple-400 font-semibold">
-                      <span className="w-2 h-2 rounded-full bg-purple-500" /> 15+ sets
-                    </span>
-                    <span className="inline-flex items-center gap-1 text-emerald-400 font-semibold">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500" /> 10–14 sets
-                    </span>
-                    <span className="inline-flex items-center gap-1 text-cyan-400 font-semibold">
-                      <span className="w-2 h-2 rounded-full bg-cyan-500" /> 6–9 sets
-                    </span>
-                    <span className="inline-flex items-center gap-1 text-blue-400 font-semibold">
-                      <span className="w-2 h-2 rounded-full bg-blue-500" /> 1–5 sets
-                    </span>
-                  </div>
-                )}
-
-                {metricMode === 'RECOVERY_READINESS' && (
-                  <div className="flex items-center gap-2.5 flex-wrap">
-                    <span className="font-semibold text-foreground">Readiness:</span>
-                    <span className="inline-flex items-center gap-1 text-rose-400 font-semibold">
-                      <span className="w-2 h-2 rounded-full bg-rose-500" /> Fatigued (&lt;24h)
-                    </span>
-                    <span className="inline-flex items-center gap-1 text-amber-400 font-semibold">
-                      <span className="w-2 h-2 rounded-full bg-amber-500" /> Rebuilding (24-48h)
-                    </span>
-                    <span className="inline-flex items-center gap-1 text-emerald-400 font-semibold">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-xs" /> Primed (48-120h)
-                    </span>
-                    <span className="inline-flex items-center gap-1 text-sky-400 font-semibold">
-                      <span className="w-2 h-2 rounded-full bg-sky-500" /> Rested (&gt;5d)
-                    </span>
-                  </div>
-                )}
-
-                {hasTwoWeekDeficit && (
-                  <button 
-                    onClick={() => {
-                      soundFx.playClick();
-                      setFocusDeficitsOnly(!focusDeficitsOnly);
-                    }}
-                    className="px-2 py-0.5 rounded-md bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 font-bold border border-rose-500/30 text-[10px] transition-colors shrink-0"
-                  >
-                    {focusDeficitsOnly ? 'Show All' : 'Filter Deficits'}
-                  </button>
-                )}
-              </div>
-
-              {/* DYNAMIC HOVER HUD TOOLTIP (Appears as user points at any muscle) */}
-              <div className="min-h-[32px] w-full flex items-center justify-center relative z-10">
+              {/* DYNAMIC HOVER HUD TOOLTIP */}
+              <div className="min-h-[30px] w-full flex items-center justify-center relative z-10 mb-1">
                 {hoveredMuscleData ? (
                   <motion.div
                     initial={{ opacity: 0, y: 3 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="px-3 py-1 rounded-full bg-background border border-primary/40 shadow-sm flex items-center gap-2.5 text-xs"
+                    className="px-3 py-1 rounded-full bg-background/90 border border-primary/40 shadow-xs flex items-center gap-2.5 text-xs backdrop-blur-xs"
                   >
                     <span className="font-bold text-foreground">{hoveredMuscleData.muscleLabel}</span>
                     <span className="text-muted-foreground">•</span>
@@ -862,69 +984,62 @@ export const PhysiqueHeatmap: React.FC<PhysiqueHeatmapProps> = ({
                   </motion.div>
                 ) : (
                   <span className="text-[11px] text-muted-foreground/80 font-mono">
-                    Hover over or click any muscle to inspect volume, stimulus, and recovery targets
+                    Tap any muscle on the Canvas2D map to inspect stimulus and volume
                   </span>
                 )}
               </div>
 
-              {/* SVG Silhouettes Display with 3D Tactile Turntable Tilt */}
+              {/* 1. Canvas Container Setup: Attached to React refs (frontRef, backRef) with zero SVG nodes */}
               <div 
-                className="flex items-center justify-center gap-6 sm:gap-12 mt-2 w-full max-w-lg transition-transform duration-150 ease-out relative z-10"
+                className="flex items-center justify-center gap-4 sm:gap-8 w-full max-w-xl transition-transform duration-150 ease-out relative z-10"
                 style={{
                   transform: `perspective(900px) rotateY(${mouseTilt.x}deg) rotateX(${mouseTilt.y}deg)`
                 }}
               >
-                {/* ANTERIOR VIEW */}
-                {(viewMode === 'FRONT' || viewMode === 'BOTH') && (
-                  <div className="flex flex-col items-center flex-1 max-w-[220px]">
-                    <span className="text-[11px] font-bold text-muted-foreground tracking-wider uppercase mb-1">
-                      Anterior (Front)
-                    </span>
-                    <AnteriorPhysiqueSvg
-                      getMuscleStyle={getMuscleStyle}
-                      selectedMuscle={selectedMuscle}
-                      hoveredMuscle={hoveredMuscle}
-                      onSelectMuscle={(m) => {
-                        const next = selectedMuscle === m ? null : m;
-                        if (next) soundFx.playTargetLock();
-                        else soundFx.playClick(600);
-                        setSelectedMuscle(next);
-                      }}
-                      onHoverMuscle={(m) => {
-                        if (m && m !== hoveredMuscle) soundFx.playHoverTick();
-                        setHoveredMuscle(m);
-                      }}
-                      focusRegion={focusRegion}
-                      isDark={isDark}
+                {/* Anterior (Front) Canvas2D Container */}
+                <div 
+                  className={cn(
+                    "flex flex-col items-center flex-1 min-w-[150px] max-w-[220px]",
+                    viewMode === 'BACK' && "hidden"
+                  )}
+                >
+                  <span className="text-[11px] font-bold text-muted-foreground tracking-wider uppercase mb-1">
+                    Anterior (Front)
+                  </span>
+                  <div className="w-full h-[380px] sm:h-[430px] flex items-center justify-center overflow-hidden relative">
+                    <div 
+                      ref={frontRef} 
+                      style={zoomStyle}
+                      className="w-full h-full max-w-[220px] mx-auto flex items-center justify-center" 
                     />
                   </div>
-                )}
+                </div>
 
-                {/* POSTERIOR VIEW */}
-                {(viewMode === 'BACK' || viewMode === 'BOTH') && (
-                  <div className="flex flex-col items-center flex-1 max-w-[220px]">
-                    <span className="text-[11px] font-bold text-muted-foreground tracking-wider uppercase mb-1">
-                      Posterior (Back)
-                    </span>
-                    <PosteriorPhysiqueSvg
-                      getMuscleStyle={getMuscleStyle}
-                      selectedMuscle={selectedMuscle}
-                      hoveredMuscle={hoveredMuscle}
-                      onSelectMuscle={(m) => {
-                        const next = selectedMuscle === m ? null : m;
-                        if (next) soundFx.playTargetLock();
-                        else soundFx.playClick(600);
-                        setSelectedMuscle(next);
-                      }}
-                      onHoverMuscle={(m) => {
-                        if (m && m !== hoveredMuscle) soundFx.playHoverTick();
-                        setHoveredMuscle(m);
-                      }}
-                      focusRegion={focusRegion}
-                      isDark={isDark}
+                {/* Posterior (Back) Canvas2D Container */}
+                <div 
+                  className={cn(
+                    "flex flex-col items-center flex-1 min-w-[150px] max-w-[220px]",
+                    viewMode === 'FRONT' && "hidden"
+                  )}
+                >
+                  <span className="text-[11px] font-bold text-muted-foreground tracking-wider uppercase mb-1">
+                    Posterior (Back)
+                  </span>
+                  <div className="w-full h-[380px] sm:h-[430px] flex items-center justify-center overflow-hidden relative">
+                    <div 
+                      ref={backRef} 
+                      style={zoomStyle}
+                      className="w-full h-full max-w-[220px] mx-auto flex items-center justify-center" 
                     />
                   </div>
-                )}
+                </div>
+              </div>
+
+              {/* HeatmapLegend Component underneath the body map */}
+              <div className="w-full mt-3 relative z-10">
+                <div className="w-full max-w-sm mx-auto px-3 py-1.5 rounded-lg bg-background/60 border border-border/40 backdrop-blur-xs">
+                  <div ref={legendRef} className="w-full" />
+                </div>
               </div>
             </div>
 
