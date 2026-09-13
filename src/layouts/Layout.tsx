@@ -24,7 +24,8 @@ import { cn } from '../lib/utils';
 import { useGeminiStore } from '../store/useGeminiStore';
 import { useWorkoutStore } from '../store/useWorkoutStore';
 import { BYOKModal } from '../components/BYOKModal';
-import { ActiveWorkoutBottomBar } from '../components/workout/ActiveWorkoutBottomBar';
+import ActiveWorkout from '../components/workout/ActiveWorkout';
+import { LiftOffSummary } from '../components/workout/LiftOffSummary';
 import { WorkoutDetailModal } from '../components/WorkoutDetailModal';
 import { MutationAuditModal } from '../components/MutationAuditModal';
 import { useNavigate } from 'react-router-dom';
@@ -45,6 +46,7 @@ export function Layout() {
   });
   const [isAutonomyModalOpen, setIsAutonomyModalOpen] = useState(false);
   const [auditTargetWorkout, setAuditTargetWorkout] = useState<Workout | null>(null);
+  const [liftOffWorkout, setLiftOffWorkout] = useState<Workout | null>(null);
   const { status: geminiStatus, openModal: openBYOKModal } = useGeminiStore();
   const { activeWorkout, isModalOpen, closeWorkoutModal, updateActiveWorkout, finishWorkout } = useWorkoutStore();
 
@@ -109,6 +111,24 @@ export function Layout() {
     },
     { name: 'Profile', path: '/profile', icon: User },
   ];
+
+  if (activeWorkout) {
+    return (
+      <div className="flex h-[100dvh] max-h-[100dvh] bg-background text-foreground overflow-y-auto w-full relative">
+        <div className="w-full">
+          <ActiveWorkout onWorkoutFinished={(w) => setLiftOffWorkout(w)} />
+        </div>
+      </div>
+    );
+  }
+
+  if (liftOffWorkout) {
+    return (
+      <div className="flex h-[100dvh] max-h-[100dvh] bg-background text-foreground overflow-hidden w-full relative">
+        <LiftOffSummary workout={liftOffWorkout} onClose={() => setLiftOffWorkout(null)} />
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-[100dvh] max-h-[100dvh] bg-background/50 text-foreground flex-col md:flex-row pb-16 md:pb-0 overflow-hidden relative">
@@ -322,9 +342,6 @@ export function Layout() {
           })}
         </div>
       </nav>
-
-      {/* Active Workout Persistent Mini Bottom Bar */}
-      <ActiveWorkoutBottomBar />
 
       {/* Global Workout Detail & Set Editor Modal for Active Session */}
       {activeWorkout && isModalOpen && (

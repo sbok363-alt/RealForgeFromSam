@@ -27,10 +27,9 @@ import {
   volumeDeltaPct,
   getPreviousExerciseSession,
 } from '../../lib/sessionCompare';
-import { WorkoutCelebration } from '../WorkoutCelebration';
 import { cn } from '../../lib/utils';
 
-export default function ActiveWorkout() {
+export default function ActiveWorkout({ onWorkoutFinished }: { onWorkoutFinished?: (w: Workout) => void }) {
   const { 
     activeWorkout, 
     restEndTime, 
@@ -49,7 +48,6 @@ export default function ActiveWorkout() {
   const [saving, setSaving] = useState(false);
   const [showSelector, setShowSelector] = useState(false);
   const [allUserWorkouts, setAllUserWorkouts] = useState<Workout[]>([]);
-  const [celebrationWorkout, setCelebrationWorkout] = useState<Workout | null>(null);
 
   // Keep screen awake while a session is in progress (gym-friendly)
   useWakeLock(Boolean(activeWorkout));
@@ -199,8 +197,10 @@ export default function ActiveWorkout() {
         }
       }
 
-      setCelebrationWorkout(completedWorkout);
       finishWorkout();
+      if (onWorkoutFinished) {
+        onWorkoutFinished(completedWorkout);
+      }
     } catch (e) {
       console.error(e);
       alert("Failed to save workout");
@@ -460,14 +460,6 @@ export default function ActiveWorkout() {
         <ExerciseSelector 
           onClose={() => setShowSelector(false)} 
           onSelect={handleAddExercise} 
-        />
-      )}
-
-      {celebrationWorkout && (
-        <WorkoutCelebration
-          workout={celebrationWorkout}
-          allWorkouts={allUserWorkouts}
-          onClose={() => setCelebrationWorkout(null)}
         />
       )}
     </div>
