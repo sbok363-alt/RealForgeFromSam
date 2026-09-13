@@ -500,160 +500,16 @@ export async function executeBrainAction(
   // --------------------------------------------------------------------------
   // Tool: proposeProgressionUpdate (Mutates Target Progression)
   // --------------------------------------------------------------------------
-  if (toolName === 'proposeProgressionUpdate') {
-    const reason = (rawArgs.rationale || rawArgs.reason || '').trim();
-
-    // Invariant: AI_BRAIN mutation strictly requires a non-empty reason
-    if (!reason) {
-      return {
-        toolName,
-        actionType: 'MUTATION',
-        success: false,
-        mutationType: 'UPDATE_TARGET_PROGRESSION',
-        error: 'AI_BRAIN mutation rejected: A non-empty rationale/reason is strictly required for progression updates.',
-      };
-    }
-
-    const idempotencyKey = context.idempotencyKey || crypto.randomUUID();
-    const targetEntityId = `target_${authenticatedUserId}_${rawArgs.exerciseId || 'unknown'}`;
-
-    const rawEnvelope = {
-      idempotencyKey,
-      userId: authenticatedUserId,
-      source: 'AI_BRAIN' as const,
-      reason,
-      timestamp: new Date().toISOString(),
-      payload: {
-        exerciseId: rawArgs.exerciseId,
-        targetWeightKg: rawArgs.targetWeightKg,
-        targetRepsMin: rawArgs.targetRepsMin,
-        targetRepsMax: rawArgs.targetRepsMax,
-        suggestedRir: rawArgs.suggestedRir,
-        action: rawArgs.action,
-        rationale: reason,
-      },
-    };
-
-    const mutResult = await executeSecureMutation({
-      rawEnvelope,
-      payloadSchema: UpdateTargetProgressionSchema,
-      authenticatedUserId,
-      targetEntityType: 'TARGET_PROGRESSION',
-      targetEntityId,
-      storageAdapter,
-      execute: async (validatedPayload) => {
-        const targetData = {
-          id: targetEntityId,
-          userId: authenticatedUserId,
-          ...validatedPayload,
-          source: 'AI_BRAIN',
-          updatedAt: new Date().toISOString(),
-        };
-        await storageAdapter.commitMutation('targets_1rm', targetEntityId, targetData);
-        return targetData;
-      },
-    });
-
-    if (!mutResult.success) {
-      return {
-        toolName,
-        actionType: 'MUTATION',
-        success: false,
-        mutationType: 'UPDATE_TARGET_PROGRESSION',
-        error: mutResult.error,
-        auditLogId: mutResult.auditLogId,
-      };
-    }
-
+  if (toolName === 'proposeProgressionUpdate' || toolName === 'proposePlanModification') {
+    const schema = toolName === 'proposeProgressionUpdate' ? UpdateTargetProgressionSchema : ModifyTrainingPlanSchema;
+    const result = schema.safeParse(rawArgs);
     return {
       toolName,
-      actionType: 'MUTATION',
-      success: true,
-      mutationType: 'UPDATE_TARGET_PROGRESSION',
-      auditLogId: mutResult.auditLogId,
-      data: mutResult.data,
-      replayed: mutResult.idempotentReplay,
+      actionType: 'ANALYSIS_ONLY',
+      success: result.success,
+      ...(result.success ? { data: result.data } : { error: 'Invalid recommendation' }),
     };
   }
-
-  // --------------------------------------------------------------------------
-  // Tool: proposePlanModification (Mutates Training Plan)
-  // --------------------------------------------------------------------------
-  if (toolName === 'proposePlanModification') {
-    const reason = (rawArgs.rationale || rawArgs.reason || '').trim();
-
-    // Invariant: AI_BRAIN mutation strictly requires a non-empty reason
-    if (!reason) {
-      return {
-        toolName,
-        actionType: 'MUTATION',
-        success: false,
-        mutationType: 'MODIFY_TRAINING_PLAN',
-        error: 'AI_BRAIN mutation rejected: A non-empty rationale/reason is strictly required for plan modifications.',
-      };
-    }
-
-    const idempotencyKey = context.idempotencyKey || crypto.randomUUID();
-    const planId = rawArgs.planId;
-
-    const rawEnvelope = {
-      idempotencyKey,
-      userId: authenticatedUserId,
-      source: 'AI_BRAIN' as const,
-      reason,
-      timestamp: new Date().toISOString(),
-      payload: {
-        planId,
-        name: rawArgs.name,
-        weeklyFrequency: rawArgs.weeklyFrequency,
-        isActive: rawArgs.isActive,
-        days: rawArgs.days,
-      },
-    };
-
-    const mutResult = await executeSecureMutation({
-      rawEnvelope,
-      payloadSchema: ModifyTrainingPlanSchema,
-      authenticatedUserId,
-      targetEntityType: 'TRAINING_PLAN',
-      targetEntityId: planId,
-      storageAdapter,
-      execute: async (validatedPayload) => {
-        const planData = {
-          id: validatedPayload.planId,
-          userId: authenticatedUserId,
-          ...validatedPayload,
-          source: 'AI_BRAIN',
-          updatedAt: new Date().toISOString(),
-        };
-        await storageAdapter.commitMutation('plans', validatedPayload.planId, planData);
-        return planData;
-      },
-    });
-
-    if (!mutResult.success) {
-      return {
-        toolName,
-        actionType: 'MUTATION',
-        success: false,
-        mutationType: 'MODIFY_TRAINING_PLAN',
-        error: mutResult.error,
-        auditLogId: mutResult.auditLogId,
-      };
-    }
-
-    return {
-      toolName,
-      actionType: 'MUTATION',
-      success: true,
-      mutationType: 'MODIFY_TRAINING_PLAN',
-      auditLogId: mutResult.auditLogId,
-      data: mutResult.data,
-      replayed: mutResult.idempotentReplay,
-    };
-  }
-
-  // --------------------------------------------------------------------------
   // Unrecognized tool
   // --------------------------------------------------------------------------
   return {

@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import { User } from 'firebase/auth';
+import { bindWorkoutIdentity } from './useWorkoutStore';
+import { useGeminiStore } from './useGeminiStore';
 
 export interface ForgeUser {
   uid: string;
@@ -23,14 +25,23 @@ export const DEMO_USER: ForgeUser = {
 interface AuthState {
   user: User | ForgeUser | null;
   loading: boolean;
+  identityEpoch: number;
   setUser: (user: User | ForgeUser | null) => void;
   setLoading: (loading: boolean) => void;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   loading: true,
-  setUser: (user) => set({ user }),
+  identityEpoch: 0,
+  setUser: (user) => {
+    if (get().user?.uid !== user?.uid) {
+      useGeminiStore.getState().setApiKey(null);
+      useGeminiStore.getState().closeModal();
+      bindWorkoutIdentity(user?.uid || null);
+      set({ user, identityEpoch: get().identityEpoch + 1 });
+    } else set({ user });
+  },
   setLoading: (loading) => set({ loading }),
 }));
 

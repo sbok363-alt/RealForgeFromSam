@@ -6,6 +6,7 @@ import { useAuthStore, DEMO_USER } from '../store/useAuthStore';
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const setUser = useAuthStore((state) => state.setUser);
   const setLoading = useAuthStore((state) => state.setLoading);
+  const identityEpoch = useAuthStore((state) => state.identityEpoch);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -27,6 +28,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => unsubscribe();
   }, [setUser, setLoading]);
 
-  return <>{children}</>;
+  return <React.Fragment key={identityEpoch}>{children}</React.Fragment>;
 }
 

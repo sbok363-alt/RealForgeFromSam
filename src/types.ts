@@ -18,6 +18,8 @@ export interface Proposal {
   summary: string;
   beforeState: Record<string, any>;
   afterState: Record<string, any>;
+  contentHash?: string;
+  permissionEpoch?: number;
   createdAt?: string;
   reviewedAt?: string;
 }
@@ -224,6 +226,7 @@ export interface Target1RM {
 }
 
 export interface TrainingPlan {
+  version?: number;
   id: string;
   userId: string;
   name: string;

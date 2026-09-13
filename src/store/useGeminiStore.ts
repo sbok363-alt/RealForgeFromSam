@@ -13,19 +13,18 @@ interface GeminiStore {
 }
 
 export const useGeminiStore = create<GeminiStore>((set) => {
-  const storedKey = localStorage.getItem('FORGE_GEMINI_API_KEY');
-  
+  if (typeof window !== 'undefined') {
+    window.localStorage.removeItem('FORGE_GEMINI_API_KEY');
+  }
   return {
-    apiKey: storedKey,
-    status: storedKey ? 'CONNECTED' : 'UNCONFIGURED',
+    apiKey: null,
+    status: 'UNCONFIGURED',
     isModalOpen: false,
     
     setApiKey: (key) => {
       if (key) {
-        localStorage.setItem('FORGE_GEMINI_API_KEY', key);
         set({ apiKey: key, status: 'CONNECTED' });
       } else {
-        localStorage.removeItem('FORGE_GEMINI_API_KEY');
         set({ apiKey: null, status: 'UNCONFIGURED' });
       }
     },

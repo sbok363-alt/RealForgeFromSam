@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useWorkoutStore } from '../../store/useWorkoutStore';
 import { useAuthStore } from '../../store/useAuthStore';
@@ -21,6 +21,7 @@ import {
 import { cn } from '../../lib/utils';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useWakeLock } from '../../hooks/useWakeLock';
+import { acknowledgeWorkout } from '../../lib/workout-sync';
 
 export function ActiveWorkoutBottomBar() {
   const { 
@@ -42,6 +43,11 @@ export function ActiveWorkoutBottomBar() {
   const [elapsed, setElapsed] = useState(0);
   const [restRemaining, setRestRemaining] = useState(0);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+  const workoutRef = useRef(activeWorkout);
+  const elapsedRef = useRef(elapsed);
+  const [syncError, setSyncError] = useState('');
+  workoutRef.current = activeWorkout;
+  elapsedRef.current = elapsed;
 
   // Screen stays on during active gym session
   useWakeLock(Boolean(activeWorkout));
@@ -85,44 +91,58 @@ export function ActiveWorkoutBottomBar() {
 
   // Background auto-sync to Firestore every 45s
   useEffect(() => {
-    if (!activeWorkout || !user) return;
+    if (!activeWorkout || !user || activeWorkout.userId !== user.uid) return;
+
+    let syncing = false;
+    let cancelled = false;
+    const epoch = useAuthStore.getState().identityEpoch;
 
     const syncInterval = setInterval(async () => {
+      const currentWorkout = workoutRef.current;
+      if (syncing || cancelled || !currentWorkout || currentWorkout.userId !== user.uid) return;
+      syncing = true;
       try {
         // Sync whichever schema actually holds the live session data —
         // `exercises[].sets` for sessions logged via ActiveWorkout.tsx,
         // falling back to the flat `sets` array. Sending the stale flat
         // array here would overwrite the server's real progress with an
         // empty/outdated set list every 45s.
-        const hasExercises = activeWorkout.exercises && activeWorkout.exercises.length > 0;
+        const hasExercises = currentWorkout.exercises && currentWorkout.exercises.length > 0;
         const updated = await mutateWorkout(
-          activeWorkout.id,
-          activeWorkout.version || 1,
+          currentWorkout.id,
+          currentWorkout.version || 1,
           {
-            title: activeWorkout.title,
-            scheduledDate: activeWorkout.scheduledDate,
-            status: activeWorkout.status,
+            title: currentWorkout.title,
+            scheduledDate: currentWorkout.scheduledDate,
+            status: currentWorkout.status,
             // Only send the field that actually holds this session's live
             // data — sending the other, empty/stale one would overwrite
             // real progress on the server.
             ...(hasExercises
-              ? { exercises: activeWorkout.exercises }
-              : { sets: activeWorkout.sets })
+              ? { exercises: currentWorkout.exercises }
+              : { sets: currentWorkout.sets })
           },
-          elapsed,
-          activeWorkout.volume
+          elapsedRef.current,
+          currentWorkout.volume
         );
-        if (updated) {
-          updateActiveWorkout(updated);
+        if (updated && !cancelled && useAuthStore.getState().identityEpoch === epoch) {
+          const current = useWorkoutStore.getState().activeWorkout;
+          const acknowledged = acknowledgeWorkout(current, currentWorkout, updated);
+          if (acknowledged && acknowledged !== current) updateActiveWorkout(acknowledged);
+          setLastSyncedAt(Date.now());
         }
-        setLastSyncedAt(Date.now());
-      } catch (err) {
+      } catch (err: any) {
+        if (cancelled || useAuthStore.getState().identityEpoch !== epoch) return;
+        if (err.status === 409) cancelled = true;
+        setSyncError(err.status === 409 ? 'Workout changed elsewhere. Your local edits are saved; reconcile before syncing.' : 'Sync failed. Your local edits are saved.');
         console.warn("Background workout auto-sync failed:", err);
+      } finally {
+        syncing = false;
       }
     }, 45000);
 
-    return () => clearInterval(syncInterval);
-  }, [activeWorkout, user, elapsed, setLastSyncedAt, updateActiveWorkout]);
+    return () => { cancelled = true; clearInterval(syncInterval); };
+  }, [user?.uid, activeWorkout?.id, setLastSyncedAt, updateActiveWorkout]);
 
   const formatTime = (totalSeconds: number) => {
     const h = Math.floor(totalSeconds / 3600);
@@ -174,12 +194,13 @@ export function ActiveWorkoutBottomBar() {
   };
 
   // If there's no active workout or the modal is currently open full-screen, hide mini bar
-  if (!activeWorkout || isModalOpen) {
+  if (!activeWorkout || !user || activeWorkout.userId !== user.uid || isModalOpen) {
     return null;
   }
 
   return (
     <AnimatePresence>
+      {syncError && <div role="alert" className="fixed bottom-32 left-4 right-4 z-50 bg-card p-3 text-sm">{syncError}</div>}
       <motion.div
         initial={{ y: 80, opacity: 0, scale: 0.96 }}
         animate={{ y: 0, opacity: 1, scale: 1 }}

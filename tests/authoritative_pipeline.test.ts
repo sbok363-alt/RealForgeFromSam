@@ -139,13 +139,14 @@ const eval1 = evaluateIdempotencyRecord(null, 'w1', testHash);
 assert(eval1.status === 'NEW', 'First occurrence must be NEW');
 
 const eval2 = evaluateIdempotencyRecord({
+  schemaVersion: 2,
   mutationId: 'm1',
   userId: 'u1',
   targetId: 'w1',
   payloadHash: testHash,
   result: { id: 'w1', version: 2 },
   createdAt: new Date().toISOString()
-}, 'w1', testHash);
+}, 'w1', testHash, 'u1');
 assert(eval2.status === 'REPLAY', 'Exact payload replay must be REPLAY');
 console.log('✔ Exact replay returns REPLAY status with cached result');
 

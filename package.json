@@ -10,7 +10,11 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test": "tsx tests/phase0_security_regression.test.ts && tsx tests/creation_rollback_regression.test.ts && tsx tests/nested_exercise_validation_regression.test.ts && tsx tests/log_set_authorization_regression.test.ts && tsx tests/byok_ai_gate_regression.test.ts"
+    "test": "node --require ./tests/assertions.cjs --import tsx tests/phase0_security_regression.test.ts && node --require ./tests/assertions.cjs --import tsx tests/creation_rollback_regression.test.ts && node --require ./tests/assertions.cjs --import tsx tests/nested_exercise_validation_regression.test.ts && node --require ./tests/assertions.cjs --import tsx tests/log_set_authorization_regression.test.ts && node --require ./tests/assertions.cjs --import tsx tests/byok_ai_gate_regression.test.ts",
+    "typecheck:domain": "tsc -p tsconfig.domain.json --noEmit",
+    "test:domain": "node --require ./tests/assertions.cjs --import tsx tests/canonical_schemas.test.ts && node --require ./tests/assertions.cjs --import tsx tests/canonical_adapters.test.ts && node --require ./tests/assertions.cjs --import tsx tests/phase2_characterization.test.ts && node --require ./tests/assertions.cjs --import tsx tests/phase2_canonical_analytics.test.ts",
+    "test:regression": "node tests/run-regressions.mjs",
+    "test:emulator": "firebase emulators:exec --config firebase.emulator.json --project demo-forge-security --only auth,firestore \"node --require ./tests/assertions.cjs --import tsx tests/emulator.test.ts\""
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -36,11 +40,13 @@
   },
   "devDependencies": {
     "@firebase/eslint-plugin-security-rules": "^0.0.2",
+    "@firebase/rules-unit-testing": "^5.0.2",
     "@types/d3": "^7.4.3",
     "@types/express": "^4.17.21",
     "@types/node": "^22.14.0",
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.25.0",
+    "firebase-tools": "^15.30.0",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",

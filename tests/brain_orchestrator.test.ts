@@ -131,7 +131,7 @@ async function runBrainOrchestratorTests() {
     storageAdapter: inMemoryStorage
   });
   assert.strictEqual(noReasonRes.success, false);
-  assert(noReasonRes.error?.includes('rationale/reason is strictly required'));
+  assert(noReasonRes.error?.includes('Invalid recommendation'));
   console.log('✔ AI_BRAIN mutation without reason is strictly rejected');
 
   // Case B: Inverted reps (max < min) failing Zod schema
@@ -151,7 +151,7 @@ async function runBrainOrchestratorTests() {
     storageAdapter: inMemoryStorage
   });
   assert.strictEqual(invertedRes.success, false);
-  assert(invertedRes.error?.includes('Validation failed'));
+  assert(invertedRes.error?.includes('Invalid recommendation'));
   console.log('✔ Malformed progression proposal safely caught by Zod schema guard');
 
   // Case C: Valid progression proposal
@@ -172,10 +172,10 @@ async function runBrainOrchestratorTests() {
     storageAdapter: inMemoryStorage
   });
   assert.strictEqual(validProgRes.success, true);
-  assert.strictEqual(validProgRes.actionType, 'MUTATION');
-  assert(validProgRes.auditLogId, 'Must generate an audit log ID');
+  assert.strictEqual(validProgRes.actionType, 'ANALYSIS_ONLY');
+  assert.strictEqual(validProgRes.auditLogId, undefined);
   assert.strictEqual(validProgRes.data.targetWeightKg, 122.5);
-  assert.strictEqual(validProgRes.data.source, 'AI_BRAIN');
+  assert.strictEqual(inMemoryStorage.getAuditLogs().length, 0);
   console.log('✔ Valid AI progression update executed and committed through secure pipeline');
 
   // --- 5. Mutating Tool Execution (proposePlanModification) ---
@@ -210,8 +210,8 @@ async function runBrainOrchestratorTests() {
     storageAdapter: inMemoryStorage
   });
   assert.strictEqual(validPlanRes.success, true);
-  assert.strictEqual(validPlanRes.actionType, 'MUTATION');
-  assert.strictEqual(validPlanRes.data.source, 'AI_BRAIN');
+  assert.strictEqual(validPlanRes.actionType, 'ANALYSIS_ONLY');
+  assert.strictEqual(inMemoryStorage.getIdempotencyRecords().length, 0);
   console.log('✔ Valid AI plan modification executed and committed through secure pipeline');
 
   // Unrecognized tool

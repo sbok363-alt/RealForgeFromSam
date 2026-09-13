@@ -327,7 +327,7 @@ export function Layout() {
       <ActiveWorkoutBottomBar />
 
       {/* Global Workout Detail & Set Editor Modal for Active Session */}
-      {activeWorkout && isModalOpen && (
+      {activeWorkout && activeWorkout.userId === user?.uid && isModalOpen && (
         <WorkoutDetailModal
           workout={activeWorkout}
           isOpen={isModalOpen}

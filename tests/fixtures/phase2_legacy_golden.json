@@ -1,0 +1,1051 @@
+{
+  "normal": {
+    "history": [
+      {
+        "workoutId": "upper-1",
+        "workoutTitle": "Upper strength A",
+        "date": "2026-08-20",
+        "timestamp": 1787184000000,
+        "topWeight": 80,
+        "topReps": 8,
+        "topRIR": 2,
+        "topRPE": 8,
+        "maxE1RM": 106.7,
+        "totalVolume": 1600,
+        "setsCount": 3,
+        "sets": [
+          {
+            "id": "1w",
+            "exercise": "bench_press",
+            "weight": 40,
+            "reps": 10,
+            "completed": true,
+            "setType": "W"
+          },
+          {
+            "id": "1a",
+            "exercise": "bench_press",
+            "weight": 80,
+            "reps": 8,
+            "completed": true,
+            "rir": 2,
+            "rpe": 8
+          },
+          {
+            "id": "1b",
+            "exercise": "bench_press",
+            "weight": 80,
+            "reps": 7,
+            "completed": true,
+            "rir": 1
+          }
+        ]
+      },
+      {
+        "workoutId": "upper-2",
+        "workoutTitle": "Upper strength A",
+        "date": "2026-08-23",
+        "timestamp": 1787443200000,
+        "topWeight": 82.5,
+        "topReps": 8,
+        "topRIR": 2,
+        "topRPE": 8,
+        "maxE1RM": 110,
+        "totalVolume": 1237.5,
+        "setsCount": 2,
+        "sets": [
+          {
+            "id": "2a",
+            "exercise": "bench_press",
+            "weight": 82.5,
+            "reps": 8,
+            "completed": true,
+            "rir": 2,
+            "rpe": 8
+          },
+          {
+            "id": "2b",
+            "exercise": "bench_press",
+            "weight": 82.5,
+            "reps": 7,
+            "completed": true,
+            "rir": 1
+          }
+        ]
+      },
+      {
+        "workoutId": "upper-3",
+        "workoutTitle": "Upper strength A",
+        "date": "2026-08-27",
+        "timestamp": 1787788800000,
+        "topWeight": 85,
+        "topReps": 8,
+        "topRIR": 2,
+        "topRPE": 8,
+        "maxE1RM": 113.3,
+        "totalVolume": 1275,
+        "setsCount": 2,
+        "sets": [
+          {
+            "id": "3a",
+            "exercise": "bench_press",
+            "weight": 85,
+            "reps": 8,
+            "completed": true,
+            "rir": 2,
+            "rpe": 8,
+            "notes": "Controlled pause",
+            "setType": "N"
+          },
+          {
+            "id": "3b",
+            "exercise": "bench_press",
+            "weight": 85,
+            "reps": 7,
+            "completed": true,
+            "rir": 1
+          }
+        ]
+      }
+    ],
+    "report": {
+      "exerciseId": "bench_press",
+      "exerciseName": "Barbell Bench Press",
+      "state": "PROGRESSING",
+      "currentE1RM": 113.3,
+      "previousE1RM": 110,
+      "deltaE1RM": 3.3,
+      "percentageDelta": 3,
+      "recentSessionsCount": 3,
+      "lastPerformance": {
+        "date": "2026-08-27",
+        "weight": 85,
+        "reps": 8,
+        "rir": 2,
+        "rpe": 8,
+        "e1RM": 113.3,
+        "volume": 1275
+      },
+      "summary": "Progressing: Estimated 1RM has increased across recent sessions (+3.3kg / +3%).",
+      "rationales": [
+        "Estimated 1RM increased by +3.3kg (+3%) compared to previous session.",
+        "Successfully lifted heavier load (85kg vs 82.5kg) while maintaining repetition volume.",
+        "Completed with solid reserve (RIR 2), indicating capacity for progressive overload."
+      ],
+      "nextTarget": {
+        "targetWeight": 87.5,
+        "targetRepsMin": 6,
+        "targetRepsMax": 8,
+        "targetSets": 2,
+        "suggestedRIR": 2,
+        "action": "INCREASE_WEIGHT",
+        "rationale": "Strong progressive overload: Increase weight to 87.5kg (+2.5kg) targeting 6–8 reps."
+      },
+      "history": [
+        {
+          "date": "2026-08-27",
+          "totalVolume": 1275,
+          "sets": [
+            {
+              "weight": 85,
+              "reps": 8,
+              "rir": 2
+            },
+            {
+              "weight": 85,
+              "reps": 7,
+              "rir": 1
+            }
+          ]
+        },
+        {
+          "date": "2026-08-23",
+          "totalVolume": 1237.5,
+          "sets": [
+            {
+              "weight": 82.5,
+              "reps": 8,
+              "rir": 2
+            },
+            {
+              "weight": 82.5,
+              "reps": 7,
+              "rir": 1
+            }
+          ]
+        },
+        {
+          "date": "2026-08-20",
+          "totalVolume": 1600,
+          "sets": [
+            {
+              "weight": 40,
+              "reps": 10
+            },
+            {
+              "weight": 80,
+              "reps": 8,
+              "rir": 2
+            },
+            {
+              "weight": 80,
+              "reps": 7,
+              "rir": 1
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "nested": {
+    "history": [
+      {
+        "workoutId": "upper-1",
+        "workoutTitle": "Upper strength A",
+        "date": "2026-08-20",
+        "timestamp": 1787184000000,
+        "topWeight": 80,
+        "topReps": 8,
+        "topRIR": 2,
+        "topRPE": 8,
+        "maxE1RM": 106.7,
+        "totalVolume": 1600,
+        "setsCount": 3,
+        "sets": [
+          {
+            "id": "1w",
+            "exercise": "bench_press",
+            "weight": 40,
+            "reps": 10,
+            "completed": true
+          },
+          {
+            "id": "1a",
+            "exercise": "bench_press",
+            "weight": 80,
+            "reps": 8,
+            "rir": 2,
+            "rpe": 8,
+            "completed": true
+          },
+          {
+            "id": "1b",
+            "exercise": "bench_press",
+            "weight": 80,
+            "reps": 7,
+            "rir": 1,
+            "completed": true
+          }
+        ]
+      },
+      {
+        "workoutId": "upper-2",
+        "workoutTitle": "Upper strength A",
+        "date": "2026-08-23",
+        "timestamp": 1787443200000,
+        "topWeight": 82.5,
+        "topReps": 8,
+        "topRIR": 2,
+        "topRPE": 8,
+        "maxE1RM": 110,
+        "totalVolume": 1237.5,
+        "setsCount": 2,
+        "sets": [
+          {
+            "id": "2a",
+            "exercise": "bench_press",
+            "weight": 82.5,
+            "reps": 8,
+            "rir": 2,
+            "rpe": 8,
+            "completed": true
+          },
+          {
+            "id": "2b",
+            "exercise": "bench_press",
+            "weight": 82.5,
+            "reps": 7,
+            "rir": 1,
+            "completed": true
+          }
+        ]
+      },
+      {
+        "workoutId": "upper-3",
+        "workoutTitle": "Upper strength A",
+        "date": "2026-08-27",
+        "timestamp": 1787788800000,
+        "topWeight": 85,
+        "topReps": 8,
+        "topRIR": 2,
+        "topRPE": 8,
+        "maxE1RM": 113.3,
+        "totalVolume": 1275,
+        "setsCount": 2,
+        "sets": [
+          {
+            "id": "3a",
+            "exercise": "bench_press",
+            "weight": 85,
+            "reps": 8,
+            "rir": 2,
+            "rpe": 8,
+            "notes": "Controlled pause",
+            "completed": true
+          },
+          {
+            "id": "3b",
+            "exercise": "bench_press",
+            "weight": 85,
+            "reps": 7,
+            "rir": 1,
+            "completed": true
+          }
+        ]
+      }
+    ],
+    "report": {
+      "exerciseId": "bench_press",
+      "exerciseName": "Barbell Bench Press",
+      "state": "PROGRESSING",
+      "currentE1RM": 113.3,
+      "previousE1RM": 110,
+      "deltaE1RM": 3.3,
+      "percentageDelta": 3,
+      "recentSessionsCount": 3,
+      "lastPerformance": {
+        "date": "2026-08-27",
+        "weight": 85,
+        "reps": 8,
+        "rir": 2,
+        "rpe": 8,
+        "e1RM": 113.3,
+        "volume": 1275
+      },
+      "summary": "Progressing: Estimated 1RM has increased across recent sessions (+3.3kg / +3%).",
+      "rationales": [
+        "Estimated 1RM increased by +3.3kg (+3%) compared to previous session.",
+        "Successfully lifted heavier load (85kg vs 82.5kg) while maintaining repetition volume.",
+        "Completed with solid reserve (RIR 2), indicating capacity for progressive overload."
+      ],
+      "nextTarget": {
+        "targetWeight": 87.5,
+        "targetRepsMin": 6,
+        "targetRepsMax": 8,
+        "targetSets": 2,
+        "suggestedRIR": 2,
+        "action": "INCREASE_WEIGHT",
+        "rationale": "Strong progressive overload: Increase weight to 87.5kg (+2.5kg) targeting 6–8 reps."
+      },
+      "history": [
+        {
+          "date": "2026-08-27",
+          "totalVolume": 1275,
+          "sets": [
+            {
+              "weight": 85,
+              "reps": 8,
+              "rir": 2
+            },
+            {
+              "weight": 85,
+              "reps": 7,
+              "rir": 1
+            }
+          ]
+        },
+        {
+          "date": "2026-08-23",
+          "totalVolume": 1237.5,
+          "sets": [
+            {
+              "weight": 82.5,
+              "reps": 8,
+              "rir": 2
+            },
+            {
+              "weight": 82.5,
+              "reps": 7,
+              "rir": 1
+            }
+          ]
+        },
+        {
+          "date": "2026-08-20",
+          "totalVolume": 1600,
+          "sets": [
+            {
+              "weight": 40,
+              "reps": 10
+            },
+            {
+              "weight": 80,
+              "reps": 8,
+              "rir": 2
+            },
+            {
+              "weight": 80,
+              "reps": 7,
+              "rir": 1
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "aliases": {
+    "history": [
+      {
+        "workoutId": "upper-1",
+        "workoutTitle": "Upper strength A",
+        "date": "2026-08-20",
+        "timestamp": 1787184000000,
+        "topWeight": 80,
+        "topReps": 8,
+        "topRIR": 2,
+        "topRPE": 8,
+        "maxE1RM": 106.7,
+        "totalVolume": 1600,
+        "setsCount": 3,
+        "sets": [
+          {
+            "id": "1w",
+            "exercise": "Barbell Bench Press",
+            "weight": 40,
+            "reps": 10,
+            "completed": true,
+            "setType": "W"
+          },
+          {
+            "id": "1a",
+            "exercise": "Barbell Bench Press",
+            "weight": 80,
+            "reps": 8,
+            "completed": true,
+            "rir": 2,
+            "rpe": 8
+          },
+          {
+            "id": "1b",
+            "exercise": "Barbell Bench Press",
+            "weight": 80,
+            "reps": 7,
+            "completed": true,
+            "rir": 1
+          }
+        ]
+      },
+      {
+        "workoutId": "upper-2",
+        "workoutTitle": "Upper strength A",
+        "date": "2026-08-23",
+        "timestamp": 1787443200000,
+        "topWeight": 82.5,
+        "topReps": 8,
+        "topRIR": 2,
+        "topRPE": 8,
+        "maxE1RM": 110,
+        "totalVolume": 1237.5,
+        "setsCount": 2,
+        "sets": [
+          {
+            "id": "2a",
+            "exercise": "Bench Press",
+            "weight": 82.5,
+            "reps": 8,
+            "completed": true,
+            "rir": 2,
+            "rpe": 8
+          },
+          {
+            "id": "2b",
+            "exercise": "Bench Press",
+            "weight": 82.5,
+            "reps": 7,
+            "completed": true,
+            "rir": 1
+          }
+        ]
+      },
+      {
+        "workoutId": "upper-3",
+        "workoutTitle": "Upper strength A",
+        "date": "2026-08-27",
+        "timestamp": 1787788800000,
+        "topWeight": 85,
+        "topReps": 8,
+        "topRIR": 2,
+        "topRPE": 8,
+        "maxE1RM": 113.3,
+        "totalVolume": 1275,
+        "setsCount": 2,
+        "sets": [
+          {
+            "id": "3a",
+            "exercise": "bench_press",
+            "weight": 85,
+            "reps": 8,
+            "completed": true,
+            "rir": 2,
+            "rpe": 8,
+            "notes": "Controlled pause",
+            "setType": "N"
+          },
+          {
+            "id": "3b",
+            "exercise": "bench_press",
+            "weight": 85,
+            "reps": 7,
+            "completed": true,
+            "rir": 1
+          }
+        ]
+      }
+    ],
+    "report": {
+      "exerciseId": "bench_press",
+      "exerciseName": "Barbell Bench Press",
+      "state": "PROGRESSING",
+      "currentE1RM": 113.3,
+      "previousE1RM": 110,
+      "deltaE1RM": 3.3,
+      "percentageDelta": 3,
+      "recentSessionsCount": 3,
+      "lastPerformance": {
+        "date": "2026-08-27",
+        "weight": 85,
+        "reps": 8,
+        "rir": 2,
+        "rpe": 8,
+        "e1RM": 113.3,
+        "volume": 1275
+      },
+      "summary": "Progressing: Estimated 1RM has increased across recent sessions (+3.3kg / +3%).",
+      "rationales": [
+        "Estimated 1RM increased by +3.3kg (+3%) compared to previous session.",
+        "Successfully lifted heavier load (85kg vs 82.5kg) while maintaining repetition volume.",
+        "Completed with solid reserve (RIR 2), indicating capacity for progressive overload."
+      ],
+      "nextTarget": {
+        "targetWeight": 87.5,
+        "targetRepsMin": 6,
+        "targetRepsMax": 8,
+        "targetSets": 2,
+        "suggestedRIR": 2,
+        "action": "INCREASE_WEIGHT",
+        "rationale": "Strong progressive overload: Increase weight to 87.5kg (+2.5kg) targeting 6–8 reps."
+      },
+      "history": [
+        {
+          "date": "2026-08-27",
+          "totalVolume": 1275,
+          "sets": [
+            {
+              "weight": 85,
+              "reps": 8,
+              "rir": 2
+            },
+            {
+              "weight": 85,
+              "reps": 7,
+              "rir": 1
+            }
+          ]
+        },
+        {
+          "date": "2026-08-23",
+          "totalVolume": 1237.5,
+          "sets": [
+            {
+              "weight": 82.5,
+              "reps": 8,
+              "rir": 2
+            },
+            {
+              "weight": 82.5,
+              "reps": 7,
+              "rir": 1
+            }
+          ]
+        },
+        {
+          "date": "2026-08-20",
+          "totalVolume": 1600,
+          "sets": [
+            {
+              "weight": 40,
+              "reps": 10
+            },
+            {
+              "weight": 80,
+              "reps": 8,
+              "rir": 2
+            },
+            {
+              "weight": 80,
+              "reps": 7,
+              "rir": 1
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "stall": {
+    "history": [
+      {
+        "workoutId": "upper-1",
+        "workoutTitle": "Upper strength A",
+        "date": "2026-08-20",
+        "timestamp": 1787184000000,
+        "topWeight": 80,
+        "topReps": 8,
+        "topRIR": 2,
+        "maxE1RM": 106.7,
+        "totalVolume": 640,
+        "setsCount": 1,
+        "sets": [
+          {
+            "id": "upper-1-a",
+            "exercise": "bench_press",
+            "weight": 80,
+            "reps": 8,
+            "completed": true,
+            "rir": 2
+          }
+        ]
+      },
+      {
+        "workoutId": "upper-2",
+        "workoutTitle": "Upper strength A",
+        "date": "2026-08-23",
+        "timestamp": 1787443200000,
+        "topWeight": 80,
+        "topReps": 8,
+        "topRIR": 2,
+        "maxE1RM": 106.7,
+        "totalVolume": 640,
+        "setsCount": 1,
+        "sets": [
+          {
+            "id": "upper-2-a",
+            "exercise": "bench_press",
+            "weight": 80,
+            "reps": 8,
+            "completed": true,
+            "rir": 2
+          }
+        ]
+      },
+      {
+        "workoutId": "upper-3",
+        "workoutTitle": "Upper strength A",
+        "date": "2026-08-27",
+        "timestamp": 1787788800000,
+        "topWeight": 80,
+        "topReps": 8,
+        "topRIR": 2,
+        "maxE1RM": 106.7,
+        "totalVolume": 640,
+        "setsCount": 1,
+        "sets": [
+          {
+            "id": "upper-3-a",
+            "exercise": "bench_press",
+            "weight": 80,
+            "reps": 8,
+            "completed": true,
+            "rir": 2
+          }
+        ]
+      }
+    ],
+    "report": {
+      "exerciseId": "bench_press",
+      "exerciseName": "Barbell Bench Press",
+      "state": "STALLING",
+      "currentE1RM": 106.7,
+      "previousE1RM": 106.7,
+      "deltaE1RM": 0,
+      "percentageDelta": 0,
+      "recentSessionsCount": 3,
+      "lastPerformance": {
+        "date": "2026-08-27",
+        "weight": 80,
+        "reps": 8,
+        "rir": 2,
+        "e1RM": 106.7,
+        "volume": 640
+      },
+      "summary": "Stalling: Performance has remained approximately unchanged across recent sessions (e1RM delta +0kg).",
+      "rationales": [
+        "Performance has remained approximately unchanged across the last 3 logged sessions.",
+        "Latest: 80kg × 8 (e1RM 106.7kg) vs Prior: 80kg × 8 (e1RM 106.7kg)."
+      ],
+      "nextTarget": {
+        "targetWeight": 80,
+        "targetRepsMin": 8,
+        "targetRepsMax": 9,
+        "targetSets": 1,
+        "suggestedRIR": 2,
+        "action": "MAINTAIN",
+        "rationale": "Plateau detected: Hold weight at 80kg. Focus on breaking the stall with +1 clean repetition before increasing weight."
+      },
+      "history": [
+        {
+          "date": "2026-08-27",
+          "totalVolume": 640,
+          "sets": [
+            {
+              "weight": 80,
+              "reps": 8,
+              "rir": 2
+            }
+          ]
+        },
+        {
+          "date": "2026-08-23",
+          "totalVolume": 640,
+          "sets": [
+            {
+              "weight": 80,
+              "reps": 8,
+              "rir": 2
+            }
+          ]
+        },
+        {
+          "date": "2026-08-20",
+          "totalVolume": 640,
+          "sets": [
+            {
+              "weight": 80,
+              "reps": 8,
+              "rir": 2
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "regress": {
+    "history": [
+      {
+        "workoutId": "strong",
+        "workoutTitle": "Upper strength A",
+        "date": "2026-08-20",
+        "timestamp": 1787184000000,
+        "topWeight": 100,
+        "topReps": 8,
+        "topRIR": 1,
+        "maxE1RM": 130,
+        "totalVolume": 800,
+        "setsCount": 1,
+        "sets": [
+          {
+            "id": "a",
+            "exercise": "bench_press",
+            "weight": 100,
+            "reps": 8,
+            "completed": true,
+            "rir": 1
+          }
+        ]
+      },
+      {
+        "workoutId": "fatigued",
+        "workoutTitle": "Upper strength A",
+        "date": "2026-08-23",
+        "timestamp": 1787443200000,
+        "topWeight": 90,
+        "topReps": 6,
+        "topRIR": 0,
+        "topRPE": 10,
+        "maxE1RM": 108,
+        "totalVolume": 540,
+        "setsCount": 1,
+        "sets": [
+          {
+            "id": "b",
+            "exercise": "bench_press",
+            "weight": 90,
+            "reps": 6,
+            "completed": true,
+            "rir": 0,
+            "rpe": 10
+          }
+        ]
+      }
+    ],
+    "report": {
+      "exerciseId": "bench_press",
+      "exerciseName": "Barbell Bench Press",
+      "state": "REGRESSING",
+      "currentE1RM": 108,
+      "previousE1RM": 130,
+      "deltaE1RM": -22,
+      "percentageDelta": -16.9,
+      "recentSessionsCount": 2,
+      "lastPerformance": {
+        "date": "2026-08-23",
+        "weight": 90,
+        "reps": 6,
+        "rir": 0,
+        "rpe": 10,
+        "e1RM": 108,
+        "volume": 540
+      },
+      "summary": "Regressing: Performance has declined across recent sessions (-22kg e1RM). Consider fatigue management.",
+      "rationales": [
+        "Estimated 1RM dropped by 22kg (-16.9%) compared to prior session.",
+        "Performance decline observed (90kg × 6 vs prior 100kg × 8).",
+        "High perceived exertion / zero reserve suggests systemic or localized fatigue accumulation."
+      ],
+      "nextTarget": {
+        "targetWeight": 82.5,
+        "targetRepsMin": 6,
+        "targetRepsMax": 8,
+        "targetSets": 2,
+        "suggestedRIR": 3,
+        "action": "DELOAD",
+        "rationale": "Fatigue mitigation: Modulate load to 82.5kg at RIR 3 to restore recovery and rebuild volume safely."
+      },
+      "history": [
+        {
+          "date": "2026-08-23",
+          "totalVolume": 540,
+          "sets": [
+            {
+              "weight": 90,
+              "reps": 6,
+              "rir": 0
+            }
+          ]
+        },
+        {
+          "date": "2026-08-20",
+          "totalVolume": 800,
+          "sets": [
+            {
+              "weight": 100,
+              "reps": 8,
+              "rir": 1
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "reps": {
+    "history": [
+      {
+        "workoutId": "a",
+        "workoutTitle": "Upper strength A",
+        "date": "2026-08-20",
+        "timestamp": 1787184000000,
+        "topWeight": 80,
+        "topReps": 5,
+        "maxE1RM": 93.3,
+        "totalVolume": 400,
+        "setsCount": 1,
+        "sets": [
+          {
+            "id": "a",
+            "exercise": "bench_press",
+            "weight": 80,
+            "reps": 5,
+            "completed": true
+          }
+        ]
+      },
+      {
+        "workoutId": "b",
+        "workoutTitle": "Upper strength A",
+        "date": "2026-08-23",
+        "timestamp": 1787443200000,
+        "topWeight": 80,
+        "topReps": 6,
+        "maxE1RM": 96,
+        "totalVolume": 480,
+        "setsCount": 1,
+        "sets": [
+          {
+            "id": "b",
+            "exercise": "bench_press",
+            "weight": 80,
+            "reps": 6,
+            "completed": true
+          }
+        ]
+      }
+    ],
+    "report": {
+      "exerciseId": "bench_press",
+      "exerciseName": "Barbell Bench Press",
+      "state": "PROGRESSING",
+      "currentE1RM": 96,
+      "previousE1RM": 93.3,
+      "deltaE1RM": 2.7,
+      "percentageDelta": 2.9,
+      "recentSessionsCount": 2,
+      "lastPerformance": {
+        "date": "2026-08-23",
+        "weight": 80,
+        "reps": 6,
+        "e1RM": 96,
+        "volume": 480
+      },
+      "summary": "Progressing: Estimated 1RM has increased across recent sessions (+2.7kg / +2.9%).",
+      "rationales": [
+        "Estimated 1RM increased by +2.7kg (+2.9%) compared to previous session.",
+        "Increased repetitions (+1 rep) at 80kg."
+      ],
+      "nextTarget": {
+        "targetWeight": 80,
+        "targetRepsMin": 6,
+        "targetRepsMax": 8,
+        "targetSets": 1,
+        "suggestedRIR": 1,
+        "action": "INCREASE_REPS",
+        "rationale": "Maintain 80kg and aim to push reps from 6 to 7–8."
+      },
+      "history": [
+        {
+          "date": "2026-08-23",
+          "totalVolume": 480,
+          "sets": [
+            {
+              "weight": 80,
+              "reps": 6
+            }
+          ]
+        },
+        {
+          "date": "2026-08-20",
+          "totalVolume": 400,
+          "sets": [
+            {
+              "weight": 80,
+              "reps": 5
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "cold": {
+    "history": [],
+    "report": {
+      "exerciseId": "bench_press",
+      "exerciseName": "Barbell Bench Press",
+      "state": "INSUFFICIENT_DATA",
+      "currentE1RM": 0,
+      "previousE1RM": 0,
+      "deltaE1RM": 0,
+      "percentageDelta": 0,
+      "recentSessionsCount": 0,
+      "history": [],
+      "summary": "Insufficient data: No logged sessions recorded for this movement yet.",
+      "rationales": [
+        "Need at least 2 distinct completed workouts to calculate a deterministic performance trajectory."
+      ],
+      "nextTarget": {
+        "targetWeight": 60,
+        "targetRepsMin": 7,
+        "targetRepsMax": 10,
+        "targetSets": 3,
+        "suggestedRIR": 2,
+        "action": "BASELINE",
+        "rationale": "No prior logs found. Establish a baseline with 60kg targeting 6–8 reps at RIR 2."
+      }
+    }
+  },
+  "single": {
+    "history": [
+      {
+        "workoutId": "upper-3",
+        "workoutTitle": "Upper strength A",
+        "date": "2026-08-27",
+        "timestamp": 1787788800000,
+        "topWeight": 85,
+        "topReps": 8,
+        "topRIR": 2,
+        "topRPE": 8,
+        "maxE1RM": 113.3,
+        "totalVolume": 1275,
+        "setsCount": 2,
+        "sets": [
+          {
+            "id": "3a",
+            "exercise": "bench_press",
+            "weight": 85,
+            "reps": 8,
+            "completed": true,
+            "rir": 2,
+            "rpe": 8,
+            "notes": "Controlled pause",
+            "setType": "N"
+          },
+          {
+            "id": "3b",
+            "exercise": "bench_press",
+            "weight": 85,
+            "reps": 7,
+            "completed": true,
+            "rir": 1
+          }
+        ]
+      }
+    ],
+    "report": {
+      "exerciseId": "bench_press",
+      "exerciseName": "Barbell Bench Press",
+      "state": "INSUFFICIENT_DATA",
+      "currentE1RM": 113.3,
+      "previousE1RM": 0,
+      "deltaE1RM": 0,
+      "percentageDelta": 0,
+      "recentSessionsCount": 1,
+      "lastPerformance": {
+        "date": "2026-08-27",
+        "weight": 85,
+        "reps": 8,
+        "rir": 2,
+        "rpe": 8,
+        "e1RM": 113.3,
+        "volume": 1275
+      },
+      "history": [
+        {
+          "date": "2026-08-27",
+          "totalVolume": 1275,
+          "sets": [
+            {
+              "weight": 85,
+              "reps": 8,
+              "rir": 2
+            },
+            {
+              "weight": 85,
+              "reps": 7,
+              "rir": 1
+            }
+          ]
+        }
+      ],
+      "summary": "Insufficient data: Only 1 session recorded. Complete one more session to unlock progression tracking.",
+      "rationales": [
+        "Need at least 2 distinct completed workouts to calculate a deterministic performance trajectory."
+      ],
+      "nextTarget": {
+        "targetWeight": 85,
+        "targetRepsMin": 7,
+        "targetRepsMax": 10,
+        "targetSets": 3,
+        "suggestedRIR": 2,
+        "action": "BASELINE",
+        "rationale": "1 session recorded (85kg × 8). Log at least 1 more session to establish a deterministic progression trend."
+      }
+    }
+  }
+}

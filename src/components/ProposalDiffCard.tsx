@@ -23,7 +23,7 @@ interface ProposalDiffCardProps {
   key?: React.Key;
   proposal: Proposal;
   currentWorkout?: Workout | null;
-  onApprove?: (proposalId: string) => Promise<void>;
+  onApprove?: (proposalId: string, contentHash?: string) => Promise<void>;
   onDiscard?: (proposalId: string) => Promise<void>;
   onRebase?: (proposal: Proposal) => void;
   compact?: boolean;
@@ -175,7 +175,7 @@ export function ProposalDiffCard({
     setLoading(true);
     setErrorMsg(null);
     try {
-      await onApprove(proposal.id);
+      await onApprove(proposal.id, proposal.contentHash);
     } catch (err: any) {
       setErrorMsg(err.message || 'Could not apply — the workout may have changed. Try rebase.');
     } finally {

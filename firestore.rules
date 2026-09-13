@@ -29,15 +29,14 @@ service cloud.firestore {
       allow read, write: if isSignedIn() && isOwner(userId);
     }
 
-    match /user_permissions/{userId} {
-      allow read, write: if isSignedIn() && isOwner(userId);
+    match /user_permissions/{id} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow write: if false;
     }
 
-    match /plans/{planId} {
-      allow read, list: if isSignedIn() && existing().userId == request.auth.uid;
-      allow create: if isSignedIn() && incoming().userId == request.auth.uid;
-      allow update: if isSignedIn() && existing().userId == request.auth.uid && incoming().userId == request.auth.uid;
-      allow delete: if isSignedIn() && existing().userId == request.auth.uid;
+    match /plans/{id} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow write: if false;
     }
 
     // Workouts: direct client writes are DENIED.
@@ -48,15 +47,9 @@ service cloud.firestore {
     }
 
     // Proposals: clients can create or update drafts/discarded, but cannot set EXECUTED or REJECTED_CONFLICT directly.
-    match /proposals/{proposalId} {
-      allow read, list: if isSignedIn() && existing().userId == request.auth.uid;
-      allow create: if isSignedIn() && incoming().userId == request.auth.uid;
-      allow update: if isSignedIn() && 
-                    existing().userId == request.auth.uid && 
-                    incoming().userId == request.auth.uid && 
-                    incoming().status != 'EXECUTED' && 
-                    incoming().status != 'REJECTED_CONFLICT';
-      allow delete: if isSignedIn() && existing().userId == request.auth.uid;
+    match /proposals/{id} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow write: if false;
     }
 
     // Audit logs: server-authoritative only. Client writes are completely denied.
@@ -93,6 +86,13 @@ service cloud.firestore {
 
     match /personal_records/{recordId} {
       allow read, list: if isSignedIn() && existing().userId == request.auth.uid;
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid;
+      allow update: if isSignedIn() && existing().userId == request.auth.uid && incoming().userId == request.auth.uid;
+      allow delete: if isSignedIn() && existing().userId == request.auth.uid;
+    }
+
+    match /target_1rms/{targetId} {
+      allow read: if isSignedIn() && existing().userId == request.auth.uid;
       allow create: if isSignedIn() && incoming().userId == request.auth.uid;
       allow update: if isSignedIn() && existing().userId == request.auth.uid && incoming().userId == request.auth.uid;
       allow delete: if isSignedIn() && existing().userId == request.auth.uid;

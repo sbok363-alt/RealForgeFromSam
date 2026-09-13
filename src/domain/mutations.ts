@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { clean } from '../server/security';
 import { hashMutationPayload, evaluateIdempotencyRecord, IdempotencyRecord } from '../lib/idempotency-guard';
 
 // ==========================================
@@ -169,6 +170,7 @@ export type PlanDayInput = z.infer<typeof PlanDayInputSchema>;
 
 export const ModifyTrainingPlanSchema = z.object({
   planId: z.string({ message: 'planId is required' }).trim().min(1, 'planId is required'),
+  baseVersion: z.number().int().min(0).optional(),
   name: z.string().trim().min(1).max(100, 'Plan name cannot exceed 100 characters').optional(),
   weeklyFrequency: z
     .number()
@@ -306,12 +308,23 @@ export class InMemoryMutationStorageAdapter implements MutationStorageAdapter {
   }
 
   async commitMutation(entityType: string, entityId: string, data: Record<string, any>): Promise<void> {
-    this.entities.set(this.getEntityKey(entityType, entityId), JSON.parse(JSON.stringify(data)));
+    const key = this.getEntityKey(entityType, entityId);
+    const current = this.entities.get(key) || {};
+    this.entities.set(key, JSON.parse(JSON.stringify({ ...current, ...data })));
   }
 
   async runTransaction<R>(fn: (txAdapter: MutationStorageAdapter) => Promise<R>): Promise<R> {
-    // In-memory transactions run atomically in single-threaded Node.js
-    return await fn(this);
+    const entities = new Map(this.entities);
+    const idempotency = new Map(this.idempotencyStore);
+    const audits = new Map(this.auditLogStore);
+    try {
+      return await fn(this);
+    } catch (error) {
+      this.entities = entities;
+      this.idempotencyStore = idempotency;
+      this.auditLogStore = audits;
+      throw error;
+    }
   }
 
   getAuditLogs(): SecureAuditLogEntry[] {
@@ -357,6 +370,7 @@ export interface MutationExecutionContext {
 }
 
 export interface ExecuteSecureMutationParams<TPayload, TResult = any> {
+  operation?: string;
   rawEnvelope: unknown;
   payloadSchema: z.ZodSchema<TPayload>;
   authenticatedUserId: string;
@@ -409,6 +423,15 @@ export async function executeSecureMutation<TPayload, TResult = any>(
 
   const envelope = parseResult.data;
 
+  const rawTargetId = targetEntityId ||
+    (envelope.payload as any)?.id ||
+    (envelope.payload as any)?.exerciseId ||
+    (envelope.payload as any)?.planId || 'global';
+  const effectiveTargetId = typeof rawTargetId === 'string' ? rawTargetId.trim() : '';
+  if (!effectiveTargetId || effectiveTargetId.length > 128 || /[\\/\u0000-\u001f\u007f]/.test(effectiveTargetId) || effectiveTargetId === '.' || effectiveTargetId === '..') {
+    return { success: false, error: 'Validation failed: invalid target identifier.' };
+  }
+
   // STEP 2: Authentication & Authorization Verification
   if (envelope.userId !== authenticatedUserId) {
     return {
@@ -420,22 +443,15 @@ export async function executeSecureMutation<TPayload, TResult = any>(
   try {
     return await storageAdapter.runTransaction(async (txStorage) => {
       // Determine target entity ID (either explicit or derived from payload if present)
-      const effectiveTargetId =
-        targetEntityId ||
-        (envelope.payload as any)?.id ||
-        (envelope.payload as any)?.exerciseId ||
-        (envelope.payload as any)?.planId ||
-        'global';
-
       // STEP 3: Ownership check if target exists
       let existingEntity: Record<string, any> | null = null;
-      if (getExistingEntity && effectiveTargetId !== 'global') {
+      if (getExistingEntity) {
         existingEntity = await getExistingEntity(effectiveTargetId, txStorage);
-      } else if (effectiveTargetId !== 'global') {
+      } else {
         existingEntity = await txStorage.findExistingEntity(targetEntityType, effectiveTargetId);
       }
 
-      if (existingEntity && existingEntity.userId && existingEntity.userId !== authenticatedUserId) {
+      if (existingEntity && existingEntity.userId !== authenticatedUserId) {
         return {
           success: false,
           error: `Authorization failed: Authenticated user "${authenticatedUserId}" does not own target entity "${effectiveTargetId}".`,
@@ -443,7 +459,7 @@ export async function executeSecureMutation<TPayload, TResult = any>(
       }
 
       // STEP 4: Idempotency Key & Hash Verification
-      const payloadHash = hashMutationPayload(effectiveTargetId, envelope.payload);
+      const payloadHash = hashMutationPayload(effectiveTargetId, clean({ schemaVersion: 2, operation: params.operation || targetEntityType, uid: authenticatedUserId, payload: envelope.payload }));
       const existingIdempRecord = await txStorage.findIdempotencyRecord(envelope.idempotencyKey);
 
       const idempEval = evaluateIdempotencyRecord(
@@ -480,6 +496,8 @@ export async function executeSecureMutation<TPayload, TResult = any>(
       };
 
       const executionData = await execute(envelope.payload, executionContext);
+      const committedTargetId = (executionData && typeof executionData === 'object' && 'id' in executionData && typeof executionData.id === 'string')
+        ? executionData.id : effectiveTargetId;
 
       // STEP 6: Non-Destructive Audit Log Entry
       const auditLogId = `audit_${crypto.randomUUID()}`;
@@ -490,7 +508,7 @@ export async function executeSecureMutation<TPayload, TResult = any>(
         source: envelope.source,
         reason: envelope.reason,
         targetEntityType,
-        targetEntityId: effectiveTargetId,
+        targetEntityId: committedTargetId,
         timestamp: new Date().toISOString(),
         beforeState: existingEntity ? JSON.parse(JSON.stringify(existingEntity)) : null,
         afterState: executionData ? JSON.parse(JSON.stringify(executionData)) : null,
@@ -506,6 +524,8 @@ export async function executeSecureMutation<TPayload, TResult = any>(
         payloadHash,
         result: executionData,
         createdAt: new Date().toISOString(),
+        schemaVersion: 2,
+        operation: targetEntityType,
         auditLogId,
       };
       await txStorage.recordIdempotency(newIdempRecord);

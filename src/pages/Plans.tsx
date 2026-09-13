@@ -66,7 +66,7 @@ export default function Plans() {
 
   const handleDelete = async (id: string) => {
     if (confirm("Delete this plan?")) {
-      await deletePlan(id, user?.uid);
+      await deletePlan(id, user?.uid, plans.find(p => p.id === id)?.version);
       loadPlans();
     }
   };
@@ -77,7 +77,7 @@ export default function Plans() {
     const plan = plans.find(p => p.id === editingPlanId);
     if (!plan) return;
 
-    const updatedPlan = { ...plan };
+    const updatedPlan = structuredClone(plan);
     if (updatedPlan.days.length === 0) {
       updatedPlan.days.push({ id: crypto.randomUUID(), name: 'Day 1', exercises: [] });
     }
@@ -99,7 +99,7 @@ export default function Plans() {
     const plan = plans.find(p => p.id === planId);
     if (!plan) return;
     
-    const updatedPlan = { ...plan };
+    const updatedPlan = structuredClone(plan);
     updatedPlan.days[0].exercises = updatedPlan.days[0].exercises.filter(ex => ex.id !== exerciseIdToRemove);
     await savePlan(updatedPlan);
     loadPlans();

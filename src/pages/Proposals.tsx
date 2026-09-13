@@ -52,9 +52,9 @@ export default function Proposals() {
     fetchData();
   }, [user]);
 
-  const handleApprove = async (proposalId: string) => {
+  const handleApprove = async (proposalId: string, contentHash?: string) => {
     if (!user) return;
-    const res = await executeProposal(proposalId, user.uid, 'USER');
+    const res = await executeProposal(proposalId, user.uid, 'USER', contentHash);
     if (res.success) {
       await fetchData();
     } else {

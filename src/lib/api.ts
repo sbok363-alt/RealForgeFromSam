@@ -13,6 +13,19 @@ import {
   writeBatch 
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
+import { useAuthStore } from '../store/useAuthStore';
+import { adaptLegacyWorkouts, type TrainingSessionReadResult } from '../domain/canonical/adapters/workout';
+
+async function securedRequest(path: string, method: string, body: any) {
+  const user = useAuthStore.getState().user;
+  const token = await user?.getIdToken?.();
+  if (!token) throw new Error('Sign in required');
+  const response = await fetch(path, { method, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
+  const data = await response.json();
+  if (useAuthStore.getState().user?.uid !== user.uid) throw new Error('Account changed');
+  if (!response.ok) throw new Error(data.error || 'Request failed');
+  return data;
+}
 import { 
   UserPermissions, 
   Proposal, 
@@ -33,53 +46,13 @@ import {
 // ==========================================
 
 export async function getUserPermissions(userId: string): Promise<UserPermissions> {
-  try {
-    const docRef = doc(db, 'user_permissions', userId);
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-      return docSnap.data() as UserPermissions;
-    }
-  } catch (e) {
-    console.warn("Could not fetch user_permissions from Firestore, fallback to local:", e);
-  }
-  
-  // Default permissions
-  const defaultPermissions: UserPermissions = {
-    userId,
-    autonomyLevel: 'L2_GUIDED_AUTONOMY',
-    permissionEpoch: 1
-  };
-  
-  try {
-    await setDoc(doc(db, 'user_permissions', userId), defaultPermissions);
-  } catch (err) {
-    // Ignore if offline
-  }
-  
-  return defaultPermissions;
+  const snap = await getDoc(doc(db, 'user_permissions', userId));
+  return snap.exists() ? snap.data() as UserPermissions : { userId, autonomyLevel: 'L0_READ_ONLY', permissionEpoch: 0 };
 }
-
-export async function updateUserPermissions(
-  userId: string, 
-  autonomyLevel: AutonomyLevel
-): Promise<UserPermissions> {
-  const current = await getUserPermissions(userId);
-  const updated: UserPermissions = {
-    userId,
-    autonomyLevel,
-    permissionEpoch: (current.permissionEpoch || 1) + 1
-  };
-
-  try {
-    await setDoc(doc(db, 'user_permissions', userId), updated);
-  } catch (e) {
-    console.warn("Could not update Firestore user_permissions:", e);
-  }
-
-  localStorage.setItem(`forge_permissions_${userId}`, JSON.stringify(updated));
-  return updated;
+export async function updateUserPermissions(userId: string, autonomyLevel: AutonomyLevel): Promise<UserPermissions> {
+  if (useAuthStore.getState().user?.uid !== userId) throw new Error('Account changed');
+  return securedRequest('/api/permissions', 'PUT', { autonomyLevel });
 }
-
 // ==========================================
 // WORKOUTS & OPTIMISTIC CONCURRENCY CONTROL (OCC)
 // ==========================================
@@ -106,6 +79,11 @@ export async function getWorkouts(userId: string): Promise<Workout[]> {
     } catch (e) {}
   }
   return [];
+}
+
+/** Opt-in canonical read. Callers must surface failures; legacy reads/writes stay unchanged. */
+export async function getCanonicalTrainingSessions(userId: string): Promise<TrainingSessionReadResult> {
+  return adaptLegacyWorkouts(await getWorkouts(userId), { userId });
 }
 
 export async function getWorkout(workoutId: string, userId: string): Promise<Workout | null> {
@@ -229,31 +207,21 @@ export async function getProposals(userId: string): Promise<Proposal[]> {
 }
 
 export async function createProposal(userId: string, proposal: Omit<Proposal, 'createdAt'>): Promise<Proposal> {
-  const newProposal: Proposal = {
-    ...proposal,
-    createdAt: new Date().toISOString()
-  };
-
-  try {
-    await setDoc(doc(db, 'proposals', proposal.id), { ...newProposal, userId });
-  } catch (e) {
-    console.warn("Could not save proposal to Firestore:", e);
-  }
-
-  const list = await getProposals(userId);
-  const updated = [newProposal, ...list.filter(p => p.id !== proposal.id)];
-  localStorage.setItem(`forge_proposals_${userId}`, JSON.stringify(updated));
-
-  return newProposal;
+  if (useAuthStore.getState().user?.uid !== userId) throw new Error('Account changed');
+  const result = await securedRequest('/api/proposals', 'POST', proposal);
+  return result.proposal;
 }
-
 export async function executeProposal(
   proposalId: string, 
   userId: string,
-  actor: 'USER' | 'AI_BRAIN' | 'SYSTEM_AUTONOMOUS' = 'USER'
+  actor: 'USER' | 'AI_BRAIN' | 'SYSTEM_AUTONOMOUS' = 'USER',
+  contentHash?: string
 ): Promise<{ success: boolean; workout?: Workout; proposal?: Proposal; error?: string }> {
-  const token = (await auth.currentUser?.getIdToken()) || 'demo-token';
-  const mutationId = crypto.randomUUID();
+  if (!contentHash) return { success: false, error: 'Regenerate this legacy proposal' };
+  const token = await useAuthStore.getState().user?.getIdToken?.();
+  const mutationKey = `forge_proposal_mutation_${userId}_${proposalId}_${contentHash}`;
+  const mutationId = sessionStorage.getItem(mutationKey) || crypto.randomUUID();
+  sessionStorage.setItem(mutationKey, mutationId);
 
   try {
     const res = await fetch(`/api/proposals/${proposalId}/execute`, {
@@ -262,7 +230,7 @@ export async function executeProposal(
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`
       },
-      body: JSON.stringify({ mutationId })
+      body: JSON.stringify({ mutationId, contentHash })
     });
 
     const data = await res.json().catch(() => ({}));
@@ -272,6 +240,8 @@ export async function executeProposal(
         error: data.error || 'Failed to execute proposal'
       };
     }
+
+    sessionStorage.removeItem(mutationKey);
 
     // Update local workout cache
     if (data.workout && data.workout.userId) {
@@ -298,26 +268,11 @@ export async function executeProposal(
 }
 
 export async function discardProposal(proposalId: string, userId: string): Promise<Proposal | null> {
-  const proposals = await getProposals(userId);
-  const proposal = proposals.find(p => p.id === proposalId);
-  if (!proposal) return null;
-
-  const discarded: Proposal = {
-    ...proposal,
-    status: 'DISCARDED',
-    reviewedAt: new Date().toISOString()
-  };
-
-  try {
-    await setDoc(doc(db, 'proposals', proposal.id), { ...discarded, userId });
-  } catch (e) {}
-
-  const nextList = proposals.map(p => p.id === proposal.id ? discarded : p);
-  localStorage.setItem(`forge_proposals_${userId}`, JSON.stringify(nextList));
-
-  return discarded;
+  const proposal = (await getProposals(userId)).find(p => p.id === proposalId);
+  if (!proposal?.contentHash) throw new Error('Legacy proposal: regenerate required');
+  const result = await securedRequest(`/api/proposals/${proposalId}/discard`, 'POST', { mutationId: crypto.randomUUID(), contentHash: proposal.contentHash });
+  return result.proposal;
 }
-
 // ==========================================
 // MUTATION AUDIT LOGS & REVERSIBLE UNDO
 // ==========================================
@@ -643,46 +598,19 @@ export async function deleteTarget1RM(targetId: string, userId: string): Promise
 }
 
 export async function getPlans(userId: string): Promise<any[]> {
-  try {
-    const q = query(collection(db, 'plans'), where('userId', '==', userId));
-    const snap = await getDocs(q);
-    if (!snap.empty) return snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  } catch (e) {}
-  const local = localStorage.getItem(`forge_plans_${userId}`);
-  return local ? JSON.parse(local) : [];
+  const snap = await getDocs(query(collection(db, 'plans'), where('userId', '==', userId)));
+  return snap.docs.map(d => ({ ...d.data(), id: d.id, version: d.data().version ?? 0 }));
 }
-
 export async function savePlan(plan: any): Promise<void> {
-  try {
-    await setDoc(doc(db, 'plans', plan.id), plan);
-  } catch (e) {}
-  const all = await getPlans(plan.userId);
-  localStorage.setItem(`forge_plans_${plan.userId}`, JSON.stringify([plan, ...all.filter(p => p.id !== plan.id)]));
+  const { name, weeklyFrequency, isActive, days, goal } = plan;
+  const creating = plan.version === undefined;
+  await securedRequest(creating ? '/api/plans' : `/api/plans/${plan.id}`, creating ? 'POST' : 'PUT', {
+    id: plan.id, baseVersion: plan.version, mutationId: crypto.randomUUID(), plan: { name, weeklyFrequency, isActive, days, ...(goal !== undefined ? { goal } : {}) }
+  });
 }
-
-export async function deletePlan(planId: string, userId?: string): Promise<void> {
-  try {
-    await deleteDoc(doc(db, 'plans', planId));
-  } catch (e) {
-    console.warn("Could not delete plan from Firestore:", e);
-  }
-
-  if (userId) {
-    const all = await getPlans(userId);
-    localStorage.setItem(`forge_plans_${userId}`, JSON.stringify(all.filter(p => p.id !== planId)));
-  } else {
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith('forge_plans_')) {
-        try {
-          const list = JSON.parse(localStorage.getItem(key) || '[]');
-          localStorage.setItem(key, JSON.stringify(list.filter((p: any) => p.id !== planId)));
-        } catch (e) {}
-      }
-    }
-  }
+export async function deletePlan(planId: string, userId?: string, baseVersion?: number): Promise<void> {
+  await securedRequest(`/api/plans/${planId}`, 'DELETE', { baseVersion, mutationId: crypto.randomUUID() });
 }
-
 export async function getUserProfile(userId: string): Promise<UserProfile | null> {
   try {
     const snap = await getDoc(doc(db, 'users', userId));
@@ -993,6 +921,7 @@ export async function seedForgeData(userId: string): Promise<void> {
 }
 
 export async function mutateWorkout(workoutId: string, baseVersion: number, updates: Partial<Workout>, duration?: number, volume?: number): Promise<Workout> {
+  const epoch = useAuthStore.getState().identityEpoch;
   const token = (await auth.currentUser?.getIdToken()) || 'demo-token';
 
   const res = await fetch(`/api/workouts/${workoutId}/mutate`, {
@@ -1011,6 +940,7 @@ export async function mutateWorkout(workoutId: string, baseVersion: number, upda
   });
 
   const data = await res.json();
+  if (useAuthStore.getState().identityEpoch !== epoch) throw new Error('Account changed');
   if (!res.ok) {
     if (res.status === 409) {
       const err: any = new Error(data.error || 'Stale version');

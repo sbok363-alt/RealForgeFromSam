@@ -24,6 +24,9 @@ import {
   MutationExecutionContext,
 } from './src/domain/mutations';
 import { FirestoreMutationStorageAdapter } from './src/server/mutations/firestore-adapter';
+import { registerSecuredRoutes } from './src/server/secured-routes';
+import { clean, digest, documentId } from './src/server/security';
+import { createWorkoutProposal } from './src/server/proposals';
 
 dotenv.config();
 
@@ -64,7 +67,7 @@ export function scrubSecrets(input: string): string {
 }
 
 function getGenAIClient(customApiKey?: string) {
-  const key = customApiKey || process.env.GEMINI_API_KEY;
+  const key = typeof customApiKey === 'string' ? customApiKey.trim() : '';
   if (!key) {
     throw new Error("No Gemini API key found. Please activate FORGE Brain Copilot with your Gemini API key.");
   }
@@ -133,8 +136,9 @@ export const DEMO_UID = 'demo-athlete-forge';
 
 export async function validateAIAccess(idToken: string | undefined, customKey: string | undefined): Promise<string> {
   const uid = await verifyToken(idToken);
-  if (uid === DEMO_UID && !customKey) {
+  if (typeof customKey !== 'string' || !customKey.trim()) {
     const err: any = new Error("Demo users must provide their own Gemini API key to use AI features.");
+    err.message = 'A Gemini API key is required for AI features.';
     err.status = 403;
     throw err;
   }
@@ -160,8 +164,19 @@ export async function verifyToken(idToken: string | undefined): Promise<string> 
     err.status = 503;
     throw err;
   }
-  const decodedToken = await adminAuth.verifyIdToken(idToken);
-  return decodedToken.uid;
+  try {
+    const decodedToken = await adminAuth.verifyIdToken(idToken);
+    return decodedToken.uid;
+  } catch (error: any) {
+    // Credential rejection is unauthorized; infrastructure errors keep their
+    // existing service-unavailable handling. Never turn a failed verification into a UID.
+    if (['auth/argument-error', 'auth/invalid-id-token', 'auth/id-token-expired', 'auth/id-token-revoked', 'auth/user-disabled'].includes(error?.code)) {
+      const unauthorized: any = new Error('Invalid or expired ID token');
+      unauthorized.status = 401;
+      throw unauthorized;
+    }
+    throw error;
+  }
 }
 
 export async function handleMutationsExecute(req: any, res: any) {
@@ -177,6 +192,9 @@ export async function handleMutationsExecute(req: any, res: any) {
         error: "mutationType and envelope are required."
       });
     }
+    if (mutationType === 'MODIFY_TRAINING_PLAN' && (!envelope.payload || !Number.isInteger(envelope.payload.baseVersion) || envelope.payload.baseVersion < 0)) {
+      return res.status(400).json({ success: false, error: 'baseVersion is required for plan modification.' });
+    }
 
     let payloadSchema: any;
     let targetEntityType: string;
@@ -184,23 +202,26 @@ export async function handleMutationsExecute(req: any, res: any) {
 
     switch (mutationType) {
       case 'LOG_SET':
+        if (!envelope.payload?.workoutId) return res.status(400).json({ error: 'workoutId is required' });
         payloadSchema = LogSetInputSchema;
         targetEntityType = envelope.payload?.workoutId ? 'workouts' : 'WORKOUT_SET';
         defaultTargetId = envelope.payload?.workoutId || envelope.payload?.exerciseId;
         break;
       case 'CREATE_WORKOUT_SESSION':
         payloadSchema = CreateWorkoutSessionSchema;
-        targetEntityType = 'WORKOUT';
+        targetEntityType = 'workouts';
+        defaultTargetId = `w_${digest({ uid, key: envelope.idempotencyKey })}`;
         break;
       case 'UPDATE_TARGET_PROGRESSION':
         payloadSchema = UpdateTargetProgressionSchema;
-        targetEntityType = 'TARGET_PROGRESSION';
-        defaultTargetId = envelope.payload?.exerciseId;
+        targetEntityType = 'targets_1rm';
+        defaultTargetId = typeof envelope.payload?.exerciseId === 'string'
+          ? `target_${uid}_${envelope.payload.exerciseId.trim()}` : undefined;
         break;
       case 'MODIFY_TRAINING_PLAN':
         payloadSchema = ModifyTrainingPlanSchema;
-        targetEntityType = 'TRAINING_PLAN';
-        defaultTargetId = envelope.payload?.planId;
+        targetEntityType = 'plans';
+        defaultTargetId = typeof envelope.payload?.planId === 'string' ? envelope.payload.planId.trim() : undefined;
         break;
       default:
         return res.status(400).json({
@@ -218,6 +239,7 @@ export async function handleMutationsExecute(req: any, res: any) {
     const storageAdapter = (req as any).storageAdapter || (isDemo ? new InMemoryMutationStorageAdapter() : new FirestoreMutationStorageAdapter(adminDb));
 
     const result = await executeSecureMutation({
+      operation: mutationType,
       rawEnvelope: envelope,
       payloadSchema,
       authenticatedUserId: uid,
@@ -260,7 +282,12 @@ export async function handleMutationsExecute(req: any, res: any) {
         }
 
         if (mutationType === 'CREATE_WORKOUT_SESSION') {
-          const sessionId = `w_${crypto.randomUUID()}`;
+          if (ctx.existingEntity) throw new Error('CONFLICT');
+          if (validatedPayload.planId) {
+            const plan = await ctx.storage.findExistingEntity('plans', documentId.parse(validatedPayload.planId));
+            if (!plan || plan.userId !== uid) throw new Error('UNAUTHORIZED');
+          }
+          const sessionId = defaultTargetId;
           const newWorkout = {
             id: sessionId,
             userId: uid,
@@ -285,9 +312,7 @@ export async function handleMutationsExecute(req: any, res: any) {
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
           };
-          if (!isDemo && adminDb) {
-            await adminDb.collection("workouts").doc(sessionId).set(newWorkout);
-          }
+          if (!isDemo) await ctx.storage.commitMutation('workouts', sessionId, newWorkout);
           return newWorkout;
         }
 
@@ -305,14 +330,12 @@ export async function handleMutationsExecute(req: any, res: any) {
             rationale: validatedPayload.rationale,
             updatedAt: new Date().toISOString()
           };
-          if (!isDemo && adminDb) {
-            await adminDb.collection("targets_1rm").doc(targetId).set(targetData, { merge: true });
-          }
+          if (!isDemo) await ctx.storage.commitMutation('targets_1rm', targetId, targetData);
           return targetData;
         }
 
         if (mutationType === 'MODIFY_TRAINING_PLAN') {
-          const planData = {
+          const planData = Object.fromEntries(Object.entries({
             id: validatedPayload.planId,
             userId: uid,
             name: validatedPayload.name,
@@ -320,10 +343,14 @@ export async function handleMutationsExecute(req: any, res: any) {
             isActive: validatedPayload.isActive !== undefined ? validatedPayload.isActive : true,
             days: validatedPayload.days,
             updatedAt: new Date().toISOString()
-          };
-          if (!isDemo && adminDb) {
-            await adminDb.collection("plans").doc(validatedPayload.planId).set(planData, { merge: true });
+          }).filter(([, value]) => value !== undefined));
+          if (!ctx.existingEntity) throw new Error('NOT_FOUND');
+          const currentVersion = ctx.existingEntity.version === undefined ? 0 : ctx.existingEntity.version;
+          if (!Number.isInteger(currentVersion) || currentVersion < 0) throw new Error('INVALID_VERSION');
+          if (currentVersion !== validatedPayload.baseVersion) {
+            throw new Error('CONFLICT');
           }
+          if (!isDemo) await ctx.storage.commitMutation('plans', validatedPayload.planId, { ...planData, version: currentVersion + 1 });
           return planData;
         }
 
@@ -343,6 +370,7 @@ export async function handleMutationsExecute(req: any, res: any) {
       if (result.error === "NOT_FOUND" || result.error?.includes("not found") || result.error === "Workout not found") {
         return res.status(404).json({ success: false, error: "Workout not found" });
       }
+      if (result.error === 'CONFLICT' || result.error?.startsWith('Idempotency conflict:')) return res.status(409).json(result);
       return res.status(400).json(result);
     }
     return res.json(result);
@@ -368,7 +396,7 @@ export async function handleWorkoutRollback(req: any, res: any) {
       return res.status(400).json({ error: "Workout ID and auditLogId are required" });
     }
 
-    const payloadHash = hashMutationPayload(id, { auditLogId });
+    const payloadHash = hashMutationPayload(id, { schemaVersion: 2, uid, operation: 'ROLLBACK_WORKOUT', auditLogId });
 
     if (idToken === 'demo-token') {
       if (!isDemoAuthAllowed()) {
@@ -444,7 +472,7 @@ export async function handleWorkoutRollback(req: any, res: any) {
             mutationId,
             userId: uid,
             targetId: id,
-            payloadHash,
+            schemaVersion: 2, payloadHash,
             result: finalResult,
             createdAt: new Date().toISOString()
           });
@@ -489,7 +517,7 @@ export async function handleWorkoutRollback(req: any, res: any) {
             mutationId,
             userId: uid,
             targetId: id,
-            payloadHash,
+            schemaVersion: 2, payloadHash,
             result: finalResult,
             createdAt: new Date().toISOString()
           });
@@ -536,7 +564,7 @@ export async function handleTestGeminiKey(req: any, res: any) {
     await verifyToken(idToken);
 
     const { apiKey } = req.body || {};
-    const keyToTest = (typeof apiKey === 'string' && apiKey.trim()) ? apiKey.trim() : process.env.GEMINI_API_KEY;
+    const keyToTest = (typeof apiKey === 'string' && apiKey.trim()) ? apiKey.trim() : '';
     if (!keyToTest) {
       return res.status(400).json({ success: false, error: "API key is required" });
     }
@@ -557,7 +585,7 @@ export async function handleTestGeminiKey(req: any, res: any) {
     res.json({ success: true, text: response.text });
   } catch (err: any) {
     const safeMessage = scrubSecrets(err.message || "Failed to validate Gemini API key");
-    res.status(400).json({ 
+    res.status(err.status || 400).json({
       success: false, 
       error: safeMessage,
       status: err.status || 400
@@ -565,12 +593,12 @@ export async function handleTestGeminiKey(req: any, res: any) {
   }
 }
 
-async function startServer() {
+export function createApiApp() {
   const app = express();
-  const PORT = 3000;
 
   // Request size limits
   app.use(express.json({ limit: '1mb' }));
+  registerSecuredRoutes(app, () => testAdminDb || getFirestore(firebaseConfig.firestoreDatabaseId || '(default)'), verifyToken);
 
   // Authenticated Gemini Key Validation
   app.post("/api/test-gemini-key", handleTestGeminiKey);
@@ -636,6 +664,7 @@ CRITICAL SECURITY & EXECUTION RULES:
 
       let currentContents = [...formattedContents];
       const toolLoopGuard = new ToolLoopGuard(20, 3);
+      const modelSnapshots = new Map<string, any>();
       const MAX_TURNS = 6;
       let turnCount = 0;
 
@@ -680,56 +709,22 @@ CRITICAL SECURITY & EXECUTION RULES:
 
             // Propose workout change
             if (call.name === 'propose_workout_change') {
-               let beforeState: any = {};
-               let liveBaseVersion = Number(callArgs.baseVersion) || 1;
-               const targetId = typeof callArgs.targetEntityId === 'string' ? callArgs.targetEntityId : '';
-
-               try {
-                 const targetWorkout = await fetchUserDoc(firebaseConfig.projectId, dbId, idToken, 'workouts', targetId);
-                 if (targetWorkout) {
-                   beforeState = {
-                     title: targetWorkout.title,
-                     scheduledDate: targetWorkout.scheduledDate,
-                     status: targetWorkout.status,
-                     sets: targetWorkout.sets || []
-                   };
-                   // Always overwrite AI's claimed baseVersion with server live-fetched version!
-                   liveBaseVersion = targetWorkout.version || 1;
-                 }
-               } catch (e) {}
-
-               let validatedSets = [];
-               try {
-                 validatedSets = validateWorkoutSets(callArgs.afterState?.sets || []);
-               } catch (valErr: any) {
-                 validatedSets = callArgs.afterState?.sets || [];
-               }
-
-               const proposal = {
-                 id: crypto.randomUUID(),
-                 targetEntityType: 'WORKOUT',
-                 targetEntityId: targetId,
-                 baseVersion: liveBaseVersion,
-                 status: 'PENDING_APPROVAL',
-                 summary: scrubSecrets(String(callArgs.summary || 'Optimized workout proposal')),
-                 beforeState,
-                 afterState: {
-                   title: callArgs.afterState?.title || beforeState.title || 'Workout',
-                   scheduledDate: callArgs.afterState?.scheduledDate || beforeState.scheduledDate || new Date().toISOString().split('T')[0],
-                   status: callArgs.afterState?.status || beforeState.status || 'PLANNED',
-                   sets: validatedSets
-                 }
-               };
-
-               res.write(JSON.stringify({
-                 type: 'done',
-                 response: candidate.content.parts?.find((p: any) => p.text)?.text || "I have prepared a proposed modification for your review. See the diff below.",
-                 proposal
-               }) + '\n');
-               res.end();
-               return;
+              try {
+                const targetId = documentId.parse(callArgs.targetEntityId);
+                const snapshot = modelSnapshots.get(targetId);
+                if (!snapshot || snapshot.version !== callArgs.baseVersion) throw new Error('Read the current workout before proposing a change');
+                const proposal = await createWorkoutProposal(getFirestore(dbId), uid, {
+                  targetEntityId: targetId, baseVersion: snapshot.version,
+                  afterState: callArgs.afterState, summary: callArgs.summary,
+                });
+                res.write(JSON.stringify({ type: 'done', response: 'Review this recommendation before applying it.', proposal }) + '\n');
+                res.end();
+                return;
+              } catch (error: any) {
+                functionResponses.push({ functionResponse: { id: call.id, name: call.name, response: { error: scrubSecrets(error.message) } } });
+                continue;
+              }
             }
-
             if (['create_plan', 'modify_plan'].includes(call.name)) {
                try {
                  validatePlanArgs(callArgs);
@@ -772,6 +767,7 @@ CRITICAL SECURITY & EXECUTION RULES:
                 };
               }
 
+              if (Array.isArray(result.workouts)) for (const workout of result.workouts) modelSnapshots.set(workout.id, workout);
               functionResponses.push({
                 functionResponse: {
                   id: call.id,
@@ -872,48 +868,6 @@ CRITICAL SECURITY & EXECUTION RULES:
   });
 
   // Apply Plan
-  app.post("/api/forge-apply-plan", async (req, res) => {
-    try {
-      const idToken = req.headers.authorization?.split('Bearer ')[1];
-      const uid = await verifyToken(idToken);
-      const { action } = req.body;
-      
-      validatePlanArgs(action.args);
-      
-      const planId = action.args.planId || crypto.randomUUID();
-      const plan = {
-        id: planId,
-        userId: uid,
-        name: action.args.name,
-        goal: action.args.goal,
-        isActive: true,
-        days: action.args.days.map((d: any) => ({
-          id: crypto.randomUUID(),
-          name: d.name,
-          exercises: d.exercises.map((e: any) => ({
-            id: crypto.randomUUID(),
-            exerciseId: e.exerciseId,
-            targetSets: e.targetSets,
-            targetRepsMin: e.targetRepsMin,
-            targetRepsMax: e.targetRepsMax
-          }))
-        }))
-      };
-      
-      const dbId = firebaseConfig.firestoreDatabaseId || '(default)';
-      
-      if (action.name === 'modify_plan' && action.args.planId) {
-        await updateDoc(firebaseConfig.projectId, dbId, idToken, 'plans', planId, plan);
-      } else {
-        await createDoc(firebaseConfig.projectId, dbId, idToken, 'plans', planId, plan);
-      }
-      
-      res.json({ success: true, plan });
-    } catch (e: any) {
-      res.status(500).json({ error: scrubSecrets(e.message) });
-    }
-  });
-
   // ==========================================
   // AUTHORITATIVE MUTATION ENDPOINTS (TRANSACTIONAL)
   // ==========================================
@@ -952,7 +906,8 @@ CRITICAL SECURITY & EXECUTION RULES:
         return res.json({ success: true, workout: validatedWorkout });
       }
 
-      const payloadHash = hashMutationPayload(workoutId, { workout: validatedWorkout, actor, summary });
+      const { createdAt: generatedCreatedAt, updatedAt: generatedUpdatedAt, ...createIntent } = validatedWorkout;
+      const payloadHash = hashMutationPayload(workoutId, clean({ schemaVersion: 2, uid, operation: 'CREATE_WORKOUT', workout: createIntent }));
       const dbId = firebaseConfig.firestoreDatabaseId || "(default)";
       const adminDb = testAdminDb || getFirestore(dbId);
       const workoutRef = adminDb.collection("workouts").doc(workoutId);
@@ -997,7 +952,7 @@ CRITICAL SECURITY & EXECUTION RULES:
             mutationId,
             userId: uid,
             targetId: workoutId,
-            payloadHash,
+            schemaVersion: 2, payloadHash,
             result: validatedWorkout,
             createdAt: new Date().toISOString()
           });
@@ -1048,7 +1003,7 @@ CRITICAL SECURITY & EXECUTION RULES:
       }
 
       const validatedUpdates = validateWorkoutUpdates(updates || {});
-      const payloadHash = hashMutationPayload(id, { baseVersion, updates: validatedUpdates, duration, volume });
+      const payloadHash = hashMutationPayload(id, clean({ schemaVersion: 2, uid, operation: 'UPDATE_WORKOUT', baseVersion, updates: validatedUpdates, duration, volume }));
 
       if (idToken === 'demo-token') {
         if (!isDemoAuthAllowed()) {
@@ -1143,7 +1098,7 @@ CRITICAL SECURITY & EXECUTION RULES:
             mutationId,
             userId: uid,
             targetId: id,
-            payloadHash,
+            schemaVersion: 2, payloadHash,
             result: updatedWorkout,
             createdAt: new Date().toISOString()
           });
@@ -1193,7 +1148,7 @@ CRITICAL SECURITY & EXECUTION RULES:
         return res.status(400).json({ error: "Invalid workout ID" });
       }
 
-      const payloadHash = hashMutationPayload(id, { action: 'DELETE' });
+      const payloadHash = hashMutationPayload(id, { schemaVersion: 2, uid, operation: 'DELETE_WORKOUT' });
 
       if (idToken === 'demo-token') {
         if (!isDemoAuthAllowed()) {
@@ -1255,7 +1210,7 @@ CRITICAL SECURITY & EXECUTION RULES:
             mutationId,
             userId: uid,
             targetId: id,
-            payloadHash,
+            schemaVersion: 2, payloadHash,
             result: { success: true, deletedId: id },
             createdAt: new Date().toISOString()
           });
@@ -1270,6 +1225,8 @@ CRITICAL SECURITY & EXECUTION RULES:
         res.status(403).json({ error: "Unauthorized" });
       } else if (e.message.startsWith("IDEMP_CONFLICT:")) {
         res.status(409).json({ error: e.message.slice(15) });
+      } else if (e.message === "LEGACY_PROPOSAL_REGENERATE_REQUIRED") {
+        res.status(409).json({ error: "Proposal must be regenerated before execution." });
       } else {
         res.status(500).json({ error: scrubSecrets(e.message) });
       }
@@ -1279,148 +1236,17 @@ CRITICAL SECURITY & EXECUTION RULES:
   // 3. POST /api/workouts/:id/rollback (Hardened against forged audit data - P0-4, P0-5, P0-6, Phase 0.75)
   app.post("/api/workouts/:id/rollback", handleWorkoutRollback);
 
-  // 4. POST /api/proposals/:id/execute
-  app.post("/api/proposals/:id/execute", async (req, res) => {
-    try {
-      const idToken = req.headers.authorization?.split("Bearer ")[1];
-      const uid = await verifyToken(idToken);
-      const { id } = req.params;
-      const { mutationId } = req.body || {};
-
-      if (!id) {
-        return res.status(400).json({ error: "Proposal ID is required" });
-      }
-
-      const payloadHash = hashMutationPayload(id, { action: 'EXECUTE' });
-
-      if (idToken === 'demo-token') {
-        if (!isDemoAuthAllowed()) {
-          return res.status(401).json({ error: "UNAUTHORIZED: Demo authentication is disabled" });
-        }
-        return res.json({ success: true, message: "Proposal execution simulated for demo token" });
-      }
-
-      const dbId = firebaseConfig.firestoreDatabaseId || "(default)";
-      const adminDb = getFirestore(dbId);
-      const proposalRef = adminDb.collection("proposals").doc(id);
-      const idempRef = mutationId ? adminDb.collection("mutation_ids").doc(mutationId) : null;
-
-      const outcome = await adminDb.runTransaction(async (transaction) => {
-        if (idempRef) {
-          const idempSnap = await transaction.get(idempRef);
-          if (idempSnap.exists) {
-            const evalRecord = evaluateIdempotencyRecord(idempSnap.data() as any, id, payloadHash, uid);
-            if (evalRecord.status === 'REPLAY') return evalRecord.result;
-            if (evalRecord.status === 'CONFLICT') throw new Error(`IDEMP_CONFLICT:${evalRecord.error}`);
-          }
-        }
-
-        const propSnap = await transaction.get(proposalRef);
-        if (!propSnap.exists) throw new Error("PROPOSAL_NOT_FOUND");
-        const proposal = propSnap.data();
-        if (proposal?.userId !== uid) throw new Error("UNAUTHORIZED");
-
-        if (proposal?.status !== 'PENDING_APPROVAL') {
-          throw new Error(`INVALID_STATUS:Proposal status is ${proposal?.status}, expected PENDING_APPROVAL`);
-        }
-
-        const workoutRef = adminDb.collection("workouts").doc(proposal.targetEntityId);
-        const workoutSnap = await transaction.get(workoutRef);
-        if (!workoutSnap.exists) throw new Error("TARGET_WORKOUT_NOT_FOUND");
-        const workoutData = workoutSnap.data();
-        if (workoutData?.userId !== uid) throw new Error("UNAUTHORIZED");
-
-        // OCC Verification
-        if (workoutData?.version !== proposal.baseVersion) {
-          // Reject proposal due to conflict
-          transaction.update(proposalRef, {
-            status: 'REJECTED_CONFLICT',
-            reviewedAt: new Date().toISOString()
-          });
-          throw new Error(`OCC_CONFLICT:Target workout evolved to v${workoutData?.version} (proposal based on v${proposal.baseVersion})`);
-        }
-
-        const resultVersion = (workoutData?.version || 0) + 1;
-        const cleanAfterState = stripImmutableFields(proposal.afterState || {});
-        const updatedWorkout = {
-          ...workoutData,
-          ...cleanAfterState,
-          id: workoutData.id,
-          userId: uid,
-          version: resultVersion,
-          updatedAt: new Date().toISOString()
-        };
-
-        transaction.set(workoutRef, updatedWorkout);
-        transaction.update(proposalRef, {
-          status: 'EXECUTED',
-          reviewedAt: new Date().toISOString()
-        });
-
-        const auditRef = adminDb.collection("mutation_audit_logs").doc();
-        transaction.set(auditRef, {
-          id: auditRef.id,
-          mutationId: mutationId || crypto.randomUUID(),
-          userId: uid,
-          actor: 'USER',
-          targetEntityType: 'WORKOUT',
-          targetEntityId: workoutData.id,
-          baseVersion: proposal.baseVersion,
-          resultVersion,
-          summary: `Executed AI Proposal: ${proposal.summary}`,
-          inverseDelta: {
-            title: workoutData.title,
-            scheduledDate: workoutData.scheduledDate,
-            status: workoutData.status,
-            sets: workoutData.sets || [],
-            version: workoutData.version
-          },
-          createdAt: new Date().toISOString()
-        });
-
-        const finalResult = {
-          success: true,
-          workout: updatedWorkout,
-          proposal: { ...proposal, status: 'EXECUTED' }
-        };
-
-        if (idempRef) {
-          transaction.set(idempRef, {
-            mutationId,
-            userId: uid,
-            targetId: id,
-            payloadHash,
-            result: finalResult,
-            createdAt: new Date().toISOString()
-          });
-        }
-
-        return finalResult;
-      });
-
-      res.json(outcome);
-    } catch (e: any) {
-      if (e.message === "PROPOSAL_NOT_FOUND" || e.message === "TARGET_WORKOUT_NOT_FOUND") {
-        res.status(404).json({ error: e.message });
-      } else if (e.message === "UNAUTHORIZED") {
-        res.status(403).json({ error: "Unauthorized" });
-      } else if (e.message.startsWith("INVALID_STATUS:")) {
-        res.status(400).json({ error: e.message.slice(15) });
-      } else if (e.message.startsWith("OCC_CONFLICT:")) {
-        res.status(409).json({ error: e.message.slice(13) });
-      } else if (e.message.startsWith("IDEMP_CONFLICT:")) {
-        res.status(409).json({ error: e.message.slice(15) });
-      } else {
-        res.status(500).json({ error: scrubSecrets(e.message) });
-      }
-    }
-  });
-
   // 5. POST /api/mutations/execute
   // Universal Transactional Mutation Pipeline Gateway
   app.post("/api/mutations/execute", handleMutationsExecute);
 
   // Vite middleware for development
+  return app;
+}
+
+async function startServer() {
+  const app = createApiApp();
+  const PORT = 3000;
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },

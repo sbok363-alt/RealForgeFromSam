@@ -356,17 +356,7 @@ export default function Brain() {
               let proposalObj: Proposal | undefined = undefined;
               if (data.proposal) {
                 // Save proposal to Firestore & local
-                proposalObj = await createProposal(user.uid, {
-                  id: data.proposal.id || crypto.randomUUID(),
-                  threadId: thread.id,
-                  targetEntityType: 'WORKOUT',
-                  targetEntityId: data.proposal.targetEntityId,
-                  baseVersion: data.proposal.baseVersion,
-                  status: 'PENDING_APPROVAL',
-                  summary: data.proposal.summary,
-                  beforeState: data.proposal.beforeState,
-                  afterState: data.proposal.afterState
-                });
+                proposalObj = data.proposal;
               }
 
               const assistantMessage: ThreadMessage = {
@@ -415,9 +405,9 @@ export default function Brain() {
     }
   };
 
-  const handleApproveProposal = async (proposalId: string) => {
+  const handleApproveProposal = async (proposalId: string, contentHash?: string) => {
     if (!user) return;
-    const res = await executeProposal(proposalId, user.uid, 'USER');
+    const res = await executeProposal(proposalId, user.uid, 'USER', contentHash);
     
     if (res.success && res.workout) {
       await refreshWorkouts();

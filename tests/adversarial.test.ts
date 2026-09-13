@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import { analyzeExerciseProgression, calculateE1RM } from '../src/lib/progression';
 import { Workout } from '../src/types';
 
@@ -24,6 +25,7 @@ function runAdversarialAudit() {
       failures++;
     }
   } catch (e) {
+    failures++;
     console.log('Error in Test 1:', e);
   }
 
@@ -57,10 +59,12 @@ function runAdversarialAudit() {
       failures++;
     }
   } catch (e) {
+    failures++;
     console.log('Error in Test 2:', e);
   }
 
   console.log(`\nAudit Complete. Failures detected: ${failures}`);
+  assert.equal(failures, 0, 'Adversarial regression failures must fail the test process');
 }
 
 runAdversarialAudit();

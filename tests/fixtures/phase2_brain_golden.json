@@ -1,0 +1,105 @@
+{
+  "hardFacts": {
+    "totalWorkoutsAnalyzed": 3,
+    "completedWorkoutsCount": 3,
+    "exercises": [
+      {
+        "exerciseId": "bench_press",
+        "exerciseName": "Barbell Bench Press",
+        "recentSessionsCount": 3,
+        "latestE1RM": 113.3,
+        "deltaE1RM": 3.3,
+        "percentageDelta": 3,
+        "progressionState": "PROGRESSING",
+        "lastPerformance": {
+          "date": "2026-08-27",
+          "weight": 85,
+          "reps": 8,
+          "rir": 2,
+          "rpe": 8,
+          "e1RM": 113.3,
+          "volume": 1275
+        },
+        "stallAnalysis": {
+          "exerciseId": "bench_press",
+          "isStalled": false,
+          "sessionsAnalyzed": 3,
+          "consecutiveStallCount": 0,
+          "percentageDelta": 6.2,
+          "e1rmHistory": [
+            106.7,
+            110,
+            113.3
+          ],
+          "loadsHistory": [
+            80,
+            82.5,
+            85
+          ],
+          "targetRirAvg": 2,
+          "recommendedAction": "NONE",
+          "rationale": "Barbell Bench Press is currently progressing or maintaining normal adaptation trajectory (6.2% e1RM change over last 3 sessions)."
+        }
+      }
+    ],
+    "stalledExercises": [],
+    "muscleVolumes": {
+      "CHEST": {
+        "muscle": "CHEST",
+        "weeklySets": 4,
+        "targetThreshold": 10,
+        "isDeficit": true,
+        "status": "DEFICIT"
+      },
+      "BACK": {
+        "muscle": "BACK",
+        "weeklySets": 0,
+        "targetThreshold": 12,
+        "isDeficit": true,
+        "status": "DEFICIT"
+      },
+      "SHOULDERS": {
+        "muscle": "SHOULDERS",
+        "weeklySets": 2,
+        "targetThreshold": 10,
+        "isDeficit": true,
+        "status": "DEFICIT"
+      },
+      "LEGS": {
+        "muscle": "LEGS",
+        "weeklySets": 0,
+        "targetThreshold": 12,
+        "isDeficit": true,
+        "status": "DEFICIT"
+      },
+      "ARMS": {
+        "muscle": "ARMS",
+        "weeklySets": 2,
+        "targetThreshold": 8,
+        "isDeficit": true,
+        "status": "DEFICIT"
+      },
+      "CORE": {
+        "muscle": "CORE",
+        "weeklySets": 0,
+        "targetThreshold": 6,
+        "isDeficit": true,
+        "status": "DEFICIT"
+      }
+    },
+    "activeVolumeDeficits": [
+      "CHEST (4/10 sets)",
+      "BACK (0/12 sets)",
+      "SHOULDERS (2/10 sets)",
+      "LEGS (0/12 sets)",
+      "ARMS (2/8 sets)",
+      "CORE (0/6 sets)"
+    ]
+  },
+  "deterministicRules": {
+    "doubleProgression": "Advance load only after top-of-range reps are met with RIR >= 2.",
+    "stallCriteria": "< 2.5% progression across 3-4 consecutive sessions at target RIR indicates plateau.",
+    "fatigueDeload": "Decline in e1RM with high exertion requires deload or volume reduction."
+  },
+  "promptContextText": "=== FORGE AUTHORITATIVE TRAINING CONTEXT ===\nUSER ID: athlete-fixture\nGENERATED AT: <time>\nTOTAL COMPLETED SESSIONS: 3\n\n--- [HARD FACTS] EXERCISE PERFORMANCE & TRAJECTORY ---\n- Barbell Bench Press (bench_press): Latest: 85kg × 8 reps (e1RM: 113.3kg) [RIR: 2] | Trend: PROGRESSING (Δe1RM: +3.3kg, 3%)\n\n--- [HARD FACTS] WEEKLY MUSCLE SET VOLUMES & DEFICITS ---\n- CHEST: 4 / 10 sets (DEFICIT)\n- BACK: 0 / 12 sets (DEFICIT)\n- SHOULDERS: 2 / 10 sets (DEFICIT)\n- LEGS: 0 / 12 sets (DEFICIT)\n- ARMS: 2 / 8 sets (DEFICIT)\n- CORE: 0 / 6 sets (DEFICIT)\nACTIVE DEFICITS FLAGGED: CHEST (4/10 sets), BACK (0/12 sets), SHOULDERS (2/10 sets), LEGS (0/12 sets), ARMS (2/8 sets), CORE (0/6 sets)\n\n--- [SYSTEM PROGRESSION INVARIANTS] ---\n1. DOUBLE PROGRESSION: Increase load (+2.5kg compound / +1.25kg accessory) ONLY when target reps are hit at target RIR (>= 2).\n2. STALL CRITERIA: When e1RM or load progresses < 2.5% across 3-4 consecutive sessions, DO NOT increase weight. Use flagExerciseStall and recommend HOLD_LOAD or DELOAD.\n3. FATIGUE REGRESSION: High exertion (RIR 0-1) across stalled sessions indicates systemic fatigue; recommend deload or volume reduction.\n4. MANDATORY AI JUSTIFICATION: Any proposed mutation (proposeProgressionUpdate, proposePlanModification) MUST include a non-empty, factual rationale."
+}

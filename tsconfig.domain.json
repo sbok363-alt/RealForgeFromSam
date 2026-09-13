@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "allowJs": false
+  },
+  "include": [
+    "src/domain/canonical/**/*.ts",
+    "src/domain/analytics/**/*.ts",
+    "tests/canonical*.test.ts",
+    "tests/phase2_*.test.ts"
+  ]
+}

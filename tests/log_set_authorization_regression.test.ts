@@ -414,11 +414,8 @@ async function runLogSetAuthorizationRegressionTests() {
     const resStandalone = createMockRes();
     await handleMutationsExecute(reqStandalone, resStandalone);
 
-    assert(resStandalone.statusCode === 200, `Expected 200 for standalone set, got ${resStandalone.statusCode}`);
-    assert(resStandalone.body.success === true, 'Standalone set returned success');
-    assert(resStandalone.body.data.exerciseId === 'ex_deadlift', 'Returned exerciseId');
-    assert(resStandalone.body.data.weightKg === 200, 'Returned weightKg');
-    assert(!!resStandalone.body.data.id, 'Returned generated set id');
+    assert(resStandalone.statusCode === 400, 'Persisted logging requires a workout target');
+    assert(storage.getAuditLogs().length === 0, 'Rejected append produces no audit');
 
     // 7B: Logging set with custom setType ('W') and notes into owned workout
     storage.seedEntity('workouts', 'w_user_a_full', {

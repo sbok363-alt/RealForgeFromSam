@@ -4,9 +4,12 @@ import { Button } from './ui/Button';
 import { Input } from './ui/Input';
 import { Eye, EyeOff, Key, X, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { auth } from '../lib/firebase';
+import { useAuthStore } from '../store/useAuthStore';
 
 export function BYOKModal() {
   const { isModalOpen, closeModal, apiKey, setApiKey, status, setStatus } = useGeminiStore();
+  const { user } = useAuthStore();
   const [inputValue, setInputValue] = useState(apiKey || '');
   const [showKey, setShowKey] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -14,6 +17,7 @@ export function BYOKModal() {
   if (!isModalOpen) return null;
 
   const handleTestAndSave = async () => {
+    const epoch = useAuthStore.getState().identityEpoch;
     if (!inputValue.trim()) {
       setErrorMsg('API Key is required.');
       return;
@@ -30,9 +34,10 @@ export function BYOKModal() {
       let serverErrorMessage = '';
 
       try {
+        const token = await (user?.getIdToken ? user.getIdToken() : auth.currentUser?.getIdToken());
         const proxyRes = await fetch('/api/test-gemini-key', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
           body: JSON.stringify({ apiKey: userApiKey })
         });
         const proxyData = await proxyRes.json();
@@ -42,28 +47,11 @@ export function BYOKModal() {
           serverErrorMessage = proxyData.error || 'Server validation failed';
         }
       } catch (proxyErr) {
-        console.warn('Proxy test unreachable, trying direct client fetch fallback...', proxyErr);
+        console.warn('Proxy test unreachable.', proxyErr);
       }
 
-      // If proxy didn't succeed, try direct REST call as fallback
-      if (!testSuccess) {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${userApiKey}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: "ping" }] }]
-          })
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-          console.error('Gemini API Error Payload:', data);
-          throw new Error(data.error?.message || serverErrorMessage || 'Invalid API Key or rate limit exceeded');
-        }
-      }
+      if (!testSuccess) throw new Error(serverErrorMessage || 'Server validation failed');
+      if (useAuthStore.getState().identityEpoch !== epoch) return;
       
       setApiKey(userApiKey);
       
@@ -71,6 +59,7 @@ export function BYOKModal() {
         closeModal();
       }, 1500);
     } catch (error: any) {
+      if (useAuthStore.getState().identityEpoch !== epoch) return;
       console.error('API Key Test Error:', error);
       setStatus('ERROR');
       setErrorMsg(error.message || 'Invalid API Key or rate limit exceeded');

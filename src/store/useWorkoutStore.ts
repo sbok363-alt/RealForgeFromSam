@@ -24,6 +24,7 @@ export interface WorkoutState {
   clearRestTimer: () => void;
   setLastSyncedAt: (timestamp: number) => void;
   setActivePRSetIds: (setIds: string[]) => void;
+  clearForUser: (userId: string | null) => void;
 
   // Backward compatibility methods for exercise-based schema
   updateSet: (exerciseId: string, setId: string, updates: Partial<WorkoutSet>) => void;
@@ -159,6 +160,13 @@ export const useWorkoutStore = create<WorkoutState>()(
         set({ activePRSetIds: setIds });
       },
 
+      clearForUser: (userId) => {
+        const workout = get().activeWorkout;
+        if (workout && (!userId || workout.userId !== userId)) {
+          set({ activeWorkout: null, isModalOpen: false, startedAt: null, restEndTime: null, lastSyncedAt: null, activePRSetIds: [] });
+        }
+      },
+
       // Backward compatibility implementations
       updateSet: (exerciseId, setId, updates) => set((state) => {
         if (!state.activeWorkout) return state;
@@ -222,6 +230,7 @@ export const useWorkoutStore = create<WorkoutState>()(
     }),
     {
       name: 'forge-active-workout-v2',
+      skipHydration: true,
       partialize: (state) => ({
         activeWorkout: state.activeWorkout,
         startedAt: state.startedAt,
@@ -232,6 +241,30 @@ export const useWorkoutStore = create<WorkoutState>()(
     }
   )
 );
+
+/** Hydrate only the authenticated owner's namespace. Legacy data is never assigned an owner. */
+export function bindWorkoutIdentity(uid: string | null) {
+  const name = uid ? `forge-active-workout-v3:${uid}` : 'forge-active-workout-signed-out';
+  let saved: any = null;
+  try {
+    if (uid) {
+      saved = JSON.parse(localStorage.getItem(name) || 'null')?.state;
+      if (!saved) {
+        const legacy = JSON.parse(localStorage.getItem('forge-active-workout-v2') || 'null')?.state;
+        if (legacy?.activeWorkout?.userId === uid) saved = legacy;
+      }
+    }
+  } catch { /* Malformed browser data is not hydrated. */ }
+  useWorkoutStore.persist.setOptions({ name });
+  const owned = saved?.activeWorkout?.userId === uid && uid !== null;
+  useWorkoutStore.setState({
+    activeWorkout: owned ? saved.activeWorkout : null,
+    startedAt: owned ? saved.startedAt : null,
+    restEndTime: owned ? saved.restEndTime : null,
+    lastSyncedAt: owned ? saved.lastSyncedAt : null,
+    isModalOpen: false, activePRSetIds: [],
+  });
+}
 
 /**
  * Calculates Estimated 1RM using Epley's formula:

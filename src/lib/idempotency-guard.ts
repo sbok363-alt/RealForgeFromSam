@@ -1,84 +1,22 @@
+import { createHash } from 'node:crypto';
+import { canonical } from '../server/security';
+
 export type IdempotencyStatus = 'NEW' | 'REPLAY' | 'CONFLICT';
+export interface IdempotencyEvaluation { status: IdempotencyStatus; result?: any; error?: string; }
+export interface IdempotencyRecord { mutationId: string; userId: string; targetId: string; payloadHash: string; result: any; createdAt: string; schemaVersion?: number; operation?: string; }
 
-export interface IdempotencyEvaluation {
-  status: IdempotencyStatus;
-  result?: any;
-  error?: string;
+export function deterministicStringify(value: any): string {
+  return canonical(value);
 }
 
-export interface IdempotencyRecord {
-  mutationId: string;
-  userId: string;
-  targetId: string;
-  payloadHash: string;
-  result: any;
-  createdAt: string;
-}
-
-/**
- * Normalizes an object into a deterministic JSON string with sorted keys.
- */
-export function deterministicStringify(obj: any): string {
-  if (obj === null || obj === undefined) return '';
-  if (typeof obj !== 'object') return String(obj);
-  if (Array.isArray(obj)) {
-    return '[' + obj.map(item => deterministicStringify(item)).join(',') + ']';
-  }
-  const keys = Object.keys(obj).sort();
-  return '{' + keys.map(k => `"${k}":${deterministicStringify(obj[k])}`).join(',') + '}';
-}
-
-/**
- * Computes a hash representing targetId + payload.
- */
 export function hashMutationPayload(targetId: string, payload: any): string {
-  const normStr = `${targetId}::${deterministicStringify(payload)}`;
-  // DJB2 + FNV1a combination for fast, collision-resistant string hash in any JS environment
-  let h1 = 5381;
-  let h2 = 2166136261;
-  for (let i = 0; i < normStr.length; i++) {
-    const char = normStr.charCodeAt(i);
-    h1 = ((h1 << 5) + h1) ^ char;
-    h2 = (h2 ^ char) * 16777619;
-  }
-  return `${(h1 >>> 0).toString(16)}_${(h2 >>> 0).toString(16)}`;
+  return createHash('sha256').update(`${targetId}::${deterministicStringify(payload)}`, 'utf8').digest('hex');
 }
 
-/**
- * Evaluates an idempotency record against incoming request parameters.
- */
-export function evaluateIdempotencyRecord(
-  existingRecord: IdempotencyRecord | null | undefined,
-  currentTargetId: string,
-  currentPayloadHash: string,
-  currentUserId?: string
-): IdempotencyEvaluation {
-  if (!existingRecord) {
-    return { status: 'NEW' };
-  }
-
-  // Cross-user collision or hijack attempt -> 409 CONFLICT
-  if (currentUserId && existingRecord.userId && existingRecord.userId !== currentUserId) {
-    return {
-      status: 'CONFLICT',
-      error: `Idempotency key "${existingRecord.mutationId}" belongs to another user session.`
-    };
-  }
-
-  // If targetId and payloadHash match exactly -> REPLAY of original successful result
-  if (
-    existingRecord.targetId === currentTargetId &&
-    existingRecord.payloadHash === currentPayloadHash
-  ) {
-    return {
-      status: 'REPLAY',
-      result: existingRecord.result
-    };
-  }
-
-  // Idempotency key reused with different target or different payload -> 409 CONFLICT
-  return {
-    status: 'CONFLICT',
-    error: `Idempotency key "${existingRecord.mutationId}" was already used for a different target or payload.`
-  };
+export function evaluateIdempotencyRecord(existingRecord: IdempotencyRecord | null | undefined, currentTargetId: string, currentPayloadHash: string, currentUserId?: string): IdempotencyEvaluation {
+  if (!existingRecord) return { status: 'NEW' };
+  if (!currentUserId || existingRecord.userId !== currentUserId) return { status: 'CONFLICT', error: 'Mutation key belongs to another user session.' };
+  if (existingRecord.schemaVersion !== 2) return { status: 'CONFLICT', error: 'Legacy mutation key requires reconciliation.' };
+  if (existingRecord.targetId === currentTargetId && existingRecord.payloadHash === currentPayloadHash) return { status: 'REPLAY', result: existingRecord.result };
+  return { status: 'CONFLICT', error: `Idempotency key "${existingRecord.mutationId}" was already used for a different target or payload.` };
 }

@@ -6,6 +6,24 @@ import { getExerciseById, MuscleGroup } from '../lib/exercises';
 export { calculateE1RM, extractExerciseHistory, analyzeExerciseProgression };
 export type { SessionExercisePerformance };
 
+// Canonical Phase 2 analytics APIs. The legacy exports above remain the
+// compatibility boundary used by existing callers.
+export {
+  extractExerciseHistoryFromCanonical,
+  extractExerciseHistoryFromCanonicalResult,
+  analyzeExerciseProgressionFromCanonical,
+  analyzeExerciseProgressionFromCanonicalResult,
+  analyzeExerciseProgressionFromCanonicalSessions,
+  analyzeExerciseProgressionFromCanonicalSessionsResult,
+} from './analytics/index';
+export { extractExerciseHistoryWithDiagnostics, analyzeExerciseProgressionWithDiagnostics } from '../lib/progression';
+export type {
+  AnalyticsDiagnostic,
+  AnalyticsResult,
+  CanonicalExerciseHistorySession,
+  CanonicalProgressionReport,
+} from './analytics/index';
+
 export interface StallDetectionResult {
   exerciseId: string;
   isStalled: boolean;
