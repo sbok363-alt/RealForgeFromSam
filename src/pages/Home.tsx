@@ -205,19 +205,17 @@ export default function Home() {
         </Card>
       )}
 
-      {/* Primary action — always first after welcome */}
-      <div className="space-y-1.5">
-        <Button
-          onClick={() => setShowJustGo(true)}
-          className="w-full h-12 text-sm sm:text-base font-bold gap-2 shadow-[0_0_20px_rgba(6,182,212,0.18)]"
-        >
-          <Zap size={18} className="fill-current" />
-          Just Go
+      {/* Minimal dashboard hero */}
+      <header className="forge-hero">
+        <div>
+          <p className="forge-eyebrow">{new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</p>
+          <h1>Good to see you{user?.displayName ? `, ${user.displayName.split(' ')[0]}` : ''}.</h1>
+          <p className="forge-hero-copy">Your training, made clear. One focused session at a time.</p>
+        </div>
+        <Button onClick={() => setShowJustGo(true)} className="forge-primary-action">
+          <Zap size={16} className="fill-current" /> Start session
         </Button>
-        <p className="text-[11px] text-center text-muted-foreground">
-          Readiness → today’s session → accept & train
-        </p>
-      </div>
+      </header>
 
       {/* Daily context */}
       <TodayBriefing 
