@@ -122,8 +122,11 @@ export function ActiveWorkoutBottomBar() {
               ? { exercises: currentWorkout.exercises }
               : { sets: currentWorkout.sets })
           },
-          elapsedRef.current,
-          currentWorkout.volume
+          {
+            mutationId: crypto.randomUUID(),
+            duration: elapsedRef.current,
+            volume: currentWorkout.volume
+          }
         );
         if (updated) {
           updateActiveWorkout(updated);
