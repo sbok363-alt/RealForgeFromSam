@@ -9,7 +9,7 @@ let state: any = {
   activeWorkout: {
     id:'gate1', userId:'u1', title:'Push', scheduledDate:new Date().toISOString().slice(0,10),
     status:'IN_PROGRESS', version:1, sets:[],
-    exercises:[{id:'ex1',exerciseId:'barbell-bench-press',sets:[
+    exercises:[{id:'ex1',exerciseId:'bench_press',sets:[
       {id:'completed_a',weight:80,reps:8,completed:true,setType:'N'},
       {id:'typed_incomplete_b',weight:85,reps:8,completed:false,setType:'N'},
       {id:'completed_c',weight:82.5,reps:8,completed:true,setType:'N'},
