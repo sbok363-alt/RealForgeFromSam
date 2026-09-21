@@ -1,6 +1,15 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
-import { Workout, WorkoutExercise, WorkoutSet, WorkoutSetItem } from '../types';
+import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware';
+import {
+  PendingWorkoutMutation,
+  Workout,
+  WorkoutExercise,
+  WorkoutSet,
+  WorkoutSetItem,
+  WorkoutSyncConflict,
+} from '../types';
+import { reconcileAuthoritativeWorkout } from '../lib/workout-reconcile';
+import { createSafeStateStorage } from '../lib/safe-storage';
 
 export interface WorkoutState {
   activeWorkout: Workout | null;
@@ -9,12 +18,16 @@ export interface WorkoutState {
   restEndTime: number | null;
   lastSyncedAt: number | null;
   activePRSetIds: string[];
-  
-  // Actions
+  sessionRevision: number;
+  pendingMutation: PendingWorkoutMutation | null;
+  syncConflict: WorkoutSyncConflict | null;
+  persistenceWarning: string | null;
+
   startWorkout: (workout: Workout) => void;
   openWorkoutModal: () => void;
   closeWorkoutModal: () => void;
   updateActiveWorkout: (workoutOrUpdater: Partial<Workout> | ((prev: Workout) => Workout)) => void;
+  applyAuthoritativeWorkout: (workout: Workout, capturedRevision: number) => void;
   updateSetItem: (setId: string, updates: Partial<WorkoutSetItem>) => void;
   addSetItem: (setItem: WorkoutSetItem) => void;
   removeSetItem: (setId: string) => void;
@@ -24,8 +37,12 @@ export interface WorkoutState {
   clearRestTimer: () => void;
   setLastSyncedAt: (timestamp: number) => void;
   setActivePRSetIds: (setIds: string[]) => void;
+  queuePendingMutation: (mutation: PendingWorkoutMutation) => void;
+  clearPendingMutation: (mutationId?: string) => void;
+  setSyncConflict: (conflict: WorkoutSyncConflict | null) => void;
+  resolveConflictWithServer: () => void;
+  clearPersistenceWarning: () => void;
 
-  // Backward compatibility methods for exercise-based schema
   updateSet: (exerciseId: string, setId: string, updates: Partial<WorkoutSet>) => void;
   addSet: (exerciseId: string, set: WorkoutSet) => void;
   removeSet: (exerciseId: string, setId: string) => void;
@@ -33,15 +50,55 @@ export interface WorkoutState {
   removeExercise: (exerciseId: string) => void;
 }
 
+export function selectPersistedWorkoutState(state: WorkoutState) {
+  return {
+    activeWorkout: state.activeWorkout,
+    startedAt: state.startedAt,
+    restEndTime: state.restEndTime,
+    lastSyncedAt: state.lastSyncedAt,
+    sessionRevision: state.sessionRevision,
+    pendingMutation: state.pendingMutation,
+    syncConflict: state.syncConflict,
+  };
+}
+
+const browserStorage: StateStorage = {
+  getItem(name) {
+    if (typeof localStorage === 'undefined') return null;
+    return localStorage.getItem(name);
+  },
+  setItem(name, value) {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem(name, value);
+  },
+  removeItem(name) {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.removeItem(name);
+  },
+};
+
+let deferredPersistenceWarning: string | null = null;
+let reportPersistenceWarning = (message: string) => {
+  deferredPersistenceWarning = message;
+};
+
+const safeWorkoutStorage = createSafeStateStorage(browserStorage, (message) => {
+  reportPersistenceWarning(message);
+});
+
 export const useWorkoutStore = create<WorkoutState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       activeWorkout: null,
       isModalOpen: false,
       startedAt: null,
       restEndTime: null,
       lastSyncedAt: null,
       activePRSetIds: [],
+      sessionRevision: 0,
+      pendingMutation: null,
+      syncConflict: null,
+      persistenceWarning: null,
 
       startWorkout: (workout) => {
         const startTime = workout.startedAt || Date.now();
@@ -49,9 +106,8 @@ export const useWorkoutStore = create<WorkoutState>()(
           ...workout,
           status: 'IN_PROGRESS',
           startedAt: startTime,
-          // Ensure both sets and exercises default strictly to empty arrays if undefined
           sets: workout.sets || [],
-          exercises: workout.exercises || []
+          exercises: workout.exercises || [],
         };
 
         set({
@@ -59,17 +115,16 @@ export const useWorkoutStore = create<WorkoutState>()(
           startedAt: startTime,
           isModalOpen: true,
           restEndTime: null,
-          activePRSetIds: []
+          lastSyncedAt: null,
+          activePRSetIds: [],
+          sessionRevision: 0,
+          pendingMutation: null,
+          syncConflict: null,
         });
       },
 
-      openWorkoutModal: () => {
-        set({ isModalOpen: true });
-      },
-
-      closeWorkoutModal: () => {
-        set({ isModalOpen: false });
-      },
+      openWorkoutModal: () => set({ isModalOpen: true }),
+      closeWorkoutModal: () => set({ isModalOpen: false }),
 
       updateActiveWorkout: (workoutOrUpdater) => {
         set((state) => {
@@ -77,7 +132,24 @@ export const useWorkoutStore = create<WorkoutState>()(
           const updated = typeof workoutOrUpdater === 'function'
             ? workoutOrUpdater(state.activeWorkout)
             : { ...state.activeWorkout, ...workoutOrUpdater };
-          return { activeWorkout: updated };
+          return {
+            activeWorkout: updated,
+            sessionRevision: state.sessionRevision + 1,
+          };
+        });
+      },
+
+      applyAuthoritativeWorkout: (workout, capturedRevision) => {
+        set((state) => {
+          if (!state.activeWorkout || state.activeWorkout.id !== workout.id) return state;
+          return {
+            activeWorkout: reconcileAuthoritativeWorkout(
+              state.activeWorkout,
+              workout,
+              capturedRevision,
+              state.sessionRevision
+            ),
+          };
         });
       },
 
@@ -85,12 +157,12 @@ export const useWorkoutStore = create<WorkoutState>()(
         set((state) => {
           if (!state.activeWorkout) return state;
           const currentSets = state.activeWorkout.sets || [];
-          const updatedSets = currentSets.map(s => s.id === setId ? { ...s, ...updates } : s);
           return {
             activeWorkout: {
               ...state.activeWorkout,
-              sets: updatedSets
-            }
+              sets: currentSets.map(s => s.id === setId ? { ...s, ...updates } : s),
+            },
+            sessionRevision: state.sessionRevision + 1,
           };
         });
       },
@@ -98,12 +170,12 @@ export const useWorkoutStore = create<WorkoutState>()(
       addSetItem: (newItem) => {
         set((state) => {
           if (!state.activeWorkout) return state;
-          const currentSets = state.activeWorkout.sets || [];
           return {
             activeWorkout: {
               ...state.activeWorkout,
-              sets: [...currentSets, newItem]
-            }
+              sets: [...(state.activeWorkout.sets || []), newItem],
+            },
+            sessionRevision: state.sessionRevision + 1,
           };
         });
       },
@@ -111,12 +183,12 @@ export const useWorkoutStore = create<WorkoutState>()(
       removeSetItem: (setId) => {
         set((state) => {
           if (!state.activeWorkout) return state;
-          const currentSets = state.activeWorkout.sets || [];
           return {
             activeWorkout: {
               ...state.activeWorkout,
-              sets: currentSets.filter(s => s.id !== setId)
-            }
+              sets: (state.activeWorkout.sets || []).filter(s => s.id !== setId),
+            },
+            sessionRevision: state.sessionRevision + 1,
           };
         });
       },
@@ -128,7 +200,10 @@ export const useWorkoutStore = create<WorkoutState>()(
           startedAt: null,
           restEndTime: null,
           lastSyncedAt: null,
-          activePRSetIds: []
+          activePRSetIds: [],
+          sessionRevision: 0,
+          pendingMutation: null,
+          syncConflict: null,
         });
       },
 
@@ -139,104 +214,119 @@ export const useWorkoutStore = create<WorkoutState>()(
           startedAt: null,
           restEndTime: null,
           lastSyncedAt: null,
-          activePRSetIds: []
+          activePRSetIds: [],
+          sessionRevision: 0,
+          pendingMutation: null,
+          syncConflict: null,
         });
       },
 
-      setRestTimer: (durationSeconds) => {
-        set({ restEndTime: Date.now() + durationSeconds * 1000 });
-      },
+      setRestTimer: (durationSeconds) => set({ restEndTime: Date.now() + durationSeconds * 1000 }),
+      clearRestTimer: () => set({ restEndTime: null }),
+      setLastSyncedAt: (timestamp) => set({ lastSyncedAt: timestamp }),
+      setActivePRSetIds: (setIds) => set({ activePRSetIds: setIds }),
 
-      clearRestTimer: () => {
-        set({ restEndTime: null });
-      },
+      queuePendingMutation: (mutation) => set({ pendingMutation: mutation }),
+      clearPendingMutation: (mutationId) => set((state) => {
+        if (mutationId && state.pendingMutation?.mutationId !== mutationId) return state;
+        return { pendingMutation: null };
+      }),
+      setSyncConflict: (conflict) => set({ syncConflict: conflict }),
+      resolveConflictWithServer: () => set((state) => {
+        if (!state.syncConflict) return state;
+        return {
+          activeWorkout: state.syncConflict.serverWorkout,
+          sessionRevision: 0,
+          pendingMutation: null,
+          syncConflict: null,
+          lastSyncedAt: Date.now(),
+        };
+      }),
+      clearPersistenceWarning: () => set({ persistenceWarning: null }),
 
-      setLastSyncedAt: (timestamp) => {
-        set({ lastSyncedAt: timestamp });
-      },
-
-      setActivePRSetIds: (setIds) => {
-        set({ activePRSetIds: setIds });
-      },
-
-      // Backward compatibility implementations
       updateSet: (exerciseId, setId, updates) => set((state) => {
         if (!state.activeWorkout) return state;
-        const currentExercises = state.activeWorkout.exercises || [];
-        const exercises = currentExercises.map(ex => {
+        const exercises = (state.activeWorkout.exercises || []).map(ex => {
           if (ex.id !== exerciseId) return ex;
           return {
             ...ex,
-            sets: ex.sets.map(s => s.id === setId ? { ...s, ...updates } : s)
+            sets: ex.sets.map(s => s.id === setId ? { ...s, ...updates } : s),
           };
         });
-        return { activeWorkout: { ...state.activeWorkout, exercises } };
+        return {
+          activeWorkout: { ...state.activeWorkout, exercises },
+          sessionRevision: state.sessionRevision + 1,
+        };
       }),
 
       addSet: (exerciseId, newSet) => set((state) => {
         if (!state.activeWorkout) return state;
-        const currentExercises = state.activeWorkout.exercises || [];
-        const exercises = currentExercises.map(ex => {
-          if (ex.id !== exerciseId) return ex;
-          return { ...ex, sets: [...ex.sets, newSet] };
-        });
-        return { activeWorkout: { ...state.activeWorkout, exercises } };
+        const exercises = (state.activeWorkout.exercises || []).map(ex =>
+          ex.id === exerciseId ? { ...ex, sets: [...ex.sets, newSet] } : ex
+        );
+        return {
+          activeWorkout: { ...state.activeWorkout, exercises },
+          sessionRevision: state.sessionRevision + 1,
+        };
       }),
 
       removeSet: (exerciseId, setId) => set((state) => {
         if (!state.activeWorkout) return state;
-        const currentExercises = state.activeWorkout.exercises || [];
-        const exercises = currentExercises.map(ex => {
-          if (ex.id !== exerciseId) return ex;
-          return { ...ex, sets: ex.sets.filter(s => s.id !== setId) };
-        });
-        return { activeWorkout: { ...state.activeWorkout, exercises } };
+        const exercises = (state.activeWorkout.exercises || []).map(ex =>
+          ex.id === exerciseId ? { ...ex, sets: ex.sets.filter(s => s.id !== setId) } : ex
+        );
+        return {
+          activeWorkout: { ...state.activeWorkout, exercises },
+          sessionRevision: state.sessionRevision + 1,
+        };
       }),
 
       addExercise: (exercise) => set((state) => {
         if (!state.activeWorkout) return state;
         const currentExercises = state.activeWorkout.exercises || [];
-        
-        // Guard against duplicate exercise injection
-        const exists = currentExercises.some(e => e.id === exercise.id || e.exerciseId === exercise.exerciseId || (e as any).name === (exercise as any).name);
+        const exists = currentExercises.some(e =>
+          e.id === exercise.id ||
+          e.exerciseId === exercise.exerciseId ||
+          (e as any).name === (exercise as any).name
+        );
         if (exists) return state;
 
-        return { 
-          activeWorkout: { 
-            ...state.activeWorkout, 
-            exercises: [...currentExercises, exercise] 
-          } 
+        return {
+          activeWorkout: {
+            ...state.activeWorkout,
+            exercises: [...currentExercises, exercise],
+          },
+          sessionRevision: state.sessionRevision + 1,
         };
       }),
 
       removeExercise: (exerciseId) => set((state) => {
         if (!state.activeWorkout) return state;
-        const currentExercises = state.activeWorkout.exercises || [];
-        return { 
-          activeWorkout: { 
-            ...state.activeWorkout, 
-            exercises: currentExercises.filter(ex => ex.id !== exerciseId) 
-          } 
+        return {
+          activeWorkout: {
+            ...state.activeWorkout,
+            exercises: (state.activeWorkout.exercises || []).filter(ex => ex.id !== exerciseId),
+          },
+          sessionRevision: state.sessionRevision + 1,
         };
-      })
+      }),
     }),
     {
       name: 'forge-active-workout-v2',
-      partialize: (state) => ({
-        activeWorkout: state.activeWorkout,
-        startedAt: state.startedAt,
-        restEndTime: state.restEndTime,
-        lastSyncedAt: state.lastSyncedAt,
-        // We do NOT persist isModalOpen across reloads so the user isn't startled with a modal immediately, but the bottom bar will be visible!
-      })
+      storage: createJSONStorage(() => safeWorkoutStorage),
+      partialize: selectPersistedWorkoutState,
     }
   )
 );
 
-/**
- * Calculates Estimated 1RM using Epley's formula:
- * 1RM = Weight * (1 + Reps / 30)
- */
+reportPersistenceWarning = (message) => {
+  useWorkoutStore.setState({ persistenceWarning: message });
+};
+if (deferredPersistenceWarning) {
+  useWorkoutStore.setState({ persistenceWarning: deferredPersistenceWarning });
+  deferredPersistenceWarning = null;
+}
+
 export function calculateEpley1RM(weight: number, reps: number): number {
   if (typeof weight !== 'number' || isNaN(weight) || weight <= 0) return 0;
   if (typeof reps !== 'number' || isNaN(reps) || reps <= 0) return 0;

@@ -13,7 +13,8 @@ import {
   Minus, 
   TrendingDown, 
   HelpCircle, 
-  Target
+  Target,
+  AlertTriangle
 } from 'lucide-react';
 import { saveWorkout, mutateWorkout, getWorkouts } from '../../lib/api';
 import { WorkoutExercise, WorkoutSet, Workout, ProgressionReport } from '../../types';
@@ -39,8 +40,9 @@ export default function ActiveWorkout({ onWorkoutFinished }: { onWorkoutFinished
     addSet, 
     removeSet, 
     finishWorkout, 
-    removeExercise, 
-    addExercise 
+    removeExercise,
+    addExercise,
+    persistenceWarning
   } = useWorkoutStore();
   
   const { user } = useAuthStore();
@@ -284,6 +286,13 @@ export default function ActiveWorkout({ onWorkoutFinished }: { onWorkoutFinished
           </Button>
         </div>
       </div>
+
+      {persistenceWarning && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 flex items-start gap-2 text-xs text-amber-200">
+          <AlertTriangle size={15} className="shrink-0 mt-0.5" />
+          <span>Local recovery is unavailable on this device right now. Keep this session open until storage works again.</span>
+        </div>
+      )}
 
       {/* Rest Timer Banner */}
       {restTimeLeft > 0 && (
