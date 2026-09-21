@@ -129,6 +129,7 @@ export type WorkoutMutationKind = 'AUTOSYNC' | 'FINISH';
 export interface PendingWorkoutMutation {
   mutationId: string;
   kind: WorkoutMutationKind;
+  delivery?: 'MUTATE' | 'CREATE';
   workoutId: string;
   baseVersion: number;
   updates: Partial<Workout>;
@@ -136,6 +137,7 @@ export interface PendingWorkoutMutation {
   volume?: number;
   capturedRevision: number;
   createdAt: number;
+  createSnapshot?: Workout;
 }
 
 export interface WorkoutSyncConflict {
