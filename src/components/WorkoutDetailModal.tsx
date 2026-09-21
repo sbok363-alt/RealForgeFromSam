@@ -567,8 +567,11 @@ export function WorkoutDetailModal({
           exercises: updatedExercises,
           exerciseNotes
         },
-        duration,
-        vol
+        {
+          mutationId: crypto.randomUUID(),
+          duration,
+          volume: vol
+        }
       );
       onSave(result);
       onClose();
@@ -615,7 +618,7 @@ export function WorkoutDetailModal({
       };
       
       const vol = calculateVolume(sets);
-      const result = await mutateWorkout(workout.id, workout.version, updates, duration, vol);
+      const result = await mutateWorkout(workout.id, workout.version, updates, { mutationId: crypto.randomUUID(), duration, volume: vol });
       
       if (isCompleting) {
         setShowCelebration(true);
@@ -654,7 +657,7 @@ export function WorkoutDetailModal({
 
             const updates = { title, scheduledDate, status: newStatus, sets, exercises: updatedExercises, exerciseNotes };
             const vol = calculateVolume(sets);
-            const result = await mutateWorkout(workout.id, e.currentVersion, updates, duration, vol);
+            const result = await mutateWorkout(workout.id, e.currentVersion, updates, { mutationId: crypto.randomUUID(), duration, volume: vol });
             if (isCompleting) {
               setShowCelebration(true);
               onSave(result);
@@ -683,7 +686,8 @@ export function WorkoutDetailModal({
         {
           title: `${title} (v${workout.version + 1} Ext)`,
           sets: sets.map((s, idx) => idx === 0 ? { ...s, weight: s.weight + 2.5 } : s)
-        }
+        },
+        { mutationId: crypto.randomUUID() }
       );
       onSave(result);
     } catch (e) {
