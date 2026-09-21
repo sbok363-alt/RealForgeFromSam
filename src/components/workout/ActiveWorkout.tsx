@@ -110,8 +110,8 @@ export default function ActiveWorkout({
   const handleCompleteSet = (exId: string, setId: string, currentStatus: boolean, weight: number, reps: number) => {
     if (isFinishing) return;
     if (!currentStatus) {
-      if (weight < 0 || reps < 0) {
-        alert("Weight and reps cannot be negative.");
+      if (weight < 0 || reps <= 0) {
+        alert("Weight cannot be negative and reps must be at least 1.");
         return;
       }
     }
