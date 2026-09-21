@@ -1,36 +1,43 @@
-# RealForgeFromSam
+# FORGE
 
-> A brief, catchy description of what RealForgeFromSam does and why it exists.
+FORGE is a local-first strength-training app built around one core loop: train, record, analyze deterministic history, and use that evidence to decide what should happen next.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Status](https://img.shields.io/badge/Status-Active-success.svg)]()
+## Current focus
 
----
+The current release gate is **Dogfood Gate 1**: one real gym session must be trustworthy end to end. That means explicit set completion, stable exercise/set identity, reload recovery, one autosync lifecycle, idempotent retries, safe OCC conflict handling, authoritative finish, exact history, and deterministic basic analytics from the same completed working sets.
 
-## 🚀 Features
+Broad UI propagation, Brain expansion, naming work, templates, and advanced analytics are intentionally outside this gate.
 
-- **Feature 1:** High-level description of a core feature.
-- **Feature 2:** Detail what makes this project unique or efficient.
-- **Feature 3:** Mention compatibility, performance, or ease of use.
+## Stack
 
----
+- Vite + React 19 + TypeScript
+- Zustand
+- Tailwind CSS 4
+- React Router 7
+- Express
+- Firebase Auth / Firestore with server-authoritative writes
+- Zod
+- Gemini BYOK integration
 
-## 🛠️ Tech Stack
+## Development
 
-List the technologies, frameworks, languages, or libraries used in the project:
-- **Language:** [e.g., Python, C++, TypeScript]
-- **Framework:** [e.g., React, Unreal, Unity, FastAPI]
-- **Tools:** [e.g., Git, Docker]
+Requirements: Node.js 22 and npm.
 
----
+~~~bash
+npm install
+npm run dev
+~~~
 
-## 📦 Getting Started
+Verification:
 
-Follow these instructions to get a copy of the project up and running on your local machine for development and testing purposes.
+~~~bash
+npm run lint
+npm test
+npm run build
+~~~
 
-### Prerequisites
+## Reliability invariants
 
-List what users need to install beforehand (e.g., Node.js, Python 3.x, CMake):
-```bash
-# Example prerequisite check
-node -v
+FORGE preserves authenticated server-authoritative mutations, OCC/versioning, idempotency, audit/rollback behavior, canonical exercise identity, deterministic analytics, local-first active-session state, and Firestore client-write restrictions.
+
+See `docs/superpowers/specs/2026-09-21-dogfood-gate-1-design.md` and `docs/superpowers/plans/2026-09-21-dogfood-gate-1.md` for the current gate.
