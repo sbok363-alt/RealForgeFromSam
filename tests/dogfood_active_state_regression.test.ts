@@ -21,3 +21,37 @@ const storage = createSafeStateStorage({
 }, (message) => { warning = message; });
 storage.setItem('forge-active-workout-v2', '{}');
 if (!warning) throw new Error('storage failure must surface');
+
+
+let recursiveWarnings = 0;
+let recursiveStorage: ReturnType<typeof createSafeStateStorage>;
+recursiveStorage = createSafeStateStorage({
+  getItem: () => null,
+  setItem: () => { throw new Error('quota'); },
+  removeItem: () => undefined,
+}, () => {
+  recursiveWarnings++;
+  if (recursiveWarnings < 5) {
+    recursiveStorage.setItem('forge-active-workout-v2', '{}');
+  }
+});
+recursiveStorage.setItem('forge-active-workout-v2', '{}');
+if (recursiveWarnings !== 1) {
+  throw new Error(`storage failure callback must not recursively re-report the same failure, got ${recursiveWarnings}`);
+}
+
+let failWrites = true;
+let recoverySignals = 0;
+const recoveringStorage = (createSafeStateStorage as any)({
+  getItem: () => null,
+  setItem: () => {
+    if (failWrites) throw new Error('temporary quota');
+  },
+  removeItem: () => undefined,
+}, () => {}, () => { recoverySignals++; });
+recoveringStorage.setItem('forge-active-workout-v2', '{}');
+failWrites = false;
+recoveringStorage.setItem('forge-active-workout-v2', '{}');
+if (recoverySignals !== 1) {
+  throw new Error(`storage recovery must emit exactly one healthy signal, got ${recoverySignals}`);
+}
