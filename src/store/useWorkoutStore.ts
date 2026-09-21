@@ -216,7 +216,7 @@ export const useWorkoutStore = create<WorkoutState>()(
           if (ex.id !== exerciseId) return ex;
           return { ...ex, sets: [...ex.sets, newSet] };
         });
-        return { activeWorkout: { ...state.activeWorkout, exercises } };
+        return { activeWorkout: { ...state.activeWorkout, exercises }, sessionRevision: state.sessionRevision + 1 };
       }),
 
       removeSet: (exerciseId, setId) => set((state) => {
@@ -226,7 +226,7 @@ export const useWorkoutStore = create<WorkoutState>()(
           if (ex.id !== exerciseId) return ex;
           return { ...ex, sets: ex.sets.filter(s => s.id !== setId) };
         });
-        return { activeWorkout: { ...state.activeWorkout, exercises } };
+        return { activeWorkout: { ...state.activeWorkout, exercises }, sessionRevision: state.sessionRevision + 1 };
       }),
 
       addExercise: (exercise) => set((state) => {
