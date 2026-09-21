@@ -186,8 +186,11 @@ export default function ActiveWorkout({ onWorkoutFinished }: { onWorkoutFinished
             completedAt: completedWorkout.completedAt,
             totalVolume
           },
-          duration,
-          totalVolume
+          {
+            mutationId: crypto.randomUUID(),
+            duration,
+            volume: totalVolume
+          }
         );
       } catch (mutateErr: any) {
         if (mutateErr.message?.includes('not found') || mutateErr.message?.includes('NOT_FOUND') || mutateErr.status === 404) {
