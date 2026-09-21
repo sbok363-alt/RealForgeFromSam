@@ -13,7 +13,7 @@ import { validateWorkoutUpdates, validateWorkoutSets, stripImmutableFields, vali
 import { Workout } from './src/types';
 import { isDemoAuthAllowed } from './src/lib/auth-util';
 import { ToolLoopGuard } from './src/lib/tool-loop-guard';
-import { evaluateIdempotencyRecord, hashMutationPayload } from './src/lib/idempotency-guard';
+import { evaluateIdempotencyRecord, hashCreateWorkoutPayload, hashMutationPayload } from './src/lib/idempotency-guard';
 import {
   LogSetInputSchema,
   CreateWorkoutSessionSchema,
@@ -381,7 +381,7 @@ export async function handleWorkoutRollback(req: any, res: any) {
     const adminDb = testAdminDb || getFirestore(dbId);
     const workoutRef = adminDb.collection("workouts").doc(id);
     const auditLogRef = adminDb.collection("mutation_audit_logs").doc(auditLogId);
-    const idempRef = mutationId ? adminDb.collection("mutation_ids").doc(mutationId) : null;
+    const idempRef = adminDb.collection("mutation_ids").doc(mutationId);
 
     const outcome = await adminDb.runTransaction(async (transaction: any) => {
       if (idempRef) {
@@ -411,7 +411,7 @@ export async function handleWorkoutRollback(req: any, res: any) {
         const newAuditRef = adminDb.collection("mutation_audit_logs").doc();
         transaction.set(newAuditRef, {
           id: newAuditRef.id,
-          mutationId: mutationId || crypto.randomUUID(),
+          mutationId,
           userId: uid,
           actor: 'USER',
           action: 'ROLLBACK_CREATION',
@@ -458,7 +458,7 @@ export async function handleWorkoutRollback(req: any, res: any) {
         const newAuditRef = adminDb.collection("mutation_audit_logs").doc();
         transaction.set(newAuditRef, {
           id: newAuditRef.id,
-          mutationId: mutationId || crypto.randomUUID(),
+          mutationId,
           userId: uid,
           actor: 'USER',
           action: 'ROLLBACK_UPDATE',
@@ -928,6 +928,9 @@ CRITICAL SECURITY & EXECUTION RULES:
       if (!workout || typeof workout !== 'object') {
         return res.status(400).json({ error: "Workout payload is required" });
       }
+      if (!mutationId || typeof mutationId !== 'string' || !mutationId.trim()) {
+        return res.status(400).json({ error: "mutationId is required" });
+      }
 
       const workoutId = (typeof workout.id === 'string' && workout.id.trim())
         ? workout.id.trim()
@@ -952,11 +955,11 @@ CRITICAL SECURITY & EXECUTION RULES:
         return res.json({ success: true, workout: validatedWorkout });
       }
 
-      const payloadHash = hashMutationPayload(workoutId, { workout: validatedWorkout, actor, summary });
+      const payloadHash = hashCreateWorkoutPayload(workoutId, validatedWorkout, actor, summary);
       const dbId = firebaseConfig.firestoreDatabaseId || "(default)";
       const adminDb = testAdminDb || getFirestore(dbId);
       const workoutRef = adminDb.collection("workouts").doc(workoutId);
-      const idempRef = mutationId ? adminDb.collection("mutation_ids").doc(mutationId) : null;
+      const idempRef = adminDb.collection("mutation_ids").doc(mutationId);
 
       const result = await adminDb.runTransaction(async (transaction) => {
         if (idempRef) {
@@ -978,7 +981,7 @@ CRITICAL SECURITY & EXECUTION RULES:
         const auditRef = adminDb.collection("mutation_audit_logs").doc();
         transaction.set(auditRef, {
           id: auditRef.id,
-          mutationId: mutationId || crypto.randomUUID(),
+          mutationId,
           userId: uid,
           actor: actor || 'USER',
           action: 'CREATE',
@@ -1041,6 +1044,9 @@ CRITICAL SECURITY & EXECUTION RULES:
 
       if (!id || typeof id !== 'string') {
         return res.status(400).json({ error: "Invalid workout ID" });
+      }
+      if (!mutationId || typeof mutationId !== 'string' || !mutationId.trim()) {
+        return res.status(400).json({ error: "mutationId is required" });
       }
 
       if (typeof baseVersion !== 'number' || !Number.isInteger(baseVersion) || baseVersion < 0) {
@@ -1119,7 +1125,7 @@ CRITICAL SECURITY & EXECUTION RULES:
         const auditRef = adminDb.collection("mutation_audit_logs").doc();
         transaction.set(auditRef, {
           id: auditRef.id,
-          mutationId: mutationId || crypto.randomUUID(),
+          mutationId,
           userId: uid,
           actor: 'USER',
           targetEntityType: 'WORKOUT',
@@ -1233,7 +1239,7 @@ CRITICAL SECURITY & EXECUTION RULES:
         const auditRef = adminDb.collection("mutation_audit_logs").doc();
         transaction.set(auditRef, {
           id: auditRef.id,
-          mutationId: mutationId || crypto.randomUUID(),
+          mutationId,
           userId: uid,
           actor: 'USER',
           targetEntityType: 'WORKOUT',
@@ -1362,7 +1368,7 @@ CRITICAL SECURITY & EXECUTION RULES:
         const auditRef = adminDb.collection("mutation_audit_logs").doc();
         transaction.set(auditRef, {
           id: auditRef.id,
-          mutationId: mutationId || crypto.randomUUID(),
+          mutationId,
           userId: uid,
           actor: 'USER',
           targetEntityType: 'WORKOUT',
