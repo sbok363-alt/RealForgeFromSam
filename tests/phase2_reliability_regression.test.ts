@@ -7,7 +7,7 @@
  * TEST 3: Hypertrophy Volume Deduplication (no double counting of dual-represented workouts).
  * TEST 4: Gemini Key Storage Isolation (no plaintext persistence in localStorage).
  * TEST 5: BYOKModal Authenticated Proxy & Google Direct Call Ban.
- * TEST 6: ActiveWorkoutBottomBar Autosync Timer Stability & Ref-Based State Access.
+ * TEST 6: Central Workout Sync Hook Owns One Stable 45s Autosync Lifecycle.
  * TEST 7: Workout Deletion Failure Isolation (Local Draft Preservation).
  */
 
@@ -245,141 +245,37 @@ async function runPhase2Tests() {
   console.log('✔ Verified BYOKModal uses authenticated /api/test-gemini-key proxy and bans direct Google endpoints.\n');
 
   // -------------------------------------------------------------------------
-  // TEST 6: ActiveWorkoutBottomBar Autosync Timer Stability & Ref-Based State Access
+  // TEST 6: Central Workout Sync Hook Owns One Stable 45s Autosync Lifecycle
   // -------------------------------------------------------------------------
-  console.log('--- TEST 6: ActiveWorkoutBottomBar Autosync Timer Stability & Ref-Based State Access ---');
+  console.log('--- TEST 6: Central Workout Sync Hook Owns Autosync Lifecycle ---');
 
+  const syncHookSource = fs.readFileSync(
+    path.resolve(process.cwd(), 'src/hooks/useWorkoutSessionSync.ts'),
+    'utf-8'
+  );
   const bottomBarSource = fs.readFileSync(
     path.resolve(process.cwd(), 'src/components/workout/ActiveWorkoutBottomBar.tsx'),
     'utf-8'
   );
 
-  // 1. Static assertion that activeWorkoutRef is used and dependency array is stable
   assert(
-    bottomBarSource.includes('const activeWorkoutRef = useRef(activeWorkout)'),
-    'ActiveWorkoutBottomBar must capture activeWorkout in a ref'
+    syncHookSource.includes('setInterval(() =>') && syncHookSource.includes('45_000'),
+    'useWorkoutSessionSync must own the single 45s periodic autosync timer'
   );
   assert(
-    bottomBarSource.includes('activeWorkoutRef.current = activeWorkout'),
-    'ActiveWorkoutBottomBar must synchronize activeWorkoutRef with current state'
-  );
-
-  // Verify the dependency array does NOT contain raw mutable activeWorkout
-  const syncEffectMatch = bottomBarSource.match(/useEffect\(\(\) => \{[\s\S]*?setInterval[\s\S]*?45000\);[\s\S]*?\}, \[([\s\S]*?)\]\);/);
-  assert(syncEffectMatch !== null, 'Could not find 45s sync effect in ActiveWorkoutBottomBar');
-  const depsString = syncEffectMatch![1];
-  assert(
-    !depsString.split(',').map(s => s.trim()).includes('activeWorkout'),
-    'Sync effect must not include mutable activeWorkout in its dependency array'
+    syncHookSource.includes('controller.requestAutosync()'),
+    'periodic timer must delegate to the central sync controller'
   );
   assert(
-    depsString.includes('activeWorkout?.id'),
-    'Sync effect must depend on stable primitive activeWorkout?.id'
-  );
-
-  // 2. Behavioral verification: Timer remains stable across edits while reading latest state
-  class AutosyncTimerHarness {
-    private timerId: number | null = null;
-    private timerCreateCount = 0;
-    private timerDestroyCount = 0;
-    private activeWorkoutRef: { current: Workout | null } = { current: null };
-    public lastSyncedPayload: any = null;
-
-    mount(initialWorkout: Workout, user: { uid: string }) {
-      this.activeWorkoutRef.current = initialWorkout;
-      this.setupTimer(initialWorkout.id, user.uid);
-    }
-
-    private setupTimer(workoutId: string, userId: string) {
-      this.timerCreateCount++;
-      this.timerId = 1001; // Mock interval handle
-    }
-
-    updateWorkoutState(updatedWorkout: Workout) {
-      // Ordinary edit: state changes, ref is updated, but timer is NOT recreated
-      this.activeWorkoutRef.current = updatedWorkout;
-      // Because activeWorkout?.id has not changed, setupTimer is NOT called
-    }
-
-    fireTimerTick() {
-      // Periodic timer fires and reads latest ref
-      const current = this.activeWorkoutRef.current;
-      if (!current) return;
-      this.lastSyncedPayload = {
-        id: current.id,
-        title: current.title,
-        version: current.version,
-        exercises: current.exercises
-      };
-    }
-
-    getTimerCreateCount() {
-      return this.timerCreateCount;
-    }
-  }
-
-  const harness = new AutosyncTimerHarness();
-  const initialActiveWorkout: Workout = {
-    id: 'w_active_999',
-    userId: 'u_athlete_1',
-    title: 'Initial Title',
-    scheduledDate: '2026-03-30',
-    status: 'IN_PROGRESS',
-    version: 1,
-    exercises: [
-      {
-        id: 'ex_1',
-        exerciseId: 'bench-press',
-        sets: [{ id: 's_1', weight: 80, reps: 8, completed: true }]
-      }
-    ],
-    sets: []
-  };
-
-  harness.mount(initialActiveWorkout, { uid: 'u_athlete_1' });
-  assert(harness.getTimerCreateCount() === 1, 'Timer must be created once on mount');
-
-  // Simulate 3 successive user edits (keystrokes / set logs)
-  harness.updateWorkoutState({
-    ...initialActiveWorkout,
-    title: 'Updated Title'
-  });
-  harness.updateWorkoutState({
-    ...initialActiveWorkout,
-    title: 'Updated Title',
-    exercises: [
-      {
-        id: 'ex_1',
-        exerciseId: 'bench-press',
-        sets: [
-          { id: 's_1', weight: 85, reps: 8, completed: true },
-          { id: 's_2', weight: 85, reps: 8, completed: true }
-        ]
-      }
-    ]
-  });
-
-  // Verify timer was NOT destroyed/re-created during edits
-  assert(
-    harness.getTimerCreateCount() === 1,
-    'Timer must NOT be re-created across ordinary workout state edits'
-  );
-
-  // Fire timer tick and verify it reads the LATEST state
-  harness.fireTimerTick();
-  assert(harness.lastSyncedPayload !== null, 'Payload must be synced');
-  assert(harness.lastSyncedPayload.title === 'Updated Title', 'Sync must read latest edited title');
-  assert(
-    harness.lastSyncedPayload.exercises[0].sets.length === 2,
-    'Sync must read latest edited sets'
+    syncHookSource.includes("window.addEventListener('online', handleOnline)"),
+    'sync hook must retry persisted operations when connectivity returns'
   );
   assert(
-    harness.lastSyncedPayload.exercises[0].sets[0].weight === 85,
-    'Sync must read latest edited weight'
+    !bottomBarSource.includes('45_000') && !bottomBarSource.includes('45000'),
+    'ActiveWorkoutBottomBar must not own a second autosync timer'
   );
-  console.log('✔ Verified ActiveWorkoutBottomBar retains 1 stable periodic timer while reading latest state.\n');
+  console.log('✔ Verified one mounted sync hook owns autosync and retry lifecycle.\n');
 
-  // -------------------------------------------------------------------------
   // TEST 7: Workout Deletion Failure Isolation (Local Draft Preservation)
   // -------------------------------------------------------------------------
   console.log('--- TEST 7: Workout Deletion Failure Isolation (Local Draft Preservation) ---');

@@ -1,8 +1,6 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useWorkoutStore } from '../../store/useWorkoutStore';
-import { useAuthStore } from '../../store/useAuthStore';
-import { mutateWorkout } from '../../lib/api';
 import { getExerciseById } from '../../lib/exercises';
 import { Button } from '../ui/Button';
 import { 
@@ -31,11 +29,8 @@ export function ActiveWorkoutBottomBar() {
     openWorkoutModal, 
     discardWorkout, 
     finishWorkout,
-    clearRestTimer,
-    setLastSyncedAt,
-    updateActiveWorkout
+    clearRestTimer
   } = useWorkoutStore();
-  const { user } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -82,63 +77,6 @@ export function ActiveWorkoutBottomBar() {
     const interval = setInterval(updateRest, 1000);
     return () => clearInterval(interval);
   }, [restEndTime, clearRestTimer]);
-
-  const activeWorkoutRef = useRef(activeWorkout);
-  activeWorkoutRef.current = activeWorkout;
-
-  const elapsedRef = useRef(elapsed);
-  elapsedRef.current = elapsed;
-
-  const userRef = useRef(user);
-  userRef.current = user;
-
-  // Background auto-sync to Firestore every 45s
-  useEffect(() => {
-    if (!activeWorkout || !user) return;
-
-    const syncInterval = setInterval(async () => {
-      const currentWorkout = activeWorkoutRef.current;
-      const currentUser = userRef.current;
-      if (!currentWorkout || !currentUser) return;
-
-      try {
-        // Sync whichever schema actually holds the live session data —
-        // `exercises[].sets` for sessions logged via ActiveWorkout.tsx,
-        // falling back to the flat `sets` array. Sending the stale flat
-        // array here would overwrite the server's real progress with an
-        // empty/outdated set list every 45s.
-        const hasExercises = currentWorkout.exercises && currentWorkout.exercises.length > 0;
-        const updated = await mutateWorkout(
-          currentWorkout.id,
-          currentWorkout.version || 1,
-          {
-            title: currentWorkout.title,
-            scheduledDate: currentWorkout.scheduledDate,
-            status: currentWorkout.status,
-            // Only send the field that actually holds this session's live
-            // data — sending the other, empty/stale one would overwrite
-            // real progress on the server.
-            ...(hasExercises
-              ? { exercises: currentWorkout.exercises }
-              : { sets: currentWorkout.sets })
-          },
-          {
-            mutationId: crypto.randomUUID(),
-            duration: elapsedRef.current,
-            volume: currentWorkout.volume
-          }
-        );
-        if (updated) {
-          updateActiveWorkout(updated);
-        }
-        setLastSyncedAt(Date.now());
-      } catch (err) {
-        console.warn("Background workout auto-sync failed:", err);
-      }
-    }, 45000);
-
-    return () => clearInterval(syncInterval);
-  }, [activeWorkout?.id, user?.uid, setLastSyncedAt, updateActiveWorkout]);
 
   const formatTime = (totalSeconds: number) => {
     const h = Math.floor(totalSeconds / 3600);

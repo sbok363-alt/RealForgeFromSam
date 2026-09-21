@@ -35,6 +35,7 @@ import { AmbientBackground } from '../components/ui/AmbientBackground';
 import { LiquidNav, LiquidNavItem } from '../components/ui/LiquidNav';
 import { ForgeLogo } from '../components/ui/ForgeLogo';
 import { soundFx } from '../lib/soundFx';
+import { useWorkoutSessionSync } from '../hooks/useWorkoutSessionSync';
 
 export function Layout() {
   const { user } = useAuthStore();
@@ -52,6 +53,7 @@ export function Layout() {
   const [liftOffWorkout, setLiftOffWorkout] = useState<Workout | null>(null);
   const { status: geminiStatus, openModal: openBYOKModal } = useGeminiStore();
   const { activeWorkout, isModalOpen, closeWorkoutModal, updateActiveWorkout, finishWorkout } = useWorkoutStore();
+  useWorkoutSessionSync();
 
   const isBrainPage = location.pathname === '/brain';
 
