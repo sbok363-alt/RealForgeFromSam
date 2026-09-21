@@ -16,6 +16,7 @@ interface GymSetRowProps {
   previousLabel?: string | null;
   /** e.g. +6.2 or -3 or 0 */
   deltaPct?: number | null;
+  disabled?: boolean;
 }
 
 /**
@@ -30,24 +31,26 @@ export function GymSetRow({
   weightStep = 2.5,
   previousLabel,
   deltaPct,
+  disabled = false,
 }: GymSetRowProps) {
   const done = Boolean(set.completed);
   const [showBurst, setShowBurst] = useState(false);
 
   const bumpWeight = (dir: 1 | -1) => {
-    if (done) return;
+    if (done || disabled) return;
     soundFx.playClick(dir > 0 ? 1200 : 900);
     const next = Math.max(0, Math.round(((set.weight || 0) + dir * weightStep) * 10) / 10);
     onChange({ weight: next });
   };
 
   const bumpReps = (dir: 1 | -1) => {
-    if (done) return;
+    if (done || disabled) return;
     soundFx.playClick(dir > 0 ? 1200 : 900);
     onChange({ reps: Math.max(0, (set.reps || 0) + dir) });
   };
 
   const handleCompleteWithBurst = () => {
+    if (disabled) return;
     if (!done) {
       setShowBurst(true);
     }
@@ -113,7 +116,7 @@ export function GymSetRow({
           <div className="flex items-center gap-1">
             <button
               type="button"
-              disabled={done}
+              disabled={done || disabled}
               onClick={() => bumpWeight(-1)}
               className={cn(
                 'h-11 w-10 sm:h-12 sm:w-12 rounded-xl border flex items-center justify-center shrink-0 touch-manipulation',
@@ -130,7 +133,7 @@ export function GymSetRow({
               type="number"
               inputMode="decimal"
               step={weightStep}
-              disabled={done}
+              disabled={done || disabled}
               value={set.weight === 0 ? '' : set.weight}
               placeholder="0"
               onChange={(e) => onChange({ weight: parseFloat(e.target.value) || 0 })}
@@ -141,7 +144,7 @@ export function GymSetRow({
             />
             <button
               type="button"
-              disabled={done}
+              disabled={done || disabled}
               onClick={() => bumpWeight(1)}
               className={cn(
                 'h-11 w-10 sm:h-12 sm:w-12 rounded-xl border flex items-center justify-center shrink-0 touch-manipulation',
@@ -164,7 +167,7 @@ export function GymSetRow({
           <div className="flex items-center gap-1">
             <button
               type="button"
-              disabled={done}
+              disabled={done || disabled}
               onClick={() => bumpReps(-1)}
               className={cn(
                 'h-11 w-10 sm:h-12 sm:w-12 rounded-xl border flex items-center justify-center shrink-0 touch-manipulation',
@@ -180,7 +183,7 @@ export function GymSetRow({
             <input
               type="number"
               inputMode="numeric"
-              disabled={done}
+              disabled={done || disabled}
               value={set.reps === 0 ? '' : set.reps}
               placeholder="0"
               onChange={(e) => onChange({ reps: parseInt(e.target.value) || 0 })}
@@ -191,7 +194,7 @@ export function GymSetRow({
             />
             <button
               type="button"
-              disabled={done}
+              disabled={done || disabled}
               onClick={() => bumpReps(1)}
               className={cn(
                 'h-11 w-10 sm:h-12 sm:w-12 rounded-xl border flex items-center justify-center shrink-0 touch-manipulation',
@@ -214,11 +217,13 @@ export function GymSetRow({
         <button
           type="button"
           onClick={handleCompleteWithBurst}
+          disabled={disabled}
           className={cn(
             'w-full h-12 sm:h-13 rounded-xl font-bold text-sm flex items-center justify-center gap-2 touch-manipulation active:scale-[0.98] transition-all relative z-10',
             done
               ? 'bg-primary text-black font-black shadow-[0_0_16px_rgba(255,122,50,0.45)]'
-              : 'bg-secondary hover:bg-secondary/80 text-foreground border border-border/80'
+              : 'bg-secondary hover:bg-secondary/80 text-foreground border border-border/80',
+            disabled && 'opacity-50 cursor-not-allowed'
           )}
         >
           <Check size={20} strokeWidth={2.5} />

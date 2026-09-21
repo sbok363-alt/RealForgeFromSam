@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { mutateWorkout } from '../lib/api';
+import { mutateWorkout, saveWorkout } from '../lib/api';
 import { createWorkoutSyncController, WorkoutSyncController } from '../lib/workout-sync';
 import { useWorkoutStore } from '../store/useWorkoutStore';
 
@@ -31,6 +31,21 @@ export function useWorkoutSessionSync(): WorkoutSyncController {
             volume: operation.volume,
           }
         ),
+      createCompletedWorkout: (operation, sourceWorkout) =>
+        saveWorkout(
+          {
+            ...sourceWorkout,
+            ...operation.updates,
+            sets: operation.updates.sets || sourceWorkout.sets || [],
+            version: sourceWorkout.version || 1,
+          } as any,
+          'USER',
+          `Completed active session: ${sourceWorkout.title}`,
+          { mutationId: operation.mutationId }
+        ),
+      completeWorkout: () => {
+        useWorkoutStore.getState().finishWorkout();
+      },
     });
   }
 

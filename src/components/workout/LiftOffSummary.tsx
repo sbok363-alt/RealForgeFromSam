@@ -12,6 +12,7 @@ import {
 } from '../../lib/sessionCompare';
 import { cn } from '../../lib/utils';
 import { useNavigate } from 'react-router-dom';
+import { projectCompletedWorkingSets } from '../../lib/workout-session';
 
 interface LiftOffSummaryProps {
   workout: Workout;
@@ -23,8 +24,7 @@ export function LiftOffSummary({ workout, allWorkouts = [], onClose }: LiftOffSu
   const navigate = useNavigate();
 
   const stats = useMemo(() => {
-    const sets = (workout.sets || []).filter((s) => s.weight > 0 && s.reps > 0);
-    const completed = sets.filter((s) => s.completed !== false);
+    const completed = projectCompletedWorkingSets(workout);
     const totalVolume = completed.reduce((sum, s) => sum + s.weight * s.reps, 0);
     const totalSets = completed.length;
 

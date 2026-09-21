@@ -53,7 +53,7 @@ export function Layout() {
   const [liftOffWorkout, setLiftOffWorkout] = useState<Workout | null>(null);
   const { status: geminiStatus, openModal: openBYOKModal } = useGeminiStore();
   const { activeWorkout, isModalOpen, closeWorkoutModal, updateActiveWorkout, finishWorkout } = useWorkoutStore();
-  useWorkoutSessionSync();
+  const workoutSync = useWorkoutSessionSync();
 
   const isBrainPage = location.pathname === '/brain';
 
@@ -121,7 +121,10 @@ export function Layout() {
     return (
       <div className="flex h-[100dvh] max-h-[100dvh] bg-background text-foreground overflow-y-auto w-full relative">
         <div className="w-full">
-          <ActiveWorkout onWorkoutFinished={(w) => setLiftOffWorkout(w)} />
+          <ActiveWorkout
+            finishActiveWorkout={workoutSync.finishActiveWorkout}
+            onWorkoutFinished={(w) => setLiftOffWorkout(w)}
+          />
         </div>
       </div>
     );
