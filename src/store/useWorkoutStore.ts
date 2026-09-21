@@ -45,7 +45,7 @@ export interface WorkoutState {
   removeExercise: (exerciseId: string) => void;
 }
 
-let persistenceWarningSink = (_message: string) => {};
+let persistenceWarningSink = (_message: string | null) => {};
 
 const workoutStorage = createSafeStateStorage(
   {
@@ -53,7 +53,8 @@ const workoutStorage = createSafeStateStorage(
     setItem: (name, value) => window.localStorage.setItem(name, value),
     removeItem: (name) => window.localStorage.removeItem(name),
   },
-  (message) => persistenceWarningSink(message)
+  (message) => persistenceWarningSink(message),
+  () => persistenceWarningSink(null)
 );
 
 export const useWorkoutStore = create<WorkoutState>()(
@@ -285,6 +286,6 @@ export function calculateEpley1RM(weight: number, reps: number): number {
 }
 
 
-persistenceWarningSink = (message: string) => {
+persistenceWarningSink = (message: string | null) => {
   useWorkoutStore.setState({ persistenceWarning: message });
 };
