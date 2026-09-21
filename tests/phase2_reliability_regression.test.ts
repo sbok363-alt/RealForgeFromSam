@@ -85,7 +85,7 @@ async function runPhase2Tests() {
     exercises: [
       {
         id: 'ex_prior_1',
-        exerciseId: 'barbell-bench-press',
+        exerciseId: 'bench_press',
         sets: [
           { id: 's_rb_1', weight: 80, reps: 8, completed: true }
         ]
@@ -110,7 +110,7 @@ async function runPhase2Tests() {
       exercises: [
         {
           id: 'ex_prior_1',
-          exerciseId: 'barbell-bench-press',
+          exerciseId: 'bench_press',
           sets: [
             { id: 's_rb_1', weight: 80, reps: 8, completed: true }
           ]
@@ -124,7 +124,7 @@ async function runPhase2Tests() {
   const restored = rollbackResult as Workout;
   assert(restored.version === 4, `Restored version should increment to 4, got ${restored.version}`);
   assert(Array.isArray(restored.exercises) && restored.exercises.length === 1, 'Restored exercises must be preserved');
-  assert(restored.exercises[0].exerciseId === 'barbell-bench-press', 'Nested exercise ID preserved');
+  assert(restored.exercises[0].exerciseId === 'bench_press', 'Nested exercise ID preserved');
   assert(restored.exercises[0].sets[0].weight === 80, 'Nested set weight preserved');
   console.log('✔ Verified rollback preserves nested exercises from audit log.\n');
 
@@ -146,7 +146,7 @@ async function runPhase2Tests() {
     exercises: [
       {
         id: 'ex_1',
-        exerciseId: 'barbell-bench-press',
+        exerciseId: 'bench_press',
         name: 'Barbell Bench Press',
         sets: [
           { id: 's_1', weight: 100, reps: 10, completed: true },
