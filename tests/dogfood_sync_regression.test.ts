@@ -23,7 +23,7 @@ const deps: WorkoutSyncControllerDeps = {
     if (loseFirst) { loseFirst = false; throw new Error('network lost'); }
     return { ...state.activeWorkout, ...op.updates, version: op.baseVersion + 1 } as Workout;
   },
-  createCompletedWorkout: async () => { throw new Error('unused'); },
+  createWorkout: async () => { throw new Error('unused'); },
   queuePendingMutation: (op) => { state = { ...state, pendingMutation: op }; },
   clearPendingMutation: () => { state = { ...state, pendingMutation: null }; },
   applyAuthoritativeWorkout: (w) => { state = { ...state, activeWorkout: w }; },
