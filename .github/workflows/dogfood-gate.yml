@@ -1,0 +1,31 @@
+name: Dogfood Gate 1
+
+on:
+  push:
+    branches:
+      - dogfood-gate-1-native
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Dogfood focused tests
+        shell: bash
+        run: |
+          shopt -s nullglob
+          files=(tests/dogfood_*.test.ts)
+          for f in "${files[@]}"; do
+            echo "==> $f"
+            npx tsx "$f"
+          done
+      - run: npm test
+      - run: npm run lint
+      - run: npm run build
