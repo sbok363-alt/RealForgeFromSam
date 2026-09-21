@@ -68,3 +68,45 @@ export function buildCompletionPayload(
     totalVolume,
   };
 }
+
+
+function normalizeExerciseKey(value: string): string {
+  return value.trim().toLowerCase().replace(/[-_\s]+/g, '');
+}
+
+export function rebuildExercisesPreservingIdentity(
+  flatSets: WorkoutSetItem[],
+  existingExercises: WorkoutExercise[]
+): WorkoutExercise[] {
+  const groups = new Map<string, WorkoutSetItem[]>();
+  for (const set of flatSets) {
+    const list = groups.get(set.exercise) || [];
+    list.push(set);
+    groups.set(set.exercise, list);
+  }
+
+  return Array.from(groups.entries()).map(([exerciseLabel, sets]) => {
+    const key = normalizeExerciseKey(exerciseLabel);
+    const existing = existingExercises.find((exercise) =>
+      normalizeExerciseKey(exercise.exerciseId) === key ||
+      (exercise.name ? normalizeExerciseKey(exercise.name) === key : false)
+    );
+    return {
+      id: existing?.id || crypto.randomUUID(),
+      exerciseId: existing?.exerciseId || exerciseLabel.toLowerCase().trim().replace(/\s+/g, '-'),
+      name: existing?.name || exerciseLabel,
+      category: existing?.category,
+      notes: existing?.notes,
+      sets: sets.map((set) => ({
+        id: set.id,
+        weight: set.weight,
+        reps: set.reps,
+        completed: set.completed === true,
+        setType: set.setType,
+        rir: set.rir,
+        rpe: set.rpe,
+        notes: set.notes,
+      })),
+    };
+  });
+}
