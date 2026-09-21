@@ -192,15 +192,6 @@ export function calculatePhysiqueHypertrophyVolume(
       recordSet(set.exercise, true);
     }
   });
-      });
-    } else if (Array.isArray(w.sets)) {
-      w.sets.forEach(s => {
-        if (s.completed && s.exercise) {
-          recordSet(s.exercise, true);
-        }
-      });
-    }
-  });
 
   const musclesMap: Record<MuscleGroup, MuscleVolumeWeekly> = {} as any;
   const deficientMuscles: MuscleVolumeWeekly[] = [];
