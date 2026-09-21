@@ -124,6 +124,27 @@ export interface Workout {
   exercises?: WorkoutExercise[];
 }
 
+export type WorkoutMutationKind = 'AUTOSYNC' | 'FINISH';
+
+export interface PendingWorkoutMutation {
+  mutationId: string;
+  kind: WorkoutMutationKind;
+  workoutId: string;
+  baseVersion: number;
+  updates: Partial<Workout>;
+  duration?: number;
+  volume?: number;
+  capturedRevision: number;
+  createdAt: number;
+}
+
+export interface WorkoutSyncConflict {
+  mutationId: string;
+  currentVersion: number;
+  serverWorkout: Workout;
+  detectedAt: number;
+}
+
 export type MutationActor = 'USER' | 'AI_BRAIN' | 'SYSTEM_AUTONOMOUS';
 
 export interface MutationAuditLog {
