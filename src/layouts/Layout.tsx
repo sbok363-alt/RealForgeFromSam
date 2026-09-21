@@ -35,8 +35,10 @@ import { AmbientBackground } from '../components/ui/AmbientBackground';
 import { LiquidNav, LiquidNavItem } from '../components/ui/LiquidNav';
 import { ForgeLogo } from '../components/ui/ForgeLogo';
 import { soundFx } from '../lib/soundFx';
+import { useWorkoutSessionSync } from '../hooks/useWorkoutSessionSync';
 
 export function Layout() {
+  const { finishActiveWorkout } = useWorkoutSessionSync();
   const { user } = useAuthStore();
   const location = useLocation();
   const navigate = useNavigate();
@@ -119,7 +121,7 @@ export function Layout() {
     return (
       <div className="flex h-[100dvh] max-h-[100dvh] bg-background text-foreground overflow-y-auto w-full relative">
         <div className="w-full">
-          <ActiveWorkout onWorkoutFinished={(w) => setLiftOffWorkout(w)} />
+          <ActiveWorkout finishActiveWorkout={finishActiveWorkout} onWorkoutFinished={(w) => setLiftOffWorkout(w)} />
         </div>
       </div>
     );
