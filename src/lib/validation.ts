@@ -323,6 +323,13 @@ export function validateWorkoutUpdates(updates: any): Partial<Workout> {
     result.startedAt = clean.startedAt;
   }
 
+  if (clean.totalVolume !== undefined) {
+    if (!isFiniteNumber(clean.totalVolume) || clean.totalVolume < 0) {
+      throw new Error('totalVolume must be a finite non-negative number');
+    }
+    result.totalVolume = clean.totalVolume;
+  }
+
   return result;
 }
 
