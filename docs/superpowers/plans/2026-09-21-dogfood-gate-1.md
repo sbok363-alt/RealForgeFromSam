@@ -645,6 +645,16 @@ Test three cases:
    - fake server returns version 8 and a normalized title/metadata
    - the object handed to post-workout summary is exactly that server object, not the locally built draft.
 
+4. Pending AUTOSYNC → Finish edge case:
+   - autosync mutation `A` was already committed server-side, but its response was lost
+   - user presses Finish while `A` is still persisted as `pendingMutation.kind === 'AUTOSYNC'`
+   - Finish replays `A` with the **same mutation ID**
+   - replay returns the authoritative autosync workout/version
+   - only then is one FINISH mutation `F` created
+   - `F.baseVersion` equals the authoritative version recovered from replaying `A`
+   - `F` commits once and produces one completed workout
+   - no second autosync mutation ID and no duplicate completion are created.
+
 - [ ] **Step 2: Verify failure**
 
 ~~~bash
@@ -653,12 +663,38 @@ npx tsx tests/dogfood_finish_regression.test.ts
 
 - [ ] **Step 3: Implement finish in the coordinator**
 
+Before creating a FINISH operation, explicitly drain any pending AUTOSYNC.
+
+Rules:
+1. If `pendingMutation.kind === 'AUTOSYNC'`, replay that exact pending autosync first with its existing mutation ID.
+2. Reconcile the authoritative autosync response/version into the active workout.
+3. Only after that pending autosync is cleared may a new FINISH mutation be created.
+4. The FINISH mutation must use the recovered authoritative version as `baseVersion`.
+5. Never replace a pending AUTOSYNC with FINISH, because doing so would abandon the logical write whose outcome may already exist on the server.
+6. If replaying the pending AUTOSYNC still has an unknown network outcome, Finish remains blocked and no FINISH mutation is created.
+7. If the pending AUTOSYNC resolves to an OCC conflict, preserve the conflict state and do not create FINISH.
+
 Flow:
 
 ~~~ts
 async function finishActiveWorkout(): Promise<Workout> {
-  const state = deps.getState();
+  let state = deps.getState();
   if (!state.activeWorkout) throw new Error('NO_ACTIVE_WORKOUT');
+
+  if (state.pendingMutation?.kind === 'AUTOSYNC') {
+    await retryPending();
+    state = deps.getState();
+
+    if (state.pendingMutation?.kind === 'AUTOSYNC') {
+      throw new Error('AUTOSYNC_PENDING');
+    }
+    if (state.syncConflict) {
+      throw new Error('SYNC_CONFLICT');
+    }
+    if (!state.activeWorkout) {
+      throw new Error('NO_ACTIVE_WORKOUT');
+    }
+  }
 
   const existing = state.pendingMutation;
   const operation = existing?.kind === 'FINISH'
