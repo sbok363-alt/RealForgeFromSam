@@ -123,13 +123,47 @@ export async function getWorkout(workoutId: string, userId: string): Promise<Wor
   return list.find(w => w.id === workoutId) || null;
 }
 
+export interface SaveWorkoutOptions {
+  mutationId?: string;
+}
+
+export interface WorkoutMutationOptions {
+  mutationId: string;
+  duration?: number;
+  volume?: number;
+}
+
+export class WorkoutConflictError extends Error {
+  status = 409;
+  currentVersion?: number;
+  workout?: Workout;
+
+  constructor(message: string, currentVersion?: number, workout?: Workout) {
+    super(message);
+    this.name = 'WorkoutConflictError';
+    this.currentVersion = currentVersion;
+    this.workout = workout;
+  }
+}
+
+export async function upsertAuthoritativeWorkoutCache(workout: Workout): Promise<void> {
+  if (!workout.userId) return;
+  const all = await getWorkouts(workout.userId);
+  const exists = all.some(w => w.id === workout.id);
+  const next = exists
+    ? all.map(w => w.id === workout.id ? workout : w)
+    : [workout, ...all];
+  localStorage.setItem(`forge_workouts_${workout.userId}`, JSON.stringify(next));
+}
+
 export async function saveWorkout(
   workout: Workout,
   actor: 'USER' | 'AI_BRAIN' | 'SYSTEM_AUTONOMOUS' = 'USER',
-  summary: string = 'Created initial workout routine'
+  summary: string = 'Created initial workout routine',
+  options: SaveWorkoutOptions = {}
 ): Promise<Workout> {
   const token = (await auth.currentUser?.getIdToken()) || 'demo-token';
-  const mutationId = crypto.randomUUID();
+  const mutationId = options.mutationId || crypto.randomUUID();
 
   // P0-2: Workouts must be created via the authoritative server API
   const res = await fetch('/api/workouts', {
@@ -153,13 +187,7 @@ export async function saveWorkout(
 
   const created: Workout = data.workout;
 
-  // Update localStorage cache
-  if (created.userId) {
-    const all = await getWorkouts(created.userId);
-    const nextList = [created, ...all.filter(w => w.id !== created.id)];
-    localStorage.setItem(`forge_workouts_${created.userId}`, JSON.stringify(nextList));
-  }
-
+  await upsertAuthoritativeWorkoutCache(created);
   return created;
 }
 
@@ -992,7 +1020,12 @@ export async function seedForgeData(userId: string): Promise<void> {
   });
 }
 
-export async function mutateWorkout(workoutId: string, baseVersion: number, updates: Partial<Workout>, duration?: number, volume?: number): Promise<Workout> {
+export async function mutateWorkout(
+  workoutId: string,
+  baseVersion: number,
+  updates: Partial<Workout>,
+  options: WorkoutMutationOptions
+): Promise<Workout> {
   const token = (await auth.currentUser?.getIdToken()) || 'demo-token';
 
   const res = await fetch(`/api/workouts/${workoutId}/mutate`, {
@@ -1001,37 +1034,31 @@ export async function mutateWorkout(workoutId: string, baseVersion: number, upda
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`
     },
-    body: JSON.stringify({ 
-      baseVersion, 
-      updates, 
-      duration, 
-      volume,
-      mutationId: crypto.randomUUID()
+    body: JSON.stringify({
+      baseVersion,
+      updates,
+      duration: options.duration,
+      volume: options.volume,
+      mutationId: options.mutationId
     })
   });
 
-  const data = await res.json();
+  const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     if (res.status === 409) {
-      const err: any = new Error(data.error || 'Stale version');
-      err.status = 409;
-      err.currentVersion = data.currentVersion;
-      err.workout = data.workout;
-      throw err;
+      throw new WorkoutConflictError(
+        data.error || 'Stale version',
+        data.currentVersion,
+        data.workout
+      );
     }
-    throw new Error(data.error || 'Failed to mutate workout');
+    const err: any = new Error(data.error || 'Failed to mutate workout');
+    err.status = res.status;
+    throw err;
   }
 
-  // Update localStorage cache
-  if (data.workout && data.workout.userId) {
-    const all = await getWorkouts(data.workout.userId);
-    const exists = all.some(w => w.id === data.workout.id);
-    const nextList = exists 
-      ? all.map(w => w.id === data.workout.id ? data.workout : w)
-      : [data.workout, ...all];
-    localStorage.setItem(`forge_workouts_${data.workout.userId}`, JSON.stringify(nextList));
-  }
-
-  return data.workout;
+  const authoritative: Workout = data.workout;
+  await upsertAuthoritativeWorkoutCache(authoritative);
+  return authoritative;
 }
 
