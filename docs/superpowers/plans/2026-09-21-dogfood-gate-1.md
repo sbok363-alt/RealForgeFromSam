@@ -645,6 +645,14 @@ Test three cases:
    - fake server returns version 8 and a normalized title/metadata
    - the object handed to post-workout summary is exactly that server object, not the locally built draft.
 
+4. Pending AUTOSYNC before Finish:
+   - first autosync is committed server-side but its response is lost
+   - user presses Finish while that AUTOSYNC remains pending
+   - coordinator replays the exact same autosync mutation ID
+   - authoritative replay recovers the new server version
+   - exactly one FINISH mutation is then created against that recovered version
+   - completion happens exactly once and no second autosync/finish logical mutation is created.
+
 4. Pending AUTOSYNC → Finish edge case:
    - autosync mutation `A` was already committed server-side, but its response was lost
    - user presses Finish while `A` is still persisted as `pendingMutation.kind === 'AUTOSYNC'`
@@ -721,6 +729,8 @@ async function finishActiveWorkout(): Promise<Workout> {
 ~~~
 
 The 404 creation fallback must use the **same** finish mutation ID and the deterministic create hash from Task 2.
+
+**Pending AUTOSYNC → Finish rule:** if `pendingMutation.kind === 'AUTOSYNC'` when Finish is pressed, do **not** replace that operation and do **not** allocate a FINISH mutation yet. Drain/replay that exact pending autosync first with its existing mutation ID. Reconcile the authoritative response/version. Only after that autosync is authoritatively resolved may the coordinator create one new FINISH mutation against the recovered authoritative version. If draining the autosync fails or conflicts, Finish remains blocked and no FINISH mutation is created.
 
 - [ ] **Step 4: Remove local completion authority from ActiveWorkout**
 
