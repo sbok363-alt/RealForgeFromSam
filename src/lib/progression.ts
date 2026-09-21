@@ -1,5 +1,6 @@
 import { Workout, WorkoutSetItem, ProgressionReport, ProgressionState, NextSessionTarget } from '../types';
 import { getExerciseById } from './exercises';
+import { projectCompletedWorkingSets } from './workout-session';
 
 /**
  * Calculates Estimated 1RM using the validated Epley formula.
@@ -54,42 +55,10 @@ export function extractExerciseHistory(
     const dateStr = w.scheduledDate || (w.completedAt ? new Date(w.completedAt).toISOString().split('T')[0] : '');
     const timestamp = w.completedAt || (w.scheduledDate ? new Date(w.scheduledDate).getTime() : 0);
 
-    // Extract sets matching this exercise
-    const matchingSets: WorkoutSetItem[] = [];
-
-    // From flat sets array
-    if (Array.isArray(w.sets)) {
-      for (const s of w.sets) {
-        if (!s.completed && s.completed !== undefined) continue;
-        const normEx = (s.exercise || '').toLowerCase().replace(/[-_\s]+/g, '');
-        if (normEx === normalizedTarget || normEx.includes(normalizedTarget) || normalizedTarget.includes(normEx)) {
-          matchingSets.push(s);
-        }
-      }
-    }
-
-    // From legacy exercises array if sets was empty
-    if (matchingSets.length === 0 && Array.isArray(w.exercises)) {
-      for (const ex of w.exercises) {
-        const normExId = (ex.exerciseId || '').toLowerCase().replace(/[-_\s]+/g, '');
-        if (normExId === normalizedTarget || normExId.includes(normalizedTarget) || normalizedTarget.includes(normExId)) {
-          for (const s of ex.sets) {
-            if (s.completed || s.completed === undefined) {
-              matchingSets.push({
-                id: s.id,
-                exercise: ex.exerciseId,
-                weight: s.weight,
-                reps: s.reps,
-                rir: s.rir,
-                rpe: s.rpe,
-                notes: s.notes,
-                completed: s.completed
-              });
-            }
-          }
-        }
-      }
-    }
+    const matchingSets: WorkoutSetItem[] = projectCompletedWorkingSets(w).filter((set) => {
+      const normEx = (set.exercise || '').toLowerCase().replace(/[-_\s]+/g, '');
+      return normEx === normalizedTarget || normEx.includes(normalizedTarget) || normalizedTarget.includes(normEx);
+    });
 
     if (matchingSets.length > 0) {
       let topWeight = 0;
