@@ -13,7 +13,7 @@ export interface WorkoutSyncState {
 export interface WorkoutSyncControllerDeps {
   getState(): WorkoutSyncState;
   mutate(operation: PendingWorkoutMutation): Promise<Workout>;
-  createCompletedWorkout(operation: PendingWorkoutMutation): Promise<Workout>;
+  createWorkout(operation: PendingWorkoutMutation): Promise<Workout>;
   queuePendingMutation(operation: PendingWorkoutMutation): void;
   clearPendingMutation(): void;
   applyAuthoritativeWorkout(workout: Workout): void;
@@ -43,17 +43,74 @@ function errorStatus(error: any): number | undefined {
 export function createWorkoutSyncController(deps: WorkoutSyncControllerDeps) {
   let inFlight = false;
 
-  const deliver = async (operation: PendingWorkoutMutation): Promise<Workout | null> => {
+  const recordConflict = (operation: PendingWorkoutMutation, error: any, message: string) => {
+    if (errorStatus(error) !== 409 || !error.workout) return false;
+    deps.clearPendingMutation();
+    deps.setSyncConflict({
+      mutationId: operation.mutationId,
+      currentVersion: error.currentVersion ?? error.workout.version,
+      serverWorkout: error.workout,
+      detectedAt: deps.now(),
+    });
+    deps.setSyncError(message);
+    return true;
+  };
+
+  const transmit = async (
+    operation: PendingWorkoutMutation
+  ): Promise<{ authoritative: Workout; operation: PendingWorkoutMutation }> => {
+    let currentOperation = operation;
+
+    if (currentOperation.delivery === 'CREATE') {
+      return {
+        authoritative: await deps.createWorkout(currentOperation),
+        operation: currentOperation,
+      };
+    }
+
+    try {
+      return {
+        authoritative: await deps.mutate(currentOperation),
+        operation: currentOperation,
+      };
+    } catch (error: any) {
+      if (errorStatus(error) !== 404) throw error;
+      const current = deps.getState();
+      if (!current.activeWorkout) throw error;
+
+      currentOperation = {
+        ...currentOperation,
+        delivery: 'CREATE',
+        createSnapshot: currentOperation.createSnapshot || ({
+          ...current.activeWorkout,
+          ...currentOperation.updates,
+          id: currentOperation.workoutId,
+        } as Workout),
+      };
+      deps.queuePendingMutation(currentOperation);
+
+      return {
+        authoritative: await deps.createWorkout(currentOperation),
+        operation: currentOperation,
+      };
+    }
+  };
+
+  const deliverAutosync = async (operation: PendingWorkoutMutation): Promise<Workout | null> => {
     if (inFlight) return null;
     inFlight = true;
+    let currentOperation = operation;
     try {
-      const authoritative = await deps.mutate(operation);
+      const sent = await transmit(operation);
+      currentOperation = sent.operation;
+      const authoritative = sent.authoritative;
+
       const current = deps.getState();
       if (!current.activeWorkout) return authoritative;
       const reconciled = reconcileAuthoritativeWorkout(
         current.activeWorkout,
         authoritative,
-        operation.capturedRevision,
+        currentOperation.capturedRevision,
         current.sessionRevision
       );
       deps.applyAuthoritativeWorkout(reconciled);
@@ -61,18 +118,44 @@ export function createWorkoutSyncController(deps: WorkoutSyncControllerDeps) {
       deps.setSyncError(null);
       return authoritative;
     } catch (error: any) {
-      if (errorStatus(error) === 409 && error.workout) {
-        deps.clearPendingMutation();
-        deps.setSyncConflict({
-          mutationId: operation.mutationId,
-          currentVersion: error.currentVersion ?? error.workout.version,
-          serverWorkout: error.workout,
-          detectedAt: deps.now(),
-        });
-        deps.setSyncError('Workout changed on the server. Resolve the conflict before syncing.');
-      } else {
+      if (!recordConflict(
+        currentOperation,
+        error,
+        'Workout changed on the server. Resolve the conflict before syncing.'
+      )) {
         deps.setSyncError(error?.message || 'Workout sync failed');
       }
+      return null;
+    } finally {
+      inFlight = false;
+    }
+  };
+
+  const deliverFinish = async (
+    operation: PendingWorkoutMutation,
+    propagateError: boolean
+  ): Promise<Workout | null> => {
+    if (inFlight) {
+      if (propagateError) throw new Error('SYNC_IN_FLIGHT');
+      return null;
+    }
+
+    inFlight = true;
+    let currentOperation = operation;
+    try {
+      const sent = await transmit(operation);
+      currentOperation = sent.operation;
+      const authoritative = sent.authoritative;
+
+      await deps.upsertAuthoritativeWorkoutCache(authoritative);
+      deps.setSyncError(null);
+      deps.completeWorkout(authoritative);
+      return authoritative;
+    } catch (error: any) {
+      if (!recordConflict(currentOperation, error, 'Workout finish conflicted with the server.')) {
+        deps.setSyncError(error?.message || 'Workout finish failed');
+      }
+      if (propagateError) throw error;
       return null;
     } finally {
       inFlight = false;
@@ -82,7 +165,9 @@ export function createWorkoutSyncController(deps: WorkoutSyncControllerDeps) {
   const retryPending = async (): Promise<Workout | null> => {
     const pending = deps.getState().pendingMutation;
     if (!pending) return null;
-    return deliver(pending);
+    return pending.kind === 'FINISH'
+      ? deliverFinish(pending, false)
+      : deliverAutosync(pending);
   };
 
   const requestAutosync = async (): Promise<Workout | null> => {
@@ -91,19 +176,22 @@ export function createWorkoutSyncController(deps: WorkoutSyncControllerDeps) {
     if (state.pendingMutation) return retryPending();
     if (inFlight) return null;
 
+    const updates = autosyncUpdates(state.activeWorkout);
     const operation: PendingWorkoutMutation = {
       mutationId: deps.uuid(),
       kind: 'AUTOSYNC',
+      delivery: 'MUTATE',
       workoutId: state.activeWorkout.id,
       baseVersion: state.activeWorkout.version,
-      updates: autosyncUpdates(state.activeWorkout),
+      updates,
       duration: state.startedAt ? Math.max(0, Math.floor((deps.now() - state.startedAt) / 1000)) : undefined,
       volume: state.activeWorkout.volume,
       capturedRevision: state.sessionRevision,
       createdAt: deps.now(),
+      createSnapshot: { ...state.activeWorkout, ...updates },
     };
     deps.queuePendingMutation(operation);
-    const authoritative = await deliver(operation);
+    const authoritative = await deliverAutosync(operation);
 
     const after = deps.getState();
     if (
@@ -144,6 +232,7 @@ export function createWorkoutSyncController(deps: WorkoutSyncControllerDeps) {
       operation = {
         mutationId: deps.uuid(),
         kind: 'FINISH',
+        delivery: 'MUTATE',
         workoutId: state.activeWorkout.id,
         baseVersion: state.activeWorkout.version,
         updates: completion.updates,
@@ -151,36 +240,15 @@ export function createWorkoutSyncController(deps: WorkoutSyncControllerDeps) {
         volume: completion.totalVolume,
         capturedRevision: state.sessionRevision,
         createdAt: completedAt,
+        createSnapshot: { ...state.activeWorkout, ...completion.updates } as Workout,
       };
       deps.queuePendingMutation(operation);
     }
     if (operation.kind !== 'FINISH') throw new Error('AUTOSYNC_PENDING');
 
-    try {
-      let authoritative: Workout;
-      try {
-        authoritative = await deps.mutate(operation);
-      } catch (error: any) {
-        if (errorStatus(error) !== 404) throw error;
-        authoritative = await deps.createCompletedWorkout(operation);
-      }
-      await deps.upsertAuthoritativeWorkoutCache(authoritative);
-      deps.clearPendingMutation();
-      deps.completeWorkout(authoritative);
-      return authoritative;
-    } catch (error: any) {
-      if (errorStatus(error) === 409 && error.workout) {
-        deps.clearPendingMutation();
-        deps.setSyncConflict({
-          mutationId: operation.mutationId,
-          currentVersion: error.currentVersion ?? error.workout.version,
-          serverWorkout: error.workout,
-          detectedAt: deps.now(),
-        });
-      }
-      deps.setSyncError(error?.message || 'Workout finish failed');
-      throw error;
-    }
+    const authoritative = await deliverFinish(operation, true);
+    if (!authoritative) throw new Error('WORKOUT_FINISH_PENDING');
+    return authoritative;
   };
 
   return {
