@@ -59,7 +59,10 @@ export function useWorkoutSessionSync() {
   useEffect(() => {
     if (!activeWorkoutId || !user?.uid) return;
 
-    if (useWorkoutStore.getState().pendingMutation) {
+    const pendingOnMount = useWorkoutStore.getState().pendingMutation;
+    if (pendingOnMount?.kind === 'FINISH') {
+      void controller.finishActiveWorkout().catch(() => undefined);
+    } else if (pendingOnMount) {
       void controller.retryPending();
     }
 
@@ -68,7 +71,12 @@ export function useWorkoutSessionSync() {
     }, 45_000);
 
     const onOnline = () => {
-      if (useWorkoutStore.getState().pendingMutation) void controller.retryPending();
+      const pending = useWorkoutStore.getState().pendingMutation;
+      if (pending?.kind === 'FINISH') {
+        void controller.finishActiveWorkout().catch(() => undefined);
+      } else if (pending) {
+        void controller.retryPending();
+      }
     };
     window.addEventListener('online', onOnline);
 
