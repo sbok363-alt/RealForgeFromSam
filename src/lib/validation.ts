@@ -309,6 +309,13 @@ export function validateWorkoutUpdates(updates: any): Partial<Workout> {
     result.exerciseNotes = clean.exerciseNotes;
   }
 
+  if (clean.totalVolume !== undefined) {
+    if (!isFiniteNumber(clean.totalVolume) || clean.totalVolume < 0) {
+      throw new Error('totalVolume must be a finite non-negative number');
+    }
+    result.totalVolume = clean.totalVolume;
+  }
+
   if (clean.completedAt !== undefined) {
     if (clean.completedAt !== null && !isFiniteNumber(clean.completedAt)) {
       throw new Error('completedAt must be a valid timestamp number or null');
