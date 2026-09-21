@@ -1,4 +1,5 @@
 import { MuscleGroup, getExerciseById, getExerciseByName } from './exercises';
+import { projectCompletedWorkingSets } from './workout-session';
 import { Workout, WorkoutSetItem } from '../types';
 
 export type HypertrophyThresholds = Record<MuscleGroup, number>;
@@ -187,16 +188,10 @@ export function calculatePhysiqueHypertrophyVolume(
       }
     };
 
-    // Prefer nested exercises if present and non-empty to avoid double-counting
-    // workouts that carry both legacy flat `sets` and structured `exercises`.
-    if (Array.isArray(w.exercises) && w.exercises.length > 0) {
-      w.exercises.forEach(ex => {
-        const exName = ex.name || ex.exerciseId;
-        ex.sets?.forEach(s => {
-          if (s.completed) {
-            recordSet(exName, true);
-          }
-        });
+    for (const set of projectCompletedWorkingSets(w)) {
+      recordSet(set.exercise, true);
+    }
+  });
       });
     } else if (Array.isArray(w.sets)) {
       w.sets.forEach(s => {
