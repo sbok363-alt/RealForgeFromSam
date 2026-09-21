@@ -4,6 +4,7 @@ import { Workout, WorkoutSetItem, ProgressionReport } from '../types';
 import { ExerciseDef, getExerciseByName } from '../lib/exercises';
 import { saveWorkout, getWorkouts, mutateWorkout, deleteWorkout } from '../lib/api';
 import { analyzeExerciseProgression } from '../lib/progression';
+import { rebuildExercisesPreservingIdentity } from '../lib/workout-session';
 import { useAuthStore } from '../store/useAuthStore';
 import { Button } from './ui/Button';
 import { Input } from './ui/Input';
@@ -535,25 +536,7 @@ export function WorkoutDetailModal({
     if (!proposedSets) return;
     setSaving(true);
     try {
-      const updatedExercises = Array.from(new Set(proposedSets.map(s => s.exercise))).map((exName) => {
-        const name = String(exName);
-        const exDef = getExerciseByName(name);
-        return {
-          id: crypto.randomUUID(),
-          exerciseId: name.toLowerCase().replace(/\s+/g, '-'),
-          name: name,
-          category: exDef?.primaryMuscle || 'OTHER',
-          sets: proposedSets.filter(s => s.exercise === name).map(s => ({
-            id: s.id,
-            weight: s.weight,
-            reps: s.reps,
-            completed: !!s.completed,
-            setType: (s.setType === 'N' ? 'normal' : s.setType) as 'N' | 'W' | 'D' | 'F' | 'normal',
-            rir: s.rir,
-            notes: s.notes
-          }))
-        };
-      });
+      const updatedExercises = rebuildExercisesPreservingIdentity(proposedSets, workout.exercises || []);
 
       const vol = calculateVolume(proposedSets);
       const result = await mutateWorkout(
@@ -566,7 +549,7 @@ export function WorkoutDetailModal({
           sets: proposedSets,
           exercises: updatedExercises,
           exerciseNotes
-        }, { mutationId: crypto.randomUUID(), duration, volume: vol }, { mutationId: crypto.randomUUID() });
+        }, { mutationId: crypto.randomUUID(), duration, volume: vol });
       onSave(result);
       onClose();
     } catch (e) {
@@ -582,25 +565,7 @@ export function WorkoutDetailModal({
       const isCompleting = !isEditMode;
       const newStatus = isCompleting ? 'COMPLETED' : workout.status;
       
-      const updatedExercises = Array.from(new Set(sets.map(s => s.exercise))).map((exName) => {
-        const name = String(exName);
-        const exDef = getExerciseByName(name);
-        return {
-          id: crypto.randomUUID(),
-          exerciseId: name.toLowerCase().replace(/\s+/g, '-'),
-          name: name,
-          category: exDef?.primaryMuscle || 'OTHER',
-          sets: sets.filter(s => s.exercise === name).map(s => ({
-            id: s.id,
-            weight: s.weight,
-            reps: s.reps,
-            completed: !!s.completed,
-            setType: (s.setType === 'N' ? 'normal' : s.setType) as 'N' | 'W' | 'D' | 'F' | 'normal',
-            rir: s.rir,
-            notes: s.notes
-          }))
-        };
-      });
+      const updatedExercises = rebuildExercisesPreservingIdentity(sets, workout.exercises || []);
 
       const updates = {
         title,
@@ -624,45 +589,7 @@ export function WorkoutDetailModal({
     } catch (e: any) {
       console.error(e);
       if (e.status === 409) {
-        if (window.confirm(`Conflict: Workout modified on another device (v${e.currentVersion}). Force override?`)) {
-          try {
-            const isCompleting = !isEditMode;
-            const newStatus = isCompleting ? 'COMPLETED' : workout.status;
-            
-            const updatedExercises = Array.from(new Set(sets.map(s => s.exercise))).map((exName) => {
-              const name = String(exName);
-              const exDef = getExerciseByName(name);
-              return {
-                id: crypto.randomUUID(),
-                exerciseId: name.toLowerCase().replace(/\s+/g, '-'),
-                name: name,
-                category: exDef?.primaryMuscle || 'OTHER',
-                sets: sets.filter(s => s.exercise === name).map(s => ({
-                  id: s.id,
-                  weight: s.weight,
-                  reps: s.reps,
-                  completed: !!s.completed,
-                  setType: (s.setType === 'N' ? 'normal' : s.setType) as 'N' | 'W' | 'D' | 'F' | 'normal',
-                  rir: s.rir,
-                  notes: s.notes
-                }))
-              };
-            });
-
-            const updates = { title, scheduledDate, status: newStatus, sets, exercises: updatedExercises, exerciseNotes };
-            const vol = calculateVolume(sets);
-            const result = await mutateWorkout(workout.id, e.currentVersion, updates, { mutationId: crypto.randomUUID(), duration, volume: vol });
-            if (isCompleting) {
-              setShowCelebration(true);
-              onSave(result);
-            } else {
-              onSave(result);
-              onClose();
-            }
-          } catch (retryErr: any) {
-            alert(`Failed to force update: ${retryErr.message}`);
-          }
-        }
+        alert(`Conflict: server is at v${e.currentVersion}. Your edits were not overwritten. Reload the server version before retrying.`);
       } else {
         alert(`Failed to save workout: ${e.message}`);
       }
