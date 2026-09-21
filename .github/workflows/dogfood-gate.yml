@@ -1,5 +1,9 @@
 name: Dogfood Gate 1
 
+concurrency:
+  group: dogfood-gate-1-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches:
