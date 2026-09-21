@@ -1,14 +1,14 @@
 # Dogfood Gate 1 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (\`- [ ]\`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make one real FORGE gym session trustworthy from start through reload/retry/finish/history/analytics, with explicit completion, stable identity, durable local recovery, exactly-once logical mutations, safe OCC behavior, and one authoritative completed workout.
 
-**Architecture:** Keep Zustand as the single durable local active-session truth, add persisted logical mutation state and a monotonically increasing local session revision, and move autosync/finish networking into one session-sync coordinator mounted from \`Layout\`. Canonical completed working sets are projected through one pure helper and reused by finish, summary, history-facing cache updates, and deterministic analytics. Server workout routes keep OCC/audit behavior but make idempotency deterministic across retries.
+**Architecture:** Keep Zustand as the single durable local active-session truth, add persisted logical mutation state and a monotonically increasing local session revision, and move autosync/finish networking into one session-sync coordinator mounted from `Layout`. Canonical completed working sets are projected through one pure helper and reused by finish, summary, history-facing cache updates, and deterministic analytics. Server workout routes keep OCC/audit behavior but make idempotency deterministic across retries.
 
 **Tech Stack:** React 19, TypeScript, Zustand persist, Express, Firebase Admin/Firestore, existing idempotency/OCC helpers, tsx test runner.
 
-**Spec:** \`docs/superpowers/specs/2026-09-21-dogfood-gate-1-design.md\`
+**Spec:** `docs/superpowers/specs/2026-09-21-dogfood-gate-1-design.md`
 
 ## Global Constraints
 
@@ -29,24 +29,24 @@
 2. **User edits while autosync is in flight:** a stale success response must not overwrite newer local edits; only authoritative server metadata/version may be merged before the follow-up sync.
 3. **Reload with a pending operation:** persisted pending mutation, captured revision, local draft, and conflict state must rehydrate so the same logical operation is retried rather than replaced with a new UUID.
 4. **OCC conflict:** preserve the local draft and authoritative server snapshot; never “force override” by substituting the server’s current version into stale local updates.
-5. **Set classification edge cases:** a completed bodyweight set with \`weight = 0\` still counts as a completed set, while warm-up set type \`W\` is excluded from the canonical working-set projection and analytics.
+5. **Set classification edge cases:** a completed bodyweight set with `weight = 0` still counts as a completed set, while warm-up set type `W` is excluded from the canonical working-set projection and analytics.
 
 ---
 
 ### Task 1: Create one canonical completed-working-set projection
 
 **Files:**
-- Create: \`src/lib/workout-session.ts\`
-- Modify: \`src/lib/validation.ts:1-260\`
-- Test: \`tests/dogfood_session_projection.test.ts\`
+- Create: `src/lib/workout-session.ts`
+- Modify: `src/lib/validation.ts:1-260`
+- Test: `tests/dogfood_session_projection.test.ts`
 
 **Interfaces:**
-- Consumes: \`Workout\`, \`WorkoutExercise\`, \`WorkoutSet\`, \`WorkoutSetItem\`.
+- Consumes: `Workout`, `WorkoutExercise`, `WorkoutSet`, `WorkoutSetItem`.
 - Produces:
-  - \`isWorkingSetType(setType): boolean\`
-  - \`projectCompletedWorkingExercises(workout): WorkoutExercise[]\`
-  - \`projectCompletedWorkingSets(workout): WorkoutSetItem[]\`
-  - \`buildCompletionPayload(workout, completedAt, durationSeconds): WorkoutCompletionPayload\`
+  - `isWorkingSetType(setType): boolean`
+  - `projectCompletedWorkingExercises(workout): WorkoutExercise[]`
+  - `projectCompletedWorkingSets(workout): WorkoutSetItem[]`
+  - `buildCompletionPayload(workout, completedAt, durationSeconds): WorkoutCompletionPayload`
 
 - [ ] **Step 1: Write the failing projection tests**
 
@@ -102,11 +102,11 @@ Run:
 npx tsx tests/dogfood_session_projection.test.ts
 ~~~
 
-Expected: FAIL because \`src/lib/workout-session.ts\` does not exist.
+Expected: FAIL because `src/lib/workout-session.ts` does not exist.
 
 - [ ] **Step 3: Implement the pure canonical projection**
 
-Use one representation only: prefer structured \`exercises[].sets\` when present; otherwise use flat \`sets\`. A working set is explicitly completed and is not set type \`W\`. Do **not** require \`weight > 0\`.
+Use one representation only: prefer structured `exercises[].sets` when present; otherwise use flat `sets`. A working set is explicitly completed and is not set type `W`. Do **not** require `weight > 0`.
 
 Core shape:
 
@@ -150,7 +150,7 @@ export function projectCompletedWorkingSets(workout: Workout): WorkoutSetItem[] 
 }
 ~~~
 
-\`buildCompletionPayload\` must return updates, duration, and total volume without incrementing \`version\` locally. Extend \`validateWorkoutUpdates\` to accept finite non-negative \`totalVolume\` so the server can persist the same authoritative total.
+`buildCompletionPayload` must return updates, duration, and total volume without incrementing `version` locally. Extend `validateWorkoutUpdates` to accept finite non-negative `totalVolume` so the server can persist the same authoritative total.
 
 - [ ] **Step 4: Re-run the projection test**
 
@@ -168,21 +168,22 @@ git commit -m "feat: canonicalize completed workout sets"
 ### Task 2: Make workout mutation identity caller-owned and retry-stable
 
 **Files:**
-- Modify: \`src/lib/api.ts:126-180,995-1040\`
-- Modify: \`src/lib/idempotency-guard.ts\`
-- Modify: \`server.ts:922-1155\`
-- Modify: every \`mutateWorkout(...)\` call site to use the options object
-- Test: \`tests/authoritative_pipeline.test.ts:23+\`
-- Test: \`tests/dogfood_idempotency_regression.test.ts\`
+- Modify: `src/lib/api.ts:126-180,995-1040`
+- Modify: `src/lib/idempotency-guard.ts`
+- Modify: `server.ts:922-1155`
+- Modify: every `mutateWorkout(...)` call site to use the options object
+- Test: `tests/authoritative_pipeline.test.ts:23+`
+- Test: `tests/dogfood_idempotency_regression.test.ts`
 
 **Interfaces:**
 - Produces:
-  - \`WorkoutMutationOptions { mutationId: string; duration?: number; volume?: number }\`
-  - \`SaveWorkoutOptions { mutationId?: string }\`
-  - \`WorkoutConflictError\`
-  - \`hashCreateWorkoutPayload(...)\`
-- Changes \`mutateWorkout\` signature to:
-  \`mutateWorkout(workoutId, baseVersion, updates, options)\`.
+  - `WorkoutMutationOptions { mutationId: string; duration?: number; volume?: number }`
+  - `SaveWorkoutOptions { mutationId?: string }`
+  - `WorkoutConflictError`
+  - `hashCreateWorkoutPayload(...)`
+  - `upsertAuthoritativeWorkoutCache(workout): Promise<void>`
+- Changes `mutateWorkout` signature to:
+  `mutateWorkout(workoutId, baseVersion, updates, options)`.
 
 - [ ] **Step 1: Write failing tests for stable logical identity**
 
@@ -236,11 +237,11 @@ Run:
 npx tsx tests/dogfood_idempotency_regression.test.ts
 ~~~
 
-Expected: FAIL because \`hashCreateWorkoutPayload\` does not exist.
+Expected: FAIL because `hashCreateWorkoutPayload` does not exist.
 
 - [ ] **Step 3: Add deterministic create hashing**
 
-In \`src/lib/idempotency-guard.ts\`, hash create payloads after removing server-managed timestamps:
+In `src/lib/idempotency-guard.ts`, hash create payloads after removing server-managed timestamps:
 
 ~~~ts
 export function hashCreateWorkoutPayload(
@@ -258,11 +259,11 @@ export function hashCreateWorkoutPayload(
 }
 ~~~
 
-Use this helper in \`POST /api/workouts\` instead of hashing the timestamp-bearing object directly.
+Use this helper in `POST /api/workouts` instead of hashing the timestamp-bearing object directly.
 
 - [ ] **Step 4: Make API mutation IDs explicit**
 
-Replace the current hidden \`crypto.randomUUID()\` in \`mutateWorkout\` with:
+Replace the current hidden `crypto.randomUUID()` in `mutateWorkout` with:
 
 ~~~ts
 export interface WorkoutMutationOptions {
@@ -285,13 +286,28 @@ export class WorkoutConflictError extends Error {
 }
 ~~~
 
-\`mutateWorkout\` must serialize the caller’s exact \`mutationId\`.
+`mutateWorkout` must serialize the caller’s exact `mutationId`.
 
-Allow \`saveWorkout(..., options?: SaveWorkoutOptions)\` so the finish fallback can reuse a pre-existing logical mutation ID. Default to a new UUID only when no caller-supplied ID exists.
+Allow `saveWorkout(..., options?: SaveWorkoutOptions)` so the finish fallback can reuse a pre-existing logical mutation ID. Default to a new UUID only when no caller-supplied ID exists.
+
+Extract local history-cache upsert into one helper and call it only with the authoritative object returned by the server:
+
+~~~ts
+export async function upsertAuthoritativeWorkoutCache(workout: Workout): Promise<void> {
+  if (!workout.userId) return;
+  const current = await getWorkouts(workout.userId);
+  const next = current.some(w => w.id === workout.id)
+    ? current.map(w => w.id === workout.id ? workout : w)
+    : [workout, ...current];
+  localStorage.setItem(`forge_workouts_${workout.userId}`, JSON.stringify(next));
+}
+~~~
+
+`saveWorkout` and `mutateWorkout` must use this helper rather than constructing a second non-authoritative completion object.
 
 - [ ] **Step 5: Require a mutation ID on authoritative workout routes**
 
-In the create and mutate routes, reject missing/blank \`mutationId\` with 400 before opening a transaction.
+In the create and mutate routes, reject missing/blank `mutationId` with 400 before opening a transaction.
 
 Use the same mutation ID in audit and idempotency records.
 
@@ -319,10 +335,10 @@ npx tsx tests/mutations.test.ts
 
 Expected: PASS.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 8: Commit**
 
 ~~~bash
-git add src/lib/api.ts src/lib/idempotency-guard.ts server.ts src tests
+git add src/lib/api.ts src/lib/idempotency-guard.ts server.ts src/components/WorkoutDetailModal.tsx src/components/workout/ActiveWorkout.tsx tests/authoritative_pipeline.test.ts tests/dogfood_idempotency_regression.test.ts
 git commit -m "fix: make workout mutations retry-idempotent"
 ~~~
 
@@ -331,23 +347,27 @@ git commit -m "fix: make workout mutations retry-idempotent"
 ### Task 3: Persist active-session revision, pending mutation, and conflict state
 
 **Files:**
-- Modify: \`src/types.ts\`
-- Modify: \`src/store/useWorkoutStore.ts:5-210\`
-- Create: \`src/lib/workout-reconcile.ts\`
-- Test: \`tests/dogfood_active_state_regression.test.ts\`
+- Modify: `src/types.ts`
+- Modify: `src/store/useWorkoutStore.ts:5-210`
+- Modify: `src/components/workout/ActiveWorkout.tsx`
+- Create: `src/lib/workout-reconcile.ts`
+- Create: `src/lib/safe-storage.ts`
+- Test: `tests/dogfood_active_state_regression.test.ts`
 
 **Interfaces:**
 - Produces:
-  - \`WorkoutMutationKind = 'AUTOSYNC' | 'FINISH'\`
-  - \`PendingWorkoutMutation\`
-  - \`WorkoutSyncConflict\`
-  - \`reconcileAuthoritativeWorkout(...)\`
-  - store actions for queue/clear/apply/conflict resolution.
+  - `WorkoutMutationKind = 'AUTOSYNC' | 'FINISH'`
+  - `PendingWorkoutMutation`
+  - `WorkoutSyncConflict`
+  - `reconcileAuthoritativeWorkout(...)`
+  - `createSafeStateStorage(...)`
+  - store actions for queue/clear/apply/conflict resolution and persistence-health warnings.
 
 - [ ] **Step 1: Write failing reconciliation/persistence-selection tests**
 
 ~~~ts
 import { reconcileAuthoritativeWorkout } from '../src/lib/workout-reconcile';
+import { createSafeStateStorage } from '../src/lib/safe-storage';
 import { selectPersistedWorkoutState } from '../src/store/useWorkoutStore';
 
 const local = {
@@ -440,7 +460,7 @@ export interface WorkoutSyncConflict {
 
 - [ ] **Step 4: Add revision tracking to the workout store**
 
-\`sessionRevision\` starts at 0 when a workout starts and increments for user edits: set changes, adding/removing sets, adding/removing exercises, and direct active-workout edits.
+`sessionRevision` starts at 0 when a workout starts and increments for user edits: set changes, adding/removing sets, adding/removing exercises, and direct active-workout edits.
 
 Do not increment the user-edit revision merely because authoritative server metadata/version is merged.
 
@@ -464,19 +484,19 @@ Render a compact warning in `ActiveWorkout` when present: `Local recovery is una
 
 - [ ] **Step 6: Add explicit server reconciliation**
 
-\`reconcileAuthoritativeWorkout(local, authoritative, capturedRevision, currentRevision)\` returns the authoritative object when no newer local edits exist. If the current local revision is newer than the captured revision, preserve local mutable session fields and merge only authoritative server identity/version/timestamps needed for the next OCC write.
+`reconcileAuthoritativeWorkout(local, authoritative, capturedRevision, currentRevision)` returns the authoritative object when no newer local edits exist. If the current local revision is newer than the captured revision, preserve local mutable session fields and merge only authoritative server identity/version/timestamps needed for the next OCC write.
 
 - [ ] **Step 7: Add safe conflict resolution**
 
 Store action:
-- \`resolveConflictWithServer()\` replaces the local active workout with the stored server snapshot, clears pending/conflict/error state, and resets the session revision baseline.
+- `resolveConflictWithServer()` replaces the local active workout with the stored server snapshot, clears pending/conflict/error state, and resets the session revision baseline.
 - No “force local overwrite” action in Gate 1.
 
 - [ ] **Step 8: Re-run the state regression test**
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 
 ~~~bash
 git add src/types.ts src/store/useWorkoutStore.ts src/lib/workout-reconcile.ts src/lib/safe-storage.ts src/components/workout/ActiveWorkout.tsx tests/dogfood_active_state_regression.test.ts
@@ -488,19 +508,19 @@ git commit -m "feat: persist workout sync operation state"
 ### Task 4: Move autosync into one mounted session-sync coordinator
 
 **Files:**
-- Create: \`src/lib/workout-sync.ts\`
-- Create: \`src/hooks/useWorkoutSessionSync.ts\`
-- Modify: \`src/layouts/Layout.tsx:39-135\`
-- Modify: \`src/components/workout/ActiveWorkoutBottomBar.tsx:95-140\`
-- Test: \`tests/dogfood_sync_regression.test.ts\`
+- Create: `src/lib/workout-sync.ts`
+- Create: `src/hooks/useWorkoutSessionSync.ts`
+- Modify: `src/layouts/Layout.tsx:39-135`
+- Modify: `src/components/workout/ActiveWorkoutBottomBar.tsx:95-140`
+- Test: `tests/dogfood_sync_regression.test.ts`
 
 **Interfaces:**
-- \`createWorkoutSyncController(deps)\` produces:
-  - \`requestAutosync()\`
-  - \`retryPending()\`
-  - \`finishActiveWorkout()\`
-  - \`isInFlight()\`
-- \`useWorkoutSessionSync()\` mounts one 45-second timer and returns \`finishActiveWorkout\`.
+- `createWorkoutSyncController(deps)` produces:
+  - `requestAutosync()`
+  - `retryPending()`
+  - `finishActiveWorkout()`
+  - `isInFlight()`
+- `useWorkoutSessionSync()` mounts one 45-second timer and returns `finishActiveWorkout`.
 
 - [ ] **Step 1: Write the deterministic sync-controller tests**
 
@@ -549,11 +569,11 @@ npx tsx tests/dogfood_sync_regression.test.ts
 
 - [ ] **Step 3: Implement the controller**
 
-The controller owns only ephemeral \`inFlight\` state. Logical operation state stays in Zustand so it survives reload.
+The controller owns only ephemeral `inFlight` state. Logical operation state stays in Zustand so it survives reload.
 
 Rules:
 1. If a pending operation exists, retry it; do not create a new UUID.
-2. Snapshot active workout + \`sessionRevision\` before a new autosync.
+2. Snapshot active workout + `sessionRevision` before a new autosync.
 3. Persist the operation before network delivery.
 4. On network/5xx failure, keep it pending.
 5. On success, reconcile with the captured revision, clear pending, and if newer local edits exist, schedule exactly one follow-up sync.
@@ -562,12 +582,12 @@ Rules:
 
 - [ ] **Step 4: Mount exactly one scheduler from Layout**
 
-Call \`useWorkoutSessionSync()\` before any early return in \`Layout\`.
+Call `useWorkoutSessionSync()` before any early return in `Layout`.
 
 The hook:
 - creates one 45-second interval while an active workout exists
 - retries an existing pending mutation immediately after rehydration
-- retries pending network failures when the browser fires \`online\`
+- retries pending network failures when the browser fires `online`
 - clears its timer/listener on unmount or when active workout ID changes
 
 - [ ] **Step 5: Remove autosync side effects from ActiveWorkoutBottomBar**
@@ -581,7 +601,7 @@ npx tsx tests/dogfood_sync_regression.test.ts
 npx tsx tests/phase2_reliability_regression.test.ts
 ~~~
 
-Update the old Phase 2 static autosync test so it checks the new hook/coordinator rather than dead \`ActiveWorkoutBottomBar\` code.
+Update the old Phase 2 static autosync test so it checks the new hook/coordinator rather than dead `ActiveWorkoutBottomBar` code.
 
 - [ ] **Step 7: Commit**
 
@@ -595,16 +615,16 @@ git commit -m "feat: centralize durable workout autosync"
 ### Task 5: Make finish one durable authoritative logical mutation
 
 **Files:**
-- Modify: \`src/lib/workout-sync.ts\`
-- Modify: \`src/hooks/useWorkoutSessionSync.ts\`
-- Modify: \`src/components/workout/ActiveWorkout.tsx:32-205\`
-- Modify: \`src/components/workout/GymSetRow.tsx\`
-- Modify: \`src/layouts/Layout.tsx:118-135\`
-- Modify: \`src/components/workout/LiftOffSummary.tsx:22-95\`
-- Test: \`tests/dogfood_finish_regression.test.ts\`
+- Modify: `src/lib/workout-sync.ts`
+- Modify: `src/hooks/useWorkoutSessionSync.ts`
+- Modify: `src/components/workout/ActiveWorkout.tsx:32-205`
+- Modify: `src/components/workout/GymSetRow.tsx`
+- Modify: `src/layouts/Layout.tsx:118-135`
+- Modify: `src/components/workout/LiftOffSummary.tsx:22-95`
+- Test: `tests/dogfood_finish_regression.test.ts`
 
 **Interfaces:**
-- \`finishActiveWorkout(): Promise<Workout>\` resolves only with the authoritative server-returned completed workout.
+- `finishActiveWorkout(): Promise<Workout>` resolves only with the authoritative server-returned completed workout.
 
 - [ ] **Step 1: Write finish failure/replay/authority tests**
 
@@ -612,7 +632,7 @@ Test three cases:
 
 1. Transport failure before authoritative response leaves:
    - active workout intact
-   - \`pendingMutation.kind === 'FINISH'\`
+   - `pendingMutation.kind === 'FINISH'`
    - same finish mutation ID available for retry.
 
 2. Lost response after server commit, then retry:
@@ -668,9 +688,9 @@ The 404 creation fallback must use the **same** finish mutation ID and the deter
 
 - [ ] **Step 4: Remove local completion authority from ActiveWorkout**
 
-Delete the local \`version + 1\` completed-workout construction and direct \`mutateWorkout/saveWorkout\` calls.
+Delete the local `version + 1` completed-workout construction and direct `mutateWorkout/saveWorkout` calls.
 
-\`ActiveWorkout\` should call the injected \`finishActiveWorkout\`, then:
+`ActiveWorkout` should call the injected `finishActiveWorkout`, then:
 
 ~~~ts
 const authoritative = await finishActiveWorkout();
@@ -681,19 +701,19 @@ Do not clear the store before that promise resolves.
 
 - [ ] **Step 5: Lock editing while finish is pending**
 
-Expose whether the pending operation is \`FINISH\`.
+Expose whether the pending operation is `FINISH`.
 
 While true:
 - disable complete/uncomplete controls
 - disable weight/reps editors
 - disable add/remove set and add/remove exercise actions
-- label button \`Finishing...\`
+- label button `Finishing...`
 
 A network-unknown finish remains pending and retryable rather than allowing additional edits that are outside the frozen completion payload.
 
 - [ ] **Step 6: Use canonical projection in LiftOffSummary**
 
-Replace \`weight > 0\` filtering with \`projectCompletedWorkingSets(workout)\`.
+Replace `weight > 0` filtering with `projectCompletedWorkingSets(workout)`.
 
 The summary must count a completed bodyweight set as a set even if its external-load volume is zero.
 
@@ -716,12 +736,12 @@ git commit -m "fix: make workout finish authoritative"
 ### Task 6: Eliminate unsafe OCC rebasing and preserve stable exercise identity in manual edits
 
 **Files:**
-- Modify: \`src/components/WorkoutDetailModal.tsx:582-660\`
-- Modify: \`src/lib/workout-session.ts\`
-- Test: \`tests/dogfood_occ_identity_regression.test.ts\`
+- Modify: `src/components/WorkoutDetailModal.tsx:582-660`
+- Modify: `src/lib/workout-session.ts`
+- Test: `tests/dogfood_occ_identity_regression.test.ts`
 
 **Interfaces:**
-- Add \`rebuildExercisesPreservingIdentity(flatSets, existingExercises)\`.
+- Add `rebuildExercisesPreservingIdentity(flatSets, existingExercises)`.
 
 - [ ] **Step 1: Write failing identity/OCC source behavior tests**
 
@@ -745,7 +765,7 @@ if (rebuilt[0].id !== 'existing-exercise-id')
   throw new Error('saving an existing exercise must not generate a new exercise id');
 ~~~
 
-Also add a source assertion that the modal no longer contains the \`Force override?\` branch or a retry using \`e.currentVersion\`.
+Also add a source assertion that the modal no longer contains the `Force override?` branch or a retry using `e.currentVersion`.
 
 - [ ] **Step 2: Verify failure**
 
@@ -755,29 +775,29 @@ npx tsx tests/dogfood_occ_identity_regression.test.ts
 
 - [ ] **Step 3: Reuse exercise IDs when rebuilding structured exercises**
 
-Match an existing exercise by canonical \`exerciseId\` first, then exact name/registry alias. Generate a UUID only for a genuinely new exercise.
+Match an existing exercise by canonical `exerciseId` first, then exact name/registry alias. Generate a UUID only for a genuinely new exercise.
 
 Set IDs always come from the existing flat rows.
 
 - [ ] **Step 4: Remove “force override” OCC behavior**
 
-On \`WorkoutConflictError\`:
+On `WorkoutConflictError`:
 - keep the modal/editor state
 - show a conflict message with server version
-- do not call \`mutateWorkout\` again using \`e.currentVersion\`
-- provide an explicit “Reload server version” action if \`e.workout\` exists
+- do not call `mutateWorkout` again using `e.currentVersion`
+- provide an explicit “Reload server version” action if `e.workout` exists
 - otherwise let the user close/reopen after refresh
 
 No automatic merge in Gate 1.
 
 - [ ] **Step 5: Add active-session conflict banner**
 
-When the central sync store contains \`syncConflict\`, show:
+When the central sync store contains `syncConflict`, show:
 
-\`Sync conflict — server is at vX. Your local draft is still safe.\`
+`Sync conflict — server is at vX. Your local draft is still safe.`
 
 Provide:
-- **Use server version** → \`resolveConflictWithServer()\`
+- **Use server version** → `resolveConflictWithServer()`
 - **Keep draft for now** → leaves conflict unresolved and autosync blocked
 
 Do not provide a force-write action.
@@ -801,14 +821,14 @@ git commit -m "fix: preserve workout identity across OCC conflicts"
 ### Task 7: Make deterministic analytics consume the canonical completed-set truth once
 
 **Files:**
-- Modify: \`src/lib/hypertrophy.ts:95+\`
-- Modify: \`src/lib/progression.ts:42+\`
-- Modify: \`src/components/workout/LiftOffSummary.tsx\`
-- Modify if needed: \`src/lib/sessionCompare.ts\`
-- Test: \`tests/dogfood_analytics_regression.test.ts\`
+- Modify: `src/lib/hypertrophy.ts:95+`
+- Modify: `src/lib/progression.ts:42+`
+- Modify: `src/components/workout/LiftOffSummary.tsx`
+- Modify if needed: `src/lib/sessionCompare.ts`
+- Test: `tests/dogfood_analytics_regression.test.ts`
 
 **Interfaces:**
-- All touched analytics consume \`projectCompletedWorkingSets\` or the equivalent canonical structured projection from Task 1.
+- All touched analytics consume `projectCompletedWorkingSets` or the equivalent canonical structured projection from Task 1.
 
 - [ ] **Step 1: Write failing analytics tests**
 
@@ -833,9 +853,9 @@ npx tsx tests/dogfood_analytics_regression.test.ts
 
 - [ ] **Step 3: Replace local analytics filtering with the shared projection**
 
-\`calculatePhysiqueHypertrophyVolume\` must no longer maintain an independent “prefer nested else flat” completion policy.
+`calculatePhysiqueHypertrophyVolume` must no longer maintain an independent “prefer nested else flat” completion policy.
 
-\`extractExerciseHistory\` must filter through the same canonical set source before exercise matching.
+`extractExerciseHistory` must filter through the same canonical set source before exercise matching.
 
 Keep e1RM behavior unchanged for zero external load: the bodyweight set can count as a completed set, while e1RM remains 0 unless a bodyweight-aware load model exists in a future scope.
 
@@ -859,8 +879,8 @@ git commit -m "fix: unify completed-set analytics"
 ### Task 8: Add one end-to-end deterministic Dogfood Gate 1 regression
 
 **Files:**
-- Create: \`tests/dogfood_gate1_integration.test.ts\`
-- Modify: \`package.json:13-16\`
+- Create: `tests/dogfood_gate1_integration.test.ts`
+- Modify: `package.json:13-16`
 
 **Interfaces:**
 - Uses the real canonical projection, sync controller, reconciliation helper, idempotency helper, hypertrophy calculator, and progression extractor.
@@ -911,17 +931,17 @@ npx tsx tests/dogfood_gate1_integration.test.ts
 
 Expected: PASS.
 
-- [ ] **Step 3: Add all Dogfood Gate tests to \`npm test\`**
+- [ ] **Step 3: Add all Dogfood Gate tests to `npm test`**
 
 Keep existing security/reliability suites. Append:
-- \`dogfood_session_projection.test.ts\`
-- \`dogfood_idempotency_regression.test.ts\`
-- \`dogfood_active_state_regression.test.ts\`
-- \`dogfood_sync_regression.test.ts\`
-- \`dogfood_finish_regression.test.ts\`
-- \`dogfood_occ_identity_regression.test.ts\`
-- \`dogfood_analytics_regression.test.ts\`
-- \`dogfood_gate1_integration.test.ts\`
+- `dogfood_session_projection.test.ts`
+- `dogfood_idempotency_regression.test.ts`
+- `dogfood_active_state_regression.test.ts`
+- `dogfood_sync_regression.test.ts`
+- `dogfood_finish_regression.test.ts`
+- `dogfood_occ_identity_regression.test.ts`
+- `dogfood_analytics_regression.test.ts`
+- `dogfood_gate1_integration.test.ts`
 
 - [ ] **Step 4: Commit**
 
@@ -935,7 +955,7 @@ git commit -m "test: freeze Dogfood Gate 1 workout loop"
 ### Task 9: Repair the accidental README regression and run final verification
 
 **Files:**
-- Modify: \`README.md:1+\`
+- Modify: `README.md:1+`
 
 **Interfaces:**
 - Documentation only; no runtime interface changes.
