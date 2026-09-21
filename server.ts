@@ -13,7 +13,7 @@ import { validateWorkoutUpdates, validateWorkoutSets, stripImmutableFields, vali
 import { Workout } from './src/types';
 import { isDemoAuthAllowed } from './src/lib/auth-util';
 import { ToolLoopGuard } from './src/lib/tool-loop-guard';
-import { evaluateIdempotencyRecord, hashMutationPayload } from './src/lib/idempotency-guard';
+import { evaluateIdempotencyRecord, hashMutationPayload, hashCreateWorkoutPayload } from './src/lib/idempotency-guard';
 import {
   LogSetInputSchema,
   CreateWorkoutSessionSchema,
@@ -411,7 +411,7 @@ export async function handleWorkoutRollback(req: any, res: any) {
         const newAuditRef = adminDb.collection("mutation_audit_logs").doc();
         transaction.set(newAuditRef, {
           id: newAuditRef.id,
-          mutationId: mutationId || crypto.randomUUID(),
+          mutationId,
           userId: uid,
           actor: 'USER',
           action: 'ROLLBACK_CREATION',
@@ -925,6 +925,9 @@ CRITICAL SECURITY & EXECUTION RULES:
       const uid = await verifyToken(idToken);
 
       const { workout, actor, summary, mutationId } = req.body || {};
+      if (typeof mutationId !== 'string' || !mutationId.trim()) {
+        return res.status(400).json({ error: "mutationId is required" });
+      }
       if (!workout || typeof workout !== 'object') {
         return res.status(400).json({ error: "Workout payload is required" });
       }
@@ -952,11 +955,11 @@ CRITICAL SECURITY & EXECUTION RULES:
         return res.json({ success: true, workout: validatedWorkout });
       }
 
-      const payloadHash = hashMutationPayload(workoutId, { workout: validatedWorkout, actor, summary });
+      const payloadHash = hashCreateWorkoutPayload(workoutId, validatedWorkout, actor, summary);
       const dbId = firebaseConfig.firestoreDatabaseId || "(default)";
       const adminDb = testAdminDb || getFirestore(dbId);
       const workoutRef = adminDb.collection("workouts").doc(workoutId);
-      const idempRef = mutationId ? adminDb.collection("mutation_ids").doc(mutationId) : null;
+      const idempRef = adminDb.collection("mutation_ids").doc(mutationId);
 
       const result = await adminDb.runTransaction(async (transaction) => {
         if (idempRef) {
@@ -1045,6 +1048,9 @@ CRITICAL SECURITY & EXECUTION RULES:
 
       if (typeof baseVersion !== 'number' || !Number.isInteger(baseVersion) || baseVersion < 0) {
         return res.status(400).json({ error: "baseVersion must be a non-negative integer" });
+      }
+      if (typeof mutationId !== 'string' || !mutationId.trim()) {
+        return res.status(400).json({ error: "mutationId is required" });
       }
 
       const validatedUpdates = validateWorkoutUpdates(updates || {});
