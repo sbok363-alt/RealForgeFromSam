@@ -15,7 +15,7 @@ import {
   HelpCircle, 
   Target
 } from 'lucide-react';
-import { saveWorkout, mutateWorkout, getWorkouts } from '../../lib/api';
+import { getWorkouts } from '../../lib/api';
 import { WorkoutExercise, WorkoutSet, Workout, ProgressionReport } from '../../types';
 import { analyzeExerciseProgression } from '../../lib/progression';
 import ExerciseSelector from './ExerciseSelector';
@@ -29,7 +29,13 @@ import {
 } from '../../lib/sessionCompare';
 import { cn } from '../../lib/utils';
 
-export default function ActiveWorkout({ onWorkoutFinished }: { onWorkoutFinished?: (w: Workout) => void }) {
+export default function ActiveWorkout({
+  finishActiveWorkout,
+  onWorkoutFinished,
+}: {
+  finishActiveWorkout: () => Promise<Workout>;
+  onWorkoutFinished?: (w: Workout) => void;
+}) {
   const { 
     activeWorkout, 
     restEndTime, 
@@ -38,9 +44,14 @@ export default function ActiveWorkout({ onWorkoutFinished }: { onWorkoutFinished
     updateSet, 
     addSet, 
     removeSet, 
-    finishWorkout, 
+    discardWorkout,
     removeExercise, 
-    addExercise 
+    addExercise,
+    pendingMutation,
+    syncConflict,
+    syncError,
+    persistenceWarning,
+    resolveConflictWithServer,
   } = useWorkoutStore();
   
   const { user } = useAuthStore();
@@ -97,6 +108,7 @@ export default function ActiveWorkout({ onWorkoutFinished }: { onWorkoutFinished
   if (!activeWorkout) return null;
 
   const handleCompleteSet = (exId: string, setId: string, currentStatus: boolean, weight: number, reps: number) => {
+    if (isFinishing) return;
     if (!currentStatus) {
       if (weight < 0 || reps < 0) {
         alert("Weight and reps cannot be negative.");
@@ -111,6 +123,7 @@ export default function ActiveWorkout({ onWorkoutFinished }: { onWorkoutFinished
   };
 
   const handleApplyNextTarget = (exId: string) => {
+    if (isFinishing) return;
     const report = progressionReports[exId];
     if (!report || !report.nextTarget) return;
     
@@ -129,78 +142,21 @@ export default function ActiveWorkout({ onWorkoutFinished }: { onWorkoutFinished
     });
   };
 
+  const isFinishing = pendingMutation?.kind === 'FINISH';
+
   const handleSaveWorkout = async () => {
-    if (!user) return;
+    if (!user || isFinishing) return;
     setSaving(true);
-    
     try {
-      let totalVolume = 0;
-      const currentExercises = activeWorkout.exercises || [];
-      const cleanedExercises = currentExercises.map(ex => {
-        const completedSets = ex.sets.filter(s => s.completed);
-        completedSets.forEach(s => totalVolume += (s.weight * s.reps));
-        return { ...ex, sets: completedSets };
-      }).filter(ex => ex.sets.length > 0);
-
-      if (cleanedExercises.length === 0) {
-        alert("Cannot save an empty workout. Complete at least one set.");
-        setSaving(false);
-        return;
-      }
-
-      const completedWorkout: Workout = {
-        ...activeWorkout,
-        userId: user.uid,
-        title: activeWorkout.title || activeWorkout.name || 'Completed Workout',
-        scheduledDate: activeWorkout.scheduledDate || new Date().toISOString().split('T')[0],
-        status: 'COMPLETED',
-        version: (activeWorkout.version || 0) + 1,
-        completedAt: Date.now(),
-        exercises: cleanedExercises,
-        sets: cleanedExercises.flatMap(e => e.sets.map(s => ({
-          id: s.id,
-          exercise: e.exerciseId,
-          weight: s.weight,
-          reps: s.reps,
-          rir: s.rir,
-          rpe: s.rpe,
-          notes: s.notes,
-          completed: s.completed
-        }))),
-        totalVolume
-      };
-      
-      const startedAt = activeWorkout.startedAt || Date.now();
-      const duration = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
-
-      try {
-        await mutateWorkout(
-          activeWorkout.id,
-          activeWorkout.version || 1,
-          {
-            title: completedWorkout.title,
-            scheduledDate: completedWorkout.scheduledDate,
-            status: 'COMPLETED',
-            sets: completedWorkout.sets,
-            exercises: completedWorkout.exercises,
-            completedAt: completedWorkout.completedAt,
-            totalVolume
-          }, { mutationId: crypto.randomUUID(), duration, volume: totalVolume });
-      } catch (mutateErr: any) {
-        if (mutateErr.message?.includes('not found') || mutateErr.message?.includes('NOT_FOUND') || mutateErr.status === 404) {
-          await saveWorkout(completedWorkout, 'USER', `Completed active session: ${completedWorkout.title}`);
-        } else {
-          throw mutateErr;
-        }
-      }
-
-      finishWorkout();
-      if (onWorkoutFinished) {
-        onWorkoutFinished(completedWorkout);
-      }
-    } catch (e) {
+      const authoritative = await finishActiveWorkout();
+      onWorkoutFinished?.(authoritative);
+    } catch (e: any) {
       console.error(e);
-      alert("Failed to save workout");
+      if (e?.message === 'EMPTY_WORKOUT') {
+        alert('Cannot save an empty workout. Complete at least one working set.');
+      } else if (e?.message !== 'AUTOSYNC_PENDING' && e?.message !== 'SYNC_CONFLICT') {
+        alert('Failed to save workout. Your active session is still safe.');
+      }
     } finally {
       setSaving(false);
     }
@@ -213,6 +169,7 @@ export default function ActiveWorkout({ onWorkoutFinished }: { onWorkoutFinished
   };
 
   const handleAddExercise = (def: ExerciseDef) => {
+    if (isFinishing) return;
     // Generate progression report for initial target prefill
     const report = analyzeExerciseProgression(allUserWorkouts, def.id, def.name);
     const target = report.nextTarget;
@@ -272,12 +229,32 @@ export default function ActiveWorkout({ onWorkoutFinished }: { onWorkoutFinished
           <div className="text-xs text-muted-foreground">Active Session Logger</div>
         </div>
         <div className="flex gap-2">
-          <Button variant="ghost" size="sm" onClick={() => finishWorkout()}>Cancel</Button>
-          <Button variant="default" size="sm" onClick={handleSaveWorkout} disabled={saving} className="font-semibold">
-            {saving ? 'Saving...' : 'Finish & Save'}
+          <Button variant="ghost" size="sm" onClick={() => discardWorkout()} disabled={isFinishing}>Cancel</Button>
+          <Button variant="default" size="sm" onClick={handleSaveWorkout} disabled={saving || isFinishing || Boolean(syncConflict)} className="font-semibold">
+            {saving || isFinishing ? 'Finishing...' : 'Finish & Save'}
           </Button>
         </div>
       </div>
+
+      {persistenceWarning && (
+        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
+          Local recovery is unavailable on this device right now. Keep this session open until storage works again.
+        </div>
+      )}
+      {syncError && !syncConflict && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-muted-foreground">
+          Sync pending: {syncError}
+        </div>
+      )}
+      {syncConflict && (
+        <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-xs space-y-2">
+          <div>Sync conflict — server is at v{syncConflict.currentVersion}. Your local draft is still safe.</div>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={resolveConflictWithServer}>Use server version</Button>
+            <span className="self-center text-muted-foreground">Keep draft for now to leave autosync blocked.</span>
+          </div>
+        </div>
+      )}
 
       {/* Rest Timer Banner */}
       {restTimeLeft > 0 && (
@@ -316,7 +293,8 @@ export default function ActiveWorkout({ onWorkoutFinished }: { onWorkoutFinished
                   variant="ghost" 
                   size="icon" 
                   className="text-muted-foreground hover:text-destructive h-8 w-8 -mr-2" 
-                  onClick={() => removeExercise(ex.id)}
+                  disabled={isFinishing}
+                  onClick={() => !isFinishing && removeExercise(ex.id)}
                 >
                   <X size={16} />
                 </Button>
@@ -344,6 +322,7 @@ export default function ActiveWorkout({ onWorkoutFinished }: { onWorkoutFinished
                         size="sm" 
                         variant="outline" 
                         className="h-6 px-2 text-[10px] font-bold border-primary/30 text-primary hover:bg-primary/10 shrink-0"
+                        disabled={isFinishing}
                         onClick={() => handleApplyNextTarget(ex.id)}
                       >
                         Apply Target
@@ -401,6 +380,7 @@ export default function ActiveWorkout({ onWorkoutFinished }: { onWorkoutFinished
                         key={set.id || setIndex}
                         setNumber={setIndex + 1}
                         set={set}
+                        disabled={isFinishing}
                         onChange={(updates) => updateSet(ex.id, set.id, updates)}
                         onComplete={() => handleCompleteSet(ex.id, set.id, set.completed, set.weight, set.reps)}
                         previousLabel={cmp.label}
@@ -419,7 +399,9 @@ export default function ActiveWorkout({ onWorkoutFinished }: { onWorkoutFinished
                     variant="outline" 
                     size="sm" 
                     className="text-xs text-primary font-semibold border-primary/30 h-10 px-3 touch-manipulation"
+                    disabled={isFinishing}
                     onClick={() => {
+                      if (isFinishing) return;
                       const lastSet = ex.sets[ex.sets.length - 1];
                       addSet(ex.id, { 
                         id: crypto.randomUUID(), 
@@ -448,7 +430,8 @@ export default function ActiveWorkout({ onWorkoutFinished }: { onWorkoutFinished
       <Button 
         variant="outline" 
         className="w-full border-dashed py-6 bg-secondary/10 hover:bg-secondary/20 font-semibold text-sm" 
-        onClick={() => setShowSelector(true)}
+        disabled={isFinishing}
+        onClick={() => !isFinishing && setShowSelector(true)}
       >
         <Plus size={16} className="mr-2 text-primary" /> Add Exercise
       </Button>
