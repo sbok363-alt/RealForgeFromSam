@@ -56,7 +56,7 @@ export function extractExerciseHistory(
     const timestamp = w.completedAt || (w.scheduledDate ? new Date(w.scheduledDate).getTime() : 0);
 
     const matchingSets: WorkoutSetItem[] = projectCompletedWorkingSets(w).filter((set) => {
-      const normEx = (set.exercise || '').toLowerCase().replace(/[-_\\s]+/g, '');
+      const normEx = (set.exercise || '').toLowerCase().replace(/[-_\s]+/g, '');
       return normEx === normalizedTarget || normEx.includes(normalizedTarget) || normalizedTarget.includes(normEx);
     });
 
