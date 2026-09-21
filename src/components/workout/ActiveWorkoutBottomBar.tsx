@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useWorkoutStore } from '../../store/useWorkoutStore';
 import { useAuthStore } from '../../store/useAuthStore';
@@ -83,34 +83,47 @@ export function ActiveWorkoutBottomBar() {
     return () => clearInterval(interval);
   }, [restEndTime, clearRestTimer]);
 
+  const activeWorkoutRef = useRef(activeWorkout);
+  activeWorkoutRef.current = activeWorkout;
+
+  const elapsedRef = useRef(elapsed);
+  elapsedRef.current = elapsed;
+
+  const userRef = useRef(user);
+  userRef.current = user;
+
   // Background auto-sync to Firestore every 45s
   useEffect(() => {
     if (!activeWorkout || !user) return;
 
     const syncInterval = setInterval(async () => {
+      const currentWorkout = activeWorkoutRef.current;
+      const currentUser = userRef.current;
+      if (!currentWorkout || !currentUser) return;
+
       try {
         // Sync whichever schema actually holds the live session data —
         // `exercises[].sets` for sessions logged via ActiveWorkout.tsx,
         // falling back to the flat `sets` array. Sending the stale flat
         // array here would overwrite the server's real progress with an
         // empty/outdated set list every 45s.
-        const hasExercises = activeWorkout.exercises && activeWorkout.exercises.length > 0;
+        const hasExercises = currentWorkout.exercises && currentWorkout.exercises.length > 0;
         const updated = await mutateWorkout(
-          activeWorkout.id,
-          activeWorkout.version || 1,
+          currentWorkout.id,
+          currentWorkout.version || 1,
           {
-            title: activeWorkout.title,
-            scheduledDate: activeWorkout.scheduledDate,
-            status: activeWorkout.status,
+            title: currentWorkout.title,
+            scheduledDate: currentWorkout.scheduledDate,
+            status: currentWorkout.status,
             // Only send the field that actually holds this session's live
             // data — sending the other, empty/stale one would overwrite
             // real progress on the server.
             ...(hasExercises
-              ? { exercises: activeWorkout.exercises }
-              : { sets: activeWorkout.sets })
+              ? { exercises: currentWorkout.exercises }
+              : { sets: currentWorkout.sets })
           },
-          elapsed,
-          activeWorkout.volume
+          elapsedRef.current,
+          currentWorkout.volume
         );
         if (updated) {
           updateActiveWorkout(updated);
@@ -122,7 +135,7 @@ export function ActiveWorkoutBottomBar() {
     }, 45000);
 
     return () => clearInterval(syncInterval);
-  }, [activeWorkout, user, elapsed, setLastSyncedAt, updateActiveWorkout]);
+  }, [activeWorkout?.id, user?.uid, setLastSyncedAt, updateActiveWorkout]);
 
   const formatTime = (totalSeconds: number) => {
     const h = Math.floor(totalSeconds / 3600);

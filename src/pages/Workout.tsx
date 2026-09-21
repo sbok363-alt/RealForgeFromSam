@@ -158,10 +158,10 @@ export default function WorkoutPage() {
     if (!user) return;
     setDeleting(true);
     try {
+      await deleteWorkout(workout.id, user.uid);
       if (activeWorkout?.id === workout.id) {
         discardWorkout();
       }
-      await deleteWorkout(workout.id, user.uid);
       setWorkouts(prev => prev.filter(w => w.id !== workout.id));
       if (selectedWorkout?.id === workout.id) {
         setSelectedWorkout(null);

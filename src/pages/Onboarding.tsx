@@ -238,7 +238,7 @@ export default function Onboarding() {
               className={cn(
                 "w-full flex items-center gap-4 p-4 rounded-xl border text-left transition-all",
                 goal === g.id
-                  ? "border-primary bg-primary/10 shadow-[0_0_20px_rgba(6,182,212,0.15)]"
+                  ? "border-primary bg-primary/10 shadow-[0_0_20px_rgba(255,122,50,0.2)]"
                   : "border-border/70 bg-card hover:border-primary/40 hover:bg-secondary/30"
               )}
             >
@@ -267,7 +267,7 @@ export default function Onboarding() {
               className={cn(
                 "w-full flex items-center gap-4 p-4 rounded-xl border text-left transition-all",
                 experience === e.id
-                  ? "border-primary bg-primary/10 shadow-[0_0_20px_rgba(6,182,212,0.15)]"
+                  ? "border-primary bg-primary/10 shadow-[0_0_20px_rgba(255,122,50,0.2)]"
                   : "border-border/70 bg-card hover:border-primary/40 hover:bg-secondary/30"
               )}
             >
@@ -292,7 +292,7 @@ export default function Onboarding() {
                   className={cn(
                     "aspect-square rounded-xl border flex flex-col items-center justify-center transition-all font-bold",
                     daysPerWeek === d
-                      ? "border-primary bg-primary text-primary-foreground shadow-[0_0_20px_rgba(6,182,212,0.2)]"
+                      ? "border-primary bg-primary text-primary-foreground shadow-[0_0_20px_rgba(255,122,50,0.25)]"
                       : "border-border/70 bg-card hover:border-primary/40 text-foreground"
                   )}
                 >
@@ -310,7 +310,7 @@ export default function Onboarding() {
               className={cn(
                 "w-full flex items-center gap-4 p-4 rounded-xl border text-left transition-all",
                 equipment === eq.id
-                  ? "border-primary bg-primary/10 shadow-[0_0_20px_rgba(6,182,212,0.15)]"
+                  ? "border-primary bg-primary/10 shadow-[0_0_20px_rgba(255,122,50,0.2)]"
                   : "border-border/70 bg-card hover:border-primary/40 hover:bg-secondary/30"
               )}
             >

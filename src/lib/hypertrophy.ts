@@ -187,15 +187,9 @@ export function calculatePhysiqueHypertrophyVolume(
       }
     };
 
-    if (Array.isArray(w.sets)) {
-      w.sets.forEach(s => {
-        if (s.completed && s.exercise) {
-          recordSet(s.exercise, true);
-        }
-      });
-    }
-
-    if (Array.isArray(w.exercises)) {
+    // Prefer nested exercises if present and non-empty to avoid double-counting
+    // workouts that carry both legacy flat `sets` and structured `exercises`.
+    if (Array.isArray(w.exercises) && w.exercises.length > 0) {
       w.exercises.forEach(ex => {
         const exName = ex.name || ex.exerciseId;
         ex.sets?.forEach(s => {
@@ -203,6 +197,12 @@ export function calculatePhysiqueHypertrophyVolume(
             recordSet(exName, true);
           }
         });
+      });
+    } else if (Array.isArray(w.sets)) {
+      w.sets.forEach(s => {
+        if (s.completed && s.exercise) {
+          recordSet(s.exercise, true);
+        }
       });
     }
   });

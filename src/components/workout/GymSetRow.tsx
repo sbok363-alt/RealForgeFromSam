@@ -64,9 +64,7 @@ export function GymSetRow({
       className={cn(
         'rounded-2xl border p-3 space-y-2.5 transition-colors',
         done
-          ? deltaUp
-            ? 'bg-emerald-500/10 border-emerald-500/40'
-            : 'bg-emerald-500/10 border-emerald-500/35'
+          ? 'bg-primary/10 border-primary/40'
           : 'bg-card border-border/70'
       )}
     >
@@ -219,8 +217,8 @@ export function GymSetRow({
           className={cn(
             'w-full h-12 sm:h-13 rounded-xl font-bold text-sm flex items-center justify-center gap-2 touch-manipulation active:scale-[0.98] transition-all relative z-10',
             done
-              ? 'bg-emerald-600 text-white shadow-[0_0_16px_rgba(16,185,129,0.35)]'
-              : 'bg-primary text-primary-foreground shadow-md'
+              ? 'bg-primary text-black font-black shadow-[0_0_16px_rgba(255,122,50,0.45)]'
+              : 'bg-secondary hover:bg-secondary/80 text-foreground border border-border/80'
           )}
         >
           <Check size={20} strokeWidth={2.5} />

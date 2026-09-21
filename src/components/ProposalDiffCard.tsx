@@ -196,7 +196,7 @@ export function ProposalDiffCard({
   return (
     <Card className={cn(
       "border overflow-hidden transition-all shadow-sm",
-      isPending && !hasVersionConflict && "border-primary/40 bg-card shadow-[0_0_24px_rgba(6,182,212,0.06)]",
+      isPending && !hasVersionConflict && "border-primary/40 bg-card shadow-[0_0_24px_rgba(255,122,50,0.1)]",
       hasVersionConflict && "border-amber-500/50 bg-amber-500/5",
       isConflict && "border-destructive/40 bg-destructive/5",
       isExecuted && "border-emerald-500/30 bg-emerald-500/5",

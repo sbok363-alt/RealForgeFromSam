@@ -12,20 +12,43 @@ interface GeminiStore {
   closeModal: () => void;
 }
 
+// Purge any legacy plaintext key persisted in localStorage
+if (typeof window !== 'undefined' && window.localStorage) {
+  try {
+    localStorage.removeItem('FORGE_GEMINI_API_KEY');
+  } catch (_) {}
+}
+
+const getInitialSessionKey = (): string | null => {
+  if (typeof window === 'undefined' || !window.sessionStorage) return null;
+  try {
+    return sessionStorage.getItem('FORGE_GEMINI_API_KEY');
+  } catch (_) {
+    return null;
+  }
+};
+
 export const useGeminiStore = create<GeminiStore>((set) => {
-  const storedKey = localStorage.getItem('FORGE_GEMINI_API_KEY');
+  const sessionKey = getInitialSessionKey();
   
   return {
-    apiKey: storedKey,
-    status: storedKey ? 'CONNECTED' : 'UNCONFIGURED',
+    apiKey: sessionKey,
+    status: sessionKey ? 'CONNECTED' : 'UNCONFIGURED',
     isModalOpen: false,
     
     setApiKey: (key) => {
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        try {
+          if (key) {
+            sessionStorage.setItem('FORGE_GEMINI_API_KEY', key);
+          } else {
+            sessionStorage.removeItem('FORGE_GEMINI_API_KEY');
+          }
+        } catch (_) {}
+      }
       if (key) {
-        localStorage.setItem('FORGE_GEMINI_API_KEY', key);
         set({ apiKey: key, status: 'CONNECTED' });
       } else {
-        localStorage.removeItem('FORGE_GEMINI_API_KEY');
         set({ apiKey: null, status: 'UNCONFIGURED' });
       }
     },

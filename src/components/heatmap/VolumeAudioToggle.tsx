@@ -17,7 +17,7 @@ export const VolumeAudioToggle: React.FC<{ className?: string }> = ({ className 
       className={cn(
         "p-1.5 rounded-lg border transition-all flex items-center gap-1 text-xs font-mono",
         enabled 
-          ? "bg-cyan-500/10 border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20" 
+          ? "bg-[#FF7A32]/10 border-[#FF7A32]/30 text-[#FF7A32] hover:bg-[#FF7A32]/20" 
           : "bg-secondary/40 border-border/50 text-muted-foreground hover:text-foreground",
         className
       )}

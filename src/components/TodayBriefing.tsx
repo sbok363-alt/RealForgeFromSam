@@ -136,7 +136,7 @@ export function TodayBriefing({ workouts, proposals, userName, onJustGo }: Today
   const dayLabel = getDayLabel();
 
   return (
-    <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-primary/15 via-card to-card shadow-[0_0_40px_rgba(6,182,212,0.08)]">
+    <Card className="relative overflow-hidden border border-border/80 bg-gradient-to-br from-primary/15 via-card to-card shadow-[0_0_40px_rgba(255,107,0,0.08)]">
       {/* Subtle glow accent */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-transparent pointer-events-none" />
       
@@ -295,7 +295,7 @@ export function TodayBriefing({ workouts, proposals, userName, onJustGo }: Today
               onClick={() => navigate('/proposals')}
               className="rounded-xl border border-accent/40 bg-accent/10 p-3.5 flex items-start gap-3 text-left hover:bg-accent/15 transition-colors"
             >
-              <div className="p-1.5 rounded-lg bg-accent text-accent-foreground shrink-0 shadow-[0_0_10px_rgba(6,182,212,0.3)]">
+              <div className="p-1.5 rounded-lg bg-accent text-accent-foreground shrink-0 shadow-[0_0_10px_rgba(255,122,50,0.35)]">
                 <Sparkles size={16} />
               </div>
               <div className="min-w-0 flex-1">

@@ -95,10 +95,10 @@ export const KineticSynergyBadge: React.FC<KineticSynergyBadgeProps> = ({ muscle
     <div className={cn("p-3 rounded-xl bg-secondary/30 border border-border/60 text-xs space-y-2", className)}>
       <div className="flex items-center justify-between">
         <span className="font-bold text-foreground flex items-center gap-1.5">
-          <Cpu size={13} className="text-cyan-400" />
+          <Cpu size={13} className="text-[#FF7A32]" />
           Kinetic Synergies & Co-Activation
         </span>
-        <span className="text-[10px] font-mono text-cyan-400 font-semibold px-1.5 py-0.2 rounded bg-cyan-500/10 border border-cyan-500/20">
+        <span className="text-[10px] font-mono text-[#FF7A32] font-semibold px-1.5 py-0.2 rounded bg-[#FF7A32]/10 border border-[#FF7A32]/20">
           {data.primaryDriver}
         </span>
       </div>
@@ -117,9 +117,9 @@ export const KineticSynergyBadge: React.FC<KineticSynergyBadgeProps> = ({ muscle
             {data.synergists.map(syn => (
               <div key={syn.name} className="flex items-center justify-between">
                 <span className="text-muted-foreground flex items-center gap-1">
-                  <ArrowRight size={10} className="text-cyan-400" /> {syn.name}
+                  <ArrowRight size={10} className="text-[#FF7A32]" /> {syn.name}
                 </span>
-                <span className="text-cyan-400 font-bold">~{syn.pct}% load</span>
+                <span className="text-[#FF7A32] font-bold">~{syn.pct}% load</span>
               </div>
             ))}
           </div>

@@ -403,7 +403,7 @@ export function Target1RMGoals({
                           isComplete 
                             ? "bg-gradient-to-r from-emerald-500 to-teal-400 shadow-xs" 
                             : item.progressPercent >= 75 
-                            ? "bg-gradient-to-r from-primary to-cyan-400" 
+                            ? "bg-gradient-to-r from-primary to-amber-400 shadow-[0_0_12px_rgba(255,122,50,0.3)]" 
                             : item.progressPercent >= 40
                             ? "bg-gradient-to-r from-blue-600 to-indigo-500"
                             : "bg-gradient-to-r from-amber-500 to-orange-400"

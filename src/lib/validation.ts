@@ -54,7 +54,7 @@ export function validateWorkoutSet(set: any, index: number = 0): WorkoutSetItem 
   }
 
   const validated: WorkoutSetItem = {
-    id: typeof set.id === 'string' && set.id.trim() ? set.id.trim() : `s_${index + 1}_${Math.random().toString(36).slice(2, 7)}`,
+    id: typeof set.id === 'string' && set.id.trim() ? set.id.trim() : `s_${index + 1}`,
     exercise,
     weight,
     reps,
@@ -112,7 +112,7 @@ export function validateWorkoutExerciseSet(set: any, sIdx: number = 0, eIdx: num
     }
   }
 
-  let id = `s_${eIdx + 1}_${sIdx + 1}_${Math.random().toString(36).slice(2, 7)}`;
+  let id = `s_${eIdx + 1}_${sIdx + 1}`;
   if (set.id !== undefined && set.id !== null) {
     if (typeof set.id !== 'string' || !set.id.trim()) {
       throw new Error(`Invalid nested set at exercise ${eIdx}, set ${sIdx}: set id must be a non-empty string`);
@@ -211,7 +211,7 @@ export function validateWorkoutExercise(exercise: any, index: number = 0): Worko
     throw new Error(`Invalid nested exercise at index ${index}: exerciseId cannot exceed 128 characters`);
   }
 
-  let id = `ex_${index + 1}_${Math.random().toString(36).slice(2, 7)}`;
+  let id = `ex_${index + 1}`;
   if (exercise.id !== undefined && exercise.id !== null) {
     if (typeof exercise.id !== 'string' || !exercise.id.trim()) {
       throw new Error(`Invalid nested exercise at index ${index}: exercise id must be a non-empty string`);

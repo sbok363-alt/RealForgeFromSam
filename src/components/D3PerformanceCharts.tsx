@@ -224,8 +224,8 @@ export const D3PerformanceCharts: React.FC<D3PerformanceChartsProps> = ({ workou
       .attr('x2', '0%')
       .attr('y2', '100%');
 
-    areaGradient.append('stop').attr('offset', '0%').attr('stop-color', '#10B981').attr('stop-opacity', 0.4);
-    areaGradient.append('stop').attr('offset', '100%').attr('stop-color', '#10B981').attr('stop-opacity', 0.0);
+    areaGradient.append('stop').attr('offset', '0%').attr('stop-color', '#FF7A32').attr('stop-opacity', 0.45);
+    areaGradient.append('stop').attr('offset', '100%').attr('stop-color', '#FF7A32').attr('stop-opacity', 0.0);
 
     // Scales
     const xScale = d3
@@ -310,7 +310,7 @@ export const D3PerformanceCharts: React.FC<D3PerformanceChartsProps> = ({ workou
       .append('path')
       .datum(volumeData)
       .attr('fill', 'none')
-      .attr('stroke', '#10B981')
+      .attr('stroke', '#FF7A32')
       .attr('stroke-width', 2.5)
       .attr('d', lineGenerator);
 
@@ -341,7 +341,7 @@ export const D3PerformanceCharts: React.FC<D3PerformanceChartsProps> = ({ workou
       .attr('cx', (d) => xScale(d.date))
       .attr('cy', (d) => yScale(d.volume))
       .attr('r', 4.5)
-      .attr('fill', '#10B981')
+      .attr('fill', '#FF7A32')
       .attr('stroke', '#0F172A')
       .attr('stroke-width', 2)
       .style('cursor', 'pointer');
@@ -377,7 +377,7 @@ export const D3PerformanceCharts: React.FC<D3PerformanceChartsProps> = ({ workou
           .attr('x2', xScale(d.date))
           .attr('opacity', 0.6);
 
-        dots.attr('r', (dotD) => (dotD === d ? 7 : 4.5)).attr('fill', (dotD) => (dotD === d ? '#34D399' : '#10B981'));
+        dots.attr('r', (dotD) => (dotD === d ? 7 : 4.5)).attr('fill', (dotD) => (dotD === d ? '#FF9457' : '#FF7A32'));
 
         const tooltipX = Math.min(width - 120, Math.max(10, xScale(d.date) + margin.left - 60));
         const tooltipY = Math.max(10, yScale(d.volume) + margin.top - 70);
@@ -389,12 +389,12 @@ export const D3PerformanceCharts: React.FC<D3PerformanceChartsProps> = ({ workou
           .html(`
             <div class="font-bold text-foreground truncate max-w-[170px]">${d.workoutTitle}</div>
             <div class="text-muted-foreground text-[10px]">${d.dateStr} • ${d.setsCount} completed sets</div>
-            <div class="mt-1 font-mono font-bold text-emerald-500 text-sm">${d.volume.toLocaleString()} kg Total Vol</div>
+            <div class="mt-1 font-mono font-bold text-primary text-sm">${d.volume.toLocaleString()} kg Total Vol</div>
           `);
       })
       .on('mouseleave', function () {
         hoverLine.attr('opacity', 0);
-        dots.attr('r', 4.5).attr('fill', '#10B981');
+        dots.attr('r', 4.5).attr('fill', '#FF7A32');
         tooltip.style('opacity', '0');
       });
   }, [activeTab, volumeData, containerWidth]);

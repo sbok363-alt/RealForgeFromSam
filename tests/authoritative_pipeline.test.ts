@@ -217,6 +217,7 @@ function simulateOccCheck(currentDocumentVersion: number, requestedBaseVersion: 
 
 const vNext = simulateOccCheck(3, 3);
 assert(vNext === 4, 'OCC should increment version when baseVersion matches');
+console.log('✔ OCC baseVersion match increments document version');
 
 let caughtOccConflict = false;
 try {

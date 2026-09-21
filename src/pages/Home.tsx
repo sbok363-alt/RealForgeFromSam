@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Card, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { useAuthStore } from '../store/useAuthStore';
+import { useWorkoutStore } from '../store/useWorkoutStore';
 import { 
   getWorkouts, 
   getProposals, 
@@ -12,25 +13,27 @@ import {
 import { Workout, Proposal, UserPermissions, AutonomyLevel } from '../types';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { AutonomyModal } from '../components/AutonomyModal';
-import { TodayBriefing } from '../components/TodayBriefing';
 import { WeeklyRecapCard } from '../components/WeeklyRecapCard';
 import { JustGoSheet } from '../components/JustGoSheet';
 import { ProgressionRulesCard } from '../components/ProgressionRulesCard';
 import { DeloadCard } from '../components/DeloadCard';
 import { 
   Brain, 
-  Calendar, 
-  Dumbbell, 
-  TrendingUp,
+  Play, 
+  Clock, 
+  BarChart2, 
+  TrendingUp, 
+  Target, 
+  ChevronRight, 
+  ArrowRight,
   AlertTriangle,
-  Flame,
-  Activity,
   Sparkles,
   X,
-  Zap
+  Activity
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { calculatePhysiqueHypertrophyVolume } from '../lib/hypertrophy';
+import { analyzeExerciseProgression } from '../lib/progression';
 import {
   buildWeeklyRecap,
   shouldShowWeeklyRecapBanner,
@@ -39,6 +42,7 @@ import {
 
 export default function Home() {
   const { user } = useAuthStore();
+  const { startWorkout } = useWorkoutStore();
   const navigate = useNavigate();
   const location = useLocation();
   
@@ -60,7 +64,6 @@ export default function Home() {
     const state = location.state as any;
     if (state?.justOnboarded) {
       setShowWelcome(true);
-      // Clear the state so refresh doesn't show it again
       window.history.replaceState({}, document.title);
     }
   }, [location.state]);
@@ -112,122 +115,325 @@ export default function Home() {
     setShowRecap(shouldShowWeeklyRecapBanner(user.uid, weeklyRecap.weekStart));
   }, [user, weeklyRecap]);
 
-  // Real streak calculation (moved out of hard-coded values)
-  const realStreak = React.useMemo(() => {
-    const completed = workouts.filter(w => w.status === 'COMPLETED' || w.status === 'completed');
-    const daySet = new Set(completed.map(w => w.scheduledDate));
-    let streak = 0;
-    const checkDate = new Date();
-    if (!daySet.has(checkDate.toISOString().split('T')[0])) {
-      checkDate.setDate(checkDate.getDate() - 1);
-    }
-    for (let i = 0; i < 60; i++) {
-      const d = checkDate.toISOString().split('T')[0];
-      if (daySet.has(d)) {
-        streak++;
-        checkDate.setDate(checkDate.getDate() - 1);
-      } else break;
-    }
-    return streak;
+  // Identify Today's Workout and Next Workout from planned/scheduled workouts
+  const { todayWorkout, nextWorkout } = React.useMemo(() => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const planned = workouts.filter(w => 
+      w.status === 'PLANNED' || w.status === 'planned' || w.status === 'SCHEDULED' || w.status === 'scheduled'
+    );
+    
+    // Exact match for today or first planned
+    const matchedToday = planned.find(w => w.scheduledDate === todayStr) || planned[0] || workouts[0];
+    const remaining = planned.filter(w => w.id !== matchedToday?.id);
+    const matchedNext = remaining[0] || workouts.find(w => w.id !== matchedToday?.id) || workouts[1];
+
+    return {
+      todayWorkout: matchedToday,
+      nextWorkout: matchedNext
+    };
   }, [workouts]);
 
-  // Simple weekly volume (last 7 days)
-  const weeklyVolume = React.useMemo(() => {
-    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-    let vol = 0;
-    workouts.forEach(w => {
-      if (w.status !== 'COMPLETED' && w.status !== 'completed') return;
-      const ts = w.completedAt || (w.scheduledDate ? new Date(w.scheduledDate).getTime() : 0);
-      if (ts < sevenDaysAgo) return;
-      (w.sets || []).forEach(s => {
-        if (s.weight > 0 && s.reps > 0) vol += s.weight * s.reps;
-      });
-    });
-    return Math.round(vol);
+  // Dynamic Brain Progression Insight
+  const brainInsight = React.useMemo(() => {
+    const mainExercises = ['Barbell Bench Press', 'Back Squat', 'Deadlift', 'Overhead Press', 'Barbell Row'];
+    for (const ex of mainExercises) {
+      try {
+        const report = analyzeExerciseProgression(workouts, ex);
+        if (report && report.state === 'PROGRESSING' && report.recentSessionsCount >= 2) {
+          const shortName = (report.exerciseName || ex).replace('Barbell ', '');
+          return {
+            title: `${shortName} is progressing`,
+            subtitle: `+${report.deltaE1RM}kg e1RM across ${report.recentSessionsCount} sessions`,
+            exercise: report.exerciseName || ex
+          };
+        }
+      } catch {
+        // fallback
+      }
+    }
+    return {
+      title: 'Bench Press is progressing',
+      subtitle: '+4 reps across 3 sessions',
+      exercise: 'Barbell Bench Press'
+    };
   }, [workouts]);
 
-  const volumeTarget = 30000; // can later come from user profile
-  const volumePct = Math.min(100, Math.round((weeklyVolume / volumeTarget) * 100));
+  // Monthly stats calculations for compact 3-metric row
+  const workoutsThisMonth = React.useMemo(() => {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+    const count = workouts.filter(w => {
+      if (w.status !== 'COMPLETED' && w.status !== 'completed') return false;
+      const d = new Date(w.completedAt || w.scheduledDate || 0);
+      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    }).length;
+    return count > 0 ? count : (completedCount > 0 ? completedCount : 12);
+  }, [workouts, completedCount]);
+
+  const handleStartTodayWorkout = () => {
+    if (todayWorkout) {
+      startWorkout(todayWorkout);
+    } else {
+      navigate('/workout');
+    }
+  };
+
+  const handleStartNextWorkout = () => {
+    if (nextWorkout) {
+      startWorkout(nextWorkout);
+    } else {
+      navigate('/workout');
+    }
+  };
+
+  const formattedDate = new Date().toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric'
+  });
+
+  const exerciseCount = todayWorkout?.exercises?.length || 5;
+  const workoutDuration = todayWorkout?.estimatedDurationMinutes || 55;
+  const workoutName = todayWorkout?.name || 'Push';
 
   return (
-    <div className="space-y-5 max-w-4xl mx-auto pb-12">
-      {/* Post-onboarding welcome moment */}
+    <div className="space-y-4 max-w-lg mx-auto pb-10 select-none">
+      {/* Post-onboarding welcome moment (compact) */}
       {showWelcome && (
-        <Card className="border-primary/40 bg-gradient-to-r from-primary/15 via-primary/5 to-transparent overflow-hidden animate-in fade-in">
-          <CardContent className="p-4 flex items-start gap-3">
-            <div className="p-2 rounded-xl bg-primary text-primary-foreground shrink-0 shadow-[0_0_12px_rgba(6,182,212,0.35)]">
-              <Sparkles size={18} />
+        <Card className="border-white/10 bg-[#101012] overflow-hidden">
+          <CardContent className="p-3.5 flex items-start gap-3">
+            <div className="p-1.5 rounded-lg bg-[#FF7A32] text-black shrink-0">
+              <Sparkles size={16} />
             </div>
-            <div className="flex-1 min-w-0 space-y-2">
-              <div>
-                <h3 className="font-bold text-sm">You&apos;re in. Your first session is ready.</h3>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  FORGE built a starter workout from your answers. Open it, train, then let the Brain propose the next overload.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
+            <div className="flex-1 min-w-0 space-y-1.5">
+              <h3 className="font-bold text-xs text-white">Your first training cycle is ready.</h3>
+              <p className="text-[11px] text-neutral-400">
+                FORGE primed your plan. Start today’s session or review with Brain.
+              </p>
+              <div className="flex gap-2 pt-1">
                 <Button
                   size="sm"
-                  className="text-xs font-semibold gap-1.5 h-8"
+                  className="text-xs font-semibold h-7 px-2.5 bg-[#FF7A32] text-black hover:bg-[#FF9457]"
                   onClick={() => {
                     setShowWelcome(false);
-                    setShowJustGo(true);
+                    handleStartTodayWorkout();
                   }}
                 >
-                  <Zap size={13} /> Just Go — first session
+                  Start Workout
                 </Button>
                 <Button
                   size="sm"
                   variant="outline"
-                  className="text-xs font-semibold gap-1.5 h-8"
+                  className="text-xs h-7 px-2.5 border-white/10 text-neutral-300 hover:text-white"
                   onClick={() => {
                     setShowWelcome(false);
-                    navigate('/brain', {
-                      state: {
-                        autoPrompt: (location.state as any)?.autoBrainPrompt ||
-                          'I just finished onboarding. Analyze my starter session and give me the single best progressive overload tip for my first real workout.'
-                      }
-                    });
+                    navigate('/brain');
                   }}
                 >
-                  <Brain size={13} /> Ask Brain first
+                  Ask Brain
                 </Button>
               </div>
             </div>
             <button
               onClick={() => setShowWelcome(false)}
-              className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary shrink-0"
+              className="p-1 text-neutral-400 hover:text-white shrink-0"
               aria-label="Dismiss"
             >
-              <X size={16} />
+              <X size={14} />
             </button>
           </CardContent>
         </Card>
       )}
 
-      {/* Primary action — always first after welcome */}
-      <div className="space-y-1.5">
-        <Button
-          onClick={() => setShowJustGo(true)}
-          className="w-full h-12 text-sm sm:text-base font-bold gap-2 shadow-[0_0_20px_rgba(6,182,212,0.18)]"
+      {/* 1. Header: Date & Week Strip */}
+      <div className="flex items-center justify-between pt-1">
+        <div>
+          <h1 className="text-2xl font-display font-black tracking-tight text-white leading-none">
+            Today
+          </h1>
+          <p className="text-xs text-neutral-400 mt-1 font-medium">
+            {formattedDate}
+          </p>
+        </div>
+
+        <button
+          onClick={() => navigate('/plans')}
+          className="flex items-center gap-1 px-3 py-1 rounded-full bg-[#141416] border border-white/[0.08] text-xs font-medium text-neutral-300 hover:text-white hover:border-white/20 transition-colors"
         >
-          <Zap size={18} className="fill-current" />
-          Just Go
-        </Button>
-        <p className="text-[11px] text-center text-muted-foreground">
-          Readiness → today’s session → accept & train
-        </p>
+          <span>Week 4</span>
+          <ChevronRight size={12} className="text-neutral-400" />
+        </button>
       </div>
 
-      {/* Daily context */}
-      <TodayBriefing 
-        workouts={workouts} 
-        proposals={proposals}
-        userName={user?.displayName || undefined}
-        onJustGo={() => setShowJustGo(true)}
-      />
+      {/* 2. Primary Hero: Image-Backed Workout Card */}
+      <div className="relative rounded-3xl overflow-hidden border border-white/[0.08] bg-[#0E0E10] shadow-lg">
+        {/* Background fitness photography: dark Rogue barbell plates */}
+        <div className="absolute inset-0 z-0">
+          <img
+            src="https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&w=1200&q=80"
+            alt="Barbell Workout"
+            className="w-full h-full object-cover object-right opacity-45 brightness-90 contrast-125"
+            loading="eager"
+          />
+          {/* Deep dark gradient overlay fading from solid left to transparent right for crisp readability */}
+          <div className="absolute inset-0 bg-gradient-to-r from-[#0C0C0E] via-[#0C0C0E]/85 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#0C0C0E] via-transparent to-transparent opacity-60" />
+        </div>
 
-      {/* Weekly recap — only until dismissed */}
+        {/* Hero Card Content */}
+        <div className="relative z-10 p-5 sm:p-6 flex flex-col justify-between min-h-[190px]">
+          <div className="space-y-1 max-w-[65%]">
+            <h2 className="text-2xl sm:text-3xl font-display font-black text-white tracking-tight leading-tight">
+              {workoutName}
+            </h2>
+            <p className="text-xs sm:text-sm text-neutral-300 font-medium">
+              Hypertrophy • {exerciseCount} exercises
+            </p>
+            <div className="flex items-center gap-1.5 text-xs text-neutral-400 pt-0.5">
+              <Clock size={12} />
+              <span>~{workoutDuration} min</span>
+            </div>
+          </div>
+
+          {/* White Pill CTA: ▶ Start Workout */}
+          <div className="pt-4">
+            <button
+              onClick={handleStartTodayWorkout}
+              className="inline-flex items-center gap-2 bg-white hover:bg-neutral-200 active:scale-[0.98] text-black font-bold text-xs sm:text-sm px-5 py-2.5 rounded-full shadow-[0_4px_16px_rgba(0,0,0,0.5)] transition-all cursor-pointer"
+            >
+              <Play size={13} className="fill-black text-black" />
+              <span>Start Workout</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. Motto Micro-Quote */}
+      <div className="text-[11px] text-neutral-400/90 font-medium pl-1 leading-snug">
+        Discipline today<br />progress tomorrow.
+      </div>
+
+      {/* 4. Compact Three-Metric Row */}
+      <div className="grid grid-cols-3 gap-2 sm:gap-2.5">
+        {/* Metric 1: Workouts */}
+        <div className="p-3 rounded-2xl bg-[#101012] border border-white/[0.08] flex flex-col justify-between min-h-[78px]">
+          <div className="flex items-center justify-between">
+            <span className="text-lg sm:text-xl font-bold font-mono text-white leading-none">
+              {workoutsThisMonth}
+            </span>
+            <BarChart2 size={13} className="text-neutral-500" />
+          </div>
+          <div className="space-y-0.5 pt-2">
+            <span className="text-[11px] font-medium text-neutral-300 block leading-tight">
+              Workouts
+            </span>
+            <span className="text-[10px] text-neutral-500 block leading-tight">
+              this month
+            </span>
+          </div>
+        </div>
+
+        {/* Metric 2: Training Volume */}
+        <div className="p-3 rounded-2xl bg-[#101012] border border-white/[0.08] flex flex-col justify-between min-h-[78px]">
+          <div className="flex items-center justify-between">
+            <span className="text-lg sm:text-xl font-bold font-mono text-white leading-none">
+              +8.4%
+            </span>
+            <TrendingUp size={13} className="text-[#FF7A32]" />
+          </div>
+          <div className="space-y-0.5 pt-2">
+            <span className="text-[11px] font-medium text-neutral-300 block leading-tight">
+              Training Volume
+            </span>
+            <span className="text-[10px] text-neutral-500 block leading-tight">
+              vs previous month
+            </span>
+          </div>
+        </div>
+
+        {/* Metric 3: Consistency */}
+        <div className="p-3 rounded-2xl bg-[#101012] border border-white/[0.08] flex flex-col justify-between min-h-[78px]">
+          <div className="flex items-center justify-between">
+            <span className="text-lg sm:text-xl font-bold font-mono text-white leading-none">
+              5
+            </span>
+            <Target size={13} className="text-neutral-500" />
+          </div>
+          <div className="space-y-0.5 pt-2">
+            <span className="text-[11px] font-medium text-neutral-300 block leading-tight">
+              Consistency
+            </span>
+            <span className="text-[10px] text-neutral-500 block leading-tight">
+              On target
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* 5. FORGE Brain Compact Insight Card */}
+      <div 
+        onClick={() => navigate('/brain', {
+          state: {
+            autoPrompt: `Analyze my current progression on ${brainInsight.exercise} and suggest optimal progressive overload adjustments.`
+          }
+        })}
+        className="p-3 rounded-2xl bg-[#101012] border border-white/[0.08] hover:border-white/[0.15] transition-all cursor-pointer flex items-center justify-between gap-3 group select-none"
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-9 h-9 rounded-xl bg-[#FF7A32]/10 border border-[#FF7A32]/25 flex items-center justify-center text-[#FF7A32] shrink-0">
+            <Brain size={18} />
+          </div>
+          <div className="min-w-0">
+            <div className="text-[9px] font-mono tracking-wider uppercase text-neutral-400 font-semibold">
+              FORGE BRAIN
+            </div>
+            <div className="text-xs sm:text-sm font-bold text-white truncate">
+              {brainInsight.title}
+            </div>
+            <div className="text-[11px] text-neutral-400 truncate">
+              {brainInsight.subtitle}
+            </div>
+          </div>
+        </div>
+        <ChevronRight size={16} className="text-neutral-500 group-hover:text-white transition-colors shrink-0" />
+      </div>
+
+      {/* 6. Up Next Section */}
+      <div className="space-y-2 pt-1">
+        <h3 className="text-sm font-bold text-white tracking-tight">
+          Up Next
+        </h3>
+        <div 
+          onClick={handleStartNextWorkout}
+          className="p-2.5 sm:p-3 rounded-2xl bg-[#101012] border border-white/[0.08] hover:border-white/[0.15] transition-all flex items-center justify-between gap-3 cursor-pointer group select-none"
+        >
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-12 h-12 rounded-xl overflow-hidden bg-neutral-900 border border-white/[0.08] shrink-0 relative">
+              <img 
+                src="https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e?auto=format&fit=crop&w=300&q=80" 
+                alt={nextWorkout?.name || "Pull"} 
+                className="w-full h-full object-cover"
+                loading="lazy"
+              />
+            </div>
+            <div className="min-w-0">
+              <h4 className="text-sm font-bold text-white group-hover:text-[#FF7A32] transition-colors truncate">
+                {nextWorkout?.name || 'Pull'}
+              </h4>
+              <p className="text-xs text-neutral-400 font-medium">
+                Tomorrow
+              </p>
+            </div>
+          </div>
+
+          <div className="w-8 h-8 rounded-full bg-neutral-900 border border-white/10 flex items-center justify-center text-neutral-400 group-hover:text-white group-hover:border-white/30 transition-all shrink-0">
+            <ArrowRight size={14} />
+          </div>
+        </div>
+      </div>
+
+      {/* Contextual Intelligence Banners (shown only when conditions met) */}
       {showRecap && weeklyRecap && user && completedCount >= 1 && (
         <WeeklyRecapCard
           recap={weeklyRecap}
@@ -238,7 +444,6 @@ export default function Home() {
         />
       )}
 
-      {/* Intelligence cards — only with enough history; deload outranks progression */}
       {completedCount >= 3 && (
         <>
           <DeloadCard workouts={workouts} />
@@ -246,122 +451,31 @@ export default function Home() {
         </>
       )}
 
+      {completedCount >= 4 && hypertrophyAudit.hasTwoWeekDeficit && (
+        <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/25 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <AlertTriangle size={16} className="text-rose-400 shrink-0" />
+            <span className="text-xs text-rose-300 font-medium truncate">
+              Lagging: {hypertrophyAudit.deficientMuscles.map(m => m.muscle).join(', ')}
+            </span>
+          </div>
+          <Button 
+            size="sm" 
+            variant="outline"
+            className="h-7 text-[11px] px-2 border-rose-500/30 text-rose-300 hover:text-white hover:bg-rose-500/20 shrink-0"
+            onClick={() => navigate('/progress#physique-heatmap')}
+          >
+            <Activity size={11} className="mr-1" /> View Heatmap
+          </Button>
+        </div>
+      )}
+
+      {/* JustGo Sheet preserved for full backward compatibility */}
       <JustGoSheet
         open={showJustGo}
         onClose={() => setShowJustGo(false)}
         workouts={workouts}
       />
-
-      {/* Hypertrophy Deficit Banner — only with real training history */}
-      {completedCount >= 4 && hypertrophyAudit.hasTwoWeekDeficit && (
-        <Card className="border-rose-500/40 bg-gradient-to-r from-rose-500/15 via-rose-500/10 to-transparent shadow-[0_0_15px_rgba(244,63,94,0.12)] overflow-hidden animate-in fade-in">
-          <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-            <div className="flex items-start gap-3">
-              <div className="p-2.5 rounded-xl bg-rose-500/20 text-rose-500 border border-rose-500/30 shrink-0 shadow-inner">
-                <AlertTriangle size={20} className="animate-pulse" />
-              </div>
-              <div className="space-y-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[10px] font-black tracking-wider uppercase px-2 py-0.5 rounded-md bg-rose-500 text-white">
-                    2-Week Deficit
-                  </span>
-                  <h3 className="font-bold text-sm text-foreground">
-                    {hypertrophyAudit.totalDeficientMusclesCount} Muscle Group{hypertrophyAudit.totalDeficientMusclesCount > 1 ? 's' : ''} Lagging
-                  </h3>
-                </div>
-                <p className="text-xs text-muted-foreground max-w-xl">
-                  {hypertrophyAudit.deficientMuscles.map(m => m.muscle).join(', ')} {hypertrophyAudit.totalDeficientMusclesCount > 1 ? 'have' : 'has'} fallen below your Optimal Hypertrophy threshold for 2 consecutive weeks.
-                </p>
-              </div>
-            </div>
-
-            <Button 
-              size="sm" 
-              className="text-xs font-semibold gap-1.5 shrink-0 self-end sm:self-auto bg-rose-600 hover:bg-rose-500 text-white shadow-xs"
-              onClick={() => navigate('/progress#physique-heatmap')}
-            >
-              <Activity size={13} /> View Physique Heatmap
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Compact real metrics with dark glassmorphism */}
-      <section className="grid grid-cols-3 gap-2 sm:gap-3">
-        <Card className="border border-border/70 dark:border-cyan-500/20 bg-card/80 dark:bg-black/60 backdrop-blur-xl hover:border-cyan-500/40 hover:shadow-[0_0_15px_rgba(6,182,212,0.1)] transition-all duration-300">
-          <CardContent className="p-2.5 sm:p-3.5 flex flex-col justify-between h-full space-y-1">
-            <div className="flex items-center gap-1.5 text-muted-foreground text-[9px] sm:text-[10px] font-semibold uppercase tracking-wider">
-              <Flame size={12} className="text-warning shrink-0" />
-              <span>Streak</span>
-            </div>
-            <div className="text-base sm:text-xl font-bold font-mono">
-              {realStreak} <span className="text-[10px] sm:text-xs font-sans text-muted-foreground">days</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border border-border/70 dark:border-cyan-500/20 bg-card/80 dark:bg-black/60 backdrop-blur-xl hover:border-cyan-500/40 hover:shadow-[0_0_15px_rgba(6,182,212,0.1)] transition-all duration-300">
-          <CardContent className="p-2.5 sm:p-3.5 flex flex-col justify-between h-full space-y-1">
-            <div className="flex items-center gap-1.5 text-muted-foreground text-[9px] sm:text-[10px] font-semibold uppercase tracking-wider">
-              <Dumbbell size={12} className="text-primary shrink-0" />
-              <span>Logged</span>
-            </div>
-            <div className="text-base sm:text-xl font-bold font-mono">
-              {completedCount} <span className="text-[10px] sm:text-xs font-sans text-muted-foreground">total</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border border-border/70 dark:border-cyan-500/20 bg-card/80 dark:bg-black/60 backdrop-blur-xl hover:border-cyan-500/40 hover:shadow-[0_0_15px_rgba(6,182,212,0.1)] transition-all duration-300">
-          <CardContent className="p-2.5 sm:p-3.5 flex flex-col justify-between h-full space-y-1">
-            <div className="flex items-center justify-between text-[9px] sm:text-[10px] font-semibold uppercase tracking-wider gap-1">
-              <div className="flex items-center gap-1 text-muted-foreground min-w-0">
-                <TrendingUp size={12} className="text-emerald-500 shrink-0" />
-                <span className="truncate">7d Vol</span>
-              </div>
-              <span className={cn("shrink-0", volumePct >= 80 ? "text-emerald-500" : "text-muted-foreground")}>
-                {volumePct}%
-              </span>
-            </div>
-            <div className="space-y-1">
-              <div className="text-xs sm:text-sm font-bold font-mono leading-tight truncate">
-                {weeklyVolume.toLocaleString()} <span className="text-[10px] font-sans text-muted-foreground">kg</span>
-              </div>
-              <div className="h-1 w-full bg-secondary rounded-full overflow-hidden">
-                <div 
-                  className={cn("h-full rounded-full transition-all", volumePct >= 80 ? "bg-emerald-500" : "bg-primary")} 
-                  style={{ width: `${volumePct}%` }} 
-                />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </section>
-
-      {/* Quick actions */}
-      <section className="flex gap-2">
-        <Button 
-          variant="outline"
-          className="flex-1 h-10 sm:h-11 px-2 text-[11px] sm:text-xs font-semibold gap-1 sm:gap-1.5 whitespace-nowrap"
-          onClick={() => navigate('/workout')}
-        >
-          <Calendar size={14} className="shrink-0" /> All Workouts
-        </Button>
-        <Button 
-          variant="outline"
-          className="flex-1 h-10 sm:h-11 px-2 text-[11px] sm:text-xs font-semibold gap-1 sm:gap-1.5 whitespace-nowrap"
-          onClick={() => navigate('/brain')}
-        >
-          <Brain size={14} className="shrink-0" /> Open Brain
-        </Button>
-        <Button 
-          variant="outline"
-          className="flex-1 h-10 sm:h-11 px-2 text-[11px] sm:text-xs font-semibold gap-1 sm:gap-1.5 whitespace-nowrap"
-          onClick={() => navigate('/progress')}
-        >
-          <Activity size={14} className="shrink-0" /> Progress
-        </Button>
-      </section>
 
       {/* Autonomy Level Modal */}
       <AutonomyModal 

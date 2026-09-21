@@ -48,7 +48,7 @@ export function AmbientBackground() {
     };
 
     const drawGrid = () => {
-      ctx.strokeStyle = 'rgba(6, 182, 212, 0.03)'; // Faint cyan grid
+      ctx.strokeStyle = 'rgba(255, 122, 50, 0.025)'; // Subtle Forge ember grid
       ctx.lineWidth = 1;
       const gridSize = 50;
       
@@ -80,7 +80,7 @@ export function AmbientBackground() {
         canvas.width / 2, canvas.height / 2, 0,
         canvas.width / 2, canvas.height / 2, Math.max(canvas.width, canvas.height) / 1.5
       );
-      gradient.addColorStop(0, 'rgba(6, 182, 212, 0.04)'); // Cyan glow
+      gradient.addColorStop(0, 'rgba(255, 122, 50, 0.04)'); // Warm Forge ember glow
       gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
       
       ctx.fillStyle = gradient;
@@ -100,7 +100,7 @@ export function AmbientBackground() {
         // Draw particle
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(6, 182, 212, ${p.alpha})`; // Cyan neon dots
+        ctx.fillStyle = `rgba(255, 122, 50, ${p.alpha * 0.6})`; // Warm Forge ember particles
         ctx.fill();
       });
 
@@ -122,7 +122,7 @@ export function AmbientBackground() {
   return (
     <canvas
       ref={canvasRef}
-      className="fixed inset-0 pointer-events-none z-[-1] bg-[#030712]" // Ultra dark gray/blue base
+      className="fixed inset-0 pointer-events-none z-[-1] bg-[#050505]" // Forge true obsidian black base
     />
   );
 }

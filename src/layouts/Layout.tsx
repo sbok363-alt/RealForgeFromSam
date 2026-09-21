@@ -11,12 +11,13 @@ import {
   Sparkles,
   History,
   Shield,
-  Lock
+  Lock,
+  Home,
+  BarChart2
 } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
 import { getProposals, getUserPermissions, getWorkouts } from '../lib/api';
 import { calculatePhysiqueHypertrophyVolume } from '../lib/hypertrophy';
-import { AutonomyBadge } from '../components/AutonomyBadge';
 import { AutonomyModal } from '../components/AutonomyModal';
 import { UserPermissions, AutonomyLevel, Workout } from '../types';
 import { updateUserPermissions } from '../lib/api';
@@ -31,6 +32,8 @@ import { MutationAuditModal } from '../components/MutationAuditModal';
 import { useNavigate } from 'react-router-dom';
 
 import { AmbientBackground } from '../components/ui/AmbientBackground';
+import { LiquidNav, LiquidNavItem } from '../components/ui/LiquidNav';
+import { ForgeLogo } from '../components/ui/ForgeLogo';
 import { soundFx } from '../lib/soundFx';
 
 export function Layout() {
@@ -98,14 +101,14 @@ export function Layout() {
     { name: 'Profile', path: '/profile', icon: User },
   ];
 
-  const mobileNavItems = [
-    { name: 'Dashboard', path: '/', icon: Activity },
+  const mobileNavItems: LiquidNavItem[] = [
+    { name: 'Home', path: '/', icon: Home },
     { name: 'Workouts', path: '/workout', icon: Dumbbell },
     { name: 'Brain', path: '/brain', icon: Brain, highlight: true, badge: pendingProposalsCount > 0 ? pendingProposalsCount : undefined },
     { 
       name: 'Stats', 
       path: '/progress', 
-      icon: LineChart,
+      icon: BarChart2,
       badge: hypertrophyDeficitCount > 0 ? `${hypertrophyDeficitCount}!` : undefined,
       badgeColor: 'bg-rose-500 text-white animate-pulse'
     },
@@ -131,34 +134,49 @@ export function Layout() {
   }
 
   return (
-    <div className="flex h-[100dvh] max-h-[100dvh] bg-background/50 text-foreground flex-col md:flex-row pb-16 md:pb-0 overflow-hidden relative">
+    <div className="flex h-[100dvh] max-h-[100dvh] bg-background/50 text-foreground flex-col md:flex-row pb-[74px] md:pb-0 overflow-hidden relative">
       <AmbientBackground />
       {/* Mobile Top Bar */}
-      <header className="md:hidden flex items-center justify-between px-3 py-2 border-b border-border bg-background/95 backdrop-blur-md z-10 shrink-0">
+      <header className="md:hidden flex items-center justify-between px-4 py-2.5 border-b border-white/[0.08] bg-[#09090b]/95 backdrop-blur-md z-10 shrink-0">
         <div className="flex items-center gap-2">
-          <span className="font-display font-black tracking-tight text-lg text-primary">FORGE</span>
+          <ForgeLogo className="h-3.5 w-auto" />
+        </div>
+        
+        <div className="flex items-center gap-2">
+          {/* Subtle BYOK indicator button */}
           <button 
             onClick={openBYOKModal}
             className={cn(
-              "flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded border transition-colors",
+              "flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full border transition-colors",
               geminiStatus === 'CONNECTED' 
                 ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20 hover:bg-emerald-500/20" 
-                : "bg-destructive/10 text-destructive border-destructive/20 hover:bg-destructive/20"
+                : "bg-neutral-800 text-neutral-400 border-white/10 hover:text-white"
             )}
+            title={geminiStatus === 'CONNECTED' ? "Brain Copilot Active" : "BYOK Gemini Setup"}
           >
             {geminiStatus === 'CONNECTED' ? (
-              <><span className="relative flex h-1.5 w-1.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span></span> <span className="hidden sm:inline">Brain OCC</span> Active</>
+              <span className="relative flex h-1.5 w-1.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span></span>
             ) : (
-              <><Lock size={10} className="shrink-0" /> BYOK</>
+              <Lock size={10} className="shrink-0 text-amber-500" />
+            )}
+            <span className="text-[9px] font-mono">{geminiStatus === 'CONNECTED' ? 'OCC' : 'BYOK'}</span>
+          </button>
+
+          {/* User Profile Avatar Thumbnail */}
+          <button
+            onClick={() => navigate('/profile')}
+            aria-label="Profile"
+            className="w-7 h-7 rounded-full border border-white/15 overflow-hidden bg-neutral-800 flex items-center justify-center text-xs font-bold text-white hover:border-[#FF7A32]/60 transition-all focus:outline-none"
+          >
+            {user?.photoURL ? (
+              <img src={user.photoURL} alt={user.displayName || "User"} className="w-full h-full object-cover" />
+            ) : (
+              <span className="text-[10px] font-mono font-bold text-neutral-300">
+                {(user?.displayName || 'Samuel').slice(0, 1).toUpperCase()}
+              </span>
             )}
           </button>
         </div>
-        {!isBrainPage && (
-          <AutonomyBadge 
-            level={permissions.autonomyLevel}
-            onClick={() => setIsAutonomyModalOpen(true)}
-          />
-        )}
       </header>
 
       {/* Desktop Sidebar */}
@@ -166,8 +184,8 @@ export function Layout() {
         <div>
           {/* Logo & System Badge */}
           <div className="mb-6 px-3">
-            <div className="flex items-center gap-2">
-              <span className="text-2xl font-display font-black tracking-tight text-primary">FORGE</span>
+            <div className="flex items-center justify-between">
+              <ForgeLogo className="h-4 w-auto" />
               <button 
                 onClick={openBYOKModal}
                 className={cn(
@@ -232,7 +250,7 @@ export function Layout() {
                       {isActive && (
                         <motion.div
                           layoutId="desktopNavActivePill"
-                          className="absolute inset-0 bg-primary rounded-xl -z-10 shadow-[0_0_15px_rgba(6,182,212,0.25)]"
+                          className="absolute inset-0 bg-primary rounded-xl -z-10 shadow-[0_0_15px_rgba(255,122,50,0.35)]"
                           transition={{ type: "spring", stiffness: 400, damping: 25 }}
                         />
                       )}
@@ -290,58 +308,8 @@ export function Layout() {
         </div>
       </main>
 
-      {/* Mobile Bottom Navigation */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 border-t border-border bg-background/95 backdrop-blur-md pb-safe z-50">
-        <div className="grid grid-cols-5 p-1 h-16 items-center">
-          {mobileNavItems.map((item) => {
-            const Icon = item.icon;
-            const isBrain = item.highlight;
-            return (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                onClick={() => soundFx.playClick(1200)}
-                className={({ isActive }) =>
-                  cn(
-                    "flex flex-col items-center justify-center py-1 px-1 text-[11px] font-medium transition-all relative h-full",
-                    isActive && !isBrain ? "text-primary font-bold" : "text-muted-foreground",
-                    isBrain && isActive ? "text-accent font-bold" : "",
-                    isBrain && !isActive ? "text-accent/80" : ""
-                  )
-                }
-              >
-                {isBrain ? (
-                  <div className="relative flex flex-col items-center justify-center -mt-4">
-                    <div className="absolute inset-0 bg-accent/20 blur-xl rounded-full scale-150" />
-                    <div className="relative bg-card border border-border/50 rounded-2xl p-3 shadow-[0_0_15px_rgba(6,182,212,0.3)] flex items-center justify-center overflow-hidden">
-                       <div className="absolute inset-0 bg-gradient-to-tr from-accent/10 to-transparent pointer-events-none" />
-                       <Icon className="h-6 w-6 text-accent" />
-                    </div>
-                    {item.badge !== undefined && (
-                      <span className="absolute -top-1 -right-2 w-4 h-4 rounded-full bg-accent text-accent-foreground text-[9px] font-bold flex items-center justify-center z-10 border border-background">
-                        {item.badge}
-                      </span>
-                    )}
-                  </div>
-                ) : (
-                  <div className="relative flex flex-col items-center">
-                    <Icon className={cn("h-5 w-5 mb-1 transition-transform", isBrain ? "h-6 w-6" : "")} />
-                    <span className="truncate max-w-[55px] text-[10px]">{item.name}</span>
-                    {item.badge !== undefined && (
-                      <span className={cn(
-                        "absolute -top-1 -right-2 min-w-4 h-4 px-1 rounded-full text-[9px] font-bold flex items-center justify-center shadow-xs",
-                        item.badgeColor ? item.badgeColor : "bg-primary text-primary-foreground"
-                      )}>
-                        {item.badge}
-                      </span>
-                    )}
-                  </div>
-                )}
-              </NavLink>
-            );
-          })}
-        </div>
-      </nav>
+      {/* Liquid Navigation in Action (Mobile) */}
+      <LiquidNav items={mobileNavItems} />
 
       {/* Global Workout Detail & Set Editor Modal for Active Session */}
       {activeWorkout && isModalOpen && (

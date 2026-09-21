@@ -1,0 +1,27 @@
+# Netlify configuration for FORGE Free-Tier Runtime Proof (Phase 1)
+# Non-secret configuration only. Secrets must be configured in Netlify environment settings.
+
+[build]
+  command = "vite build"
+  publish = "dist"
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+
+# Isolate redirects specifically to the proof endpoints
+[[redirects]]
+  from = "/api/proof/runtime"
+  to = "/.netlify/functions/runtime-proof"
+  status = 200
+
+[[redirects]]
+  from = "/api/proof/gemini"
+  to = "/.netlify/functions/gemini-proof"
+  status = 200
+
+# Client-side SPA fallback
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

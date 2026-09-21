@@ -1132,6 +1132,7 @@ CRITICAL SECURITY & EXECUTION RULES:
             scheduledDate: data?.scheduledDate,
             status: data?.status,
             sets: data?.sets || [],
+            exercises: data?.exercises || [],
             version: data?.version
           },
           createdAt: new Date().toISOString()
@@ -1245,6 +1246,7 @@ CRITICAL SECURITY & EXECUTION RULES:
             scheduledDate: data?.scheduledDate,
             status: data?.status,
             sets: data?.sets || [],
+            exercises: data?.exercises || [],
             version: data?.version
           },
           createdAt: new Date().toISOString()
@@ -1373,6 +1375,7 @@ CRITICAL SECURITY & EXECUTION RULES:
             scheduledDate: workoutData.scheduledDate,
             status: workoutData.status,
             sets: workoutData.sets || [],
+            exercises: workoutData.exercises || [],
             version: workoutData.version
           },
           createdAt: new Date().toISOString()

@@ -4,6 +4,7 @@ import { Button } from './ui/Button';
 import { Input } from './ui/Input';
 import { Eye, EyeOff, Key, X, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { auth } from '../lib/firebase';
 
 export function BYOKModal() {
   const { isModalOpen, closeModal, apiKey, setApiKey, status, setStatus } = useGeminiStore();
@@ -25,46 +26,25 @@ export function BYOKModal() {
     try {
       const userApiKey = inputValue.trim();
 
-      // First try our server test endpoint (bypasses browser CORS & header restrictions)
-      let testSuccess = false;
-      let serverErrorMessage = '';
-
-      try {
-        const proxyRes = await fetch('/api/test-gemini-key', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ apiKey: userApiKey })
-        });
-        const proxyData = await proxyRes.json();
-        if (proxyRes.ok && proxyData.success) {
-          testSuccess = true;
-        } else {
-          serverErrorMessage = proxyData.error || 'Server validation failed';
-        }
-      } catch (proxyErr) {
-        console.warn('Proxy test unreachable, trying direct client fetch fallback...', proxyErr);
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (auth.currentUser) {
+        try {
+          const idToken = await auth.currentUser.getIdToken();
+          headers['Authorization'] = `Bearer ${idToken}`;
+        } catch (_) {}
       }
 
-      // If proxy didn't succeed, try direct REST call as fallback
-      if (!testSuccess) {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${userApiKey}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: "ping" }] }]
-          })
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-          console.error('Gemini API Error Payload:', data);
-          throw new Error(data.error?.message || serverErrorMessage || 'Invalid API Key or rate limit exceeded');
-        }
+      const proxyRes = await fetch('/api/test-gemini-key', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ apiKey: userApiKey })
+      });
+      const proxyData = await proxyRes.json();
+      if (!proxyRes.ok || !proxyData.success) {
+        throw new Error(proxyData.error || 'Server validation failed');
       }
-      
+
+      setStatus('CONNECTED');
       setApiKey(userApiKey);
       
       setTimeout(() => {
@@ -89,15 +69,15 @@ export function BYOKModal() {
       <div className="relative w-full max-w-md bg-zinc-950/80 backdrop-blur-xl border border-zinc-800 rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
         
         {/* Decorative Top Glow */}
-        <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent" />
-        <div className="absolute top-0 inset-x-0 h-[200px] bg-cyan-500/10 blur-[100px] pointer-events-none" />
+        <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-[#FF7A32]/50 to-transparent" />
+        <div className="absolute top-0 inset-x-0 h-[200px] bg-[#FF7A32]/10 blur-[100px] pointer-events-none" />
 
         <div className="p-6 relative z-10">
           {/* Header */}
           <div className="flex items-start justify-between mb-6">
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center shadow-inner">
-                <Key className="w-5 h-5 text-cyan-400" />
+                <Key className="w-5 h-5 text-[#FF7A32]" />
               </div>
               <div>
                 <h2 className="text-lg font-bold text-foreground font-display">Activate FORGE Brain Copilot</h2>
@@ -119,7 +99,7 @@ export function BYOKModal() {
             <ol className="space-y-3 text-zinc-300">
               <li className="flex gap-2">
                 <span className="flex items-center justify-center h-5 w-5 rounded-full bg-zinc-800 text-[10px] font-bold text-zinc-400 shrink-0 border border-zinc-700">1</span>
-                <span>Visit <a href="https://aistudio.google.com" target="_blank" rel="noreferrer" className="text-cyan-400 hover:underline">Google AI Studio</a></span>
+                <span>Visit <a href="https://aistudio.google.com" target="_blank" rel="noreferrer" className="text-[#FF7A32] hover:underline">Google AI Studio</a></span>
               </li>
               <li className="flex gap-2">
                 <span className="flex items-center justify-center h-5 w-5 rounded-full bg-zinc-800 text-[10px] font-bold text-zinc-400 shrink-0 border border-zinc-700">2</span>
@@ -144,7 +124,7 @@ export function BYOKModal() {
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
                   placeholder="AIzaSy..."
-                  className="bg-zinc-900 border-zinc-700 h-12 pr-12 font-mono text-sm focus-visible:ring-cyan-500/50"
+                  className="bg-zinc-900 border-zinc-700 h-12 pr-12 font-mono text-sm focus-visible:ring-[#FF7A32]/50"
                   disabled={status === 'TESTING'}
                 />
                 <button
@@ -185,7 +165,7 @@ export function BYOKModal() {
                   "flex-[2] h-11 font-bold shadow-lg transition-all",
                   status === 'CONNECTED' 
                     ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20" 
-                    : "bg-cyan-600 text-white hover:bg-cyan-500"
+                    : "bg-[#FF7A32] text-black hover:bg-[#FF8847] shadow-[#FF7A32]/30"
                 )}
                 onClick={handleTestAndSave}
                 disabled={status === 'TESTING'}

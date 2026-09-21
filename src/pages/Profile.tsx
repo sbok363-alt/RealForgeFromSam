@@ -60,7 +60,7 @@ export default function Profile() {
         <CardContent className="p-6">
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div className="flex items-center space-x-4">
-              <div className="h-16 w-16 rounded-full bg-secondary flex items-center justify-center overflow-hidden border border-border">
+              <div className="h-16 w-16 rounded-full bg-secondary flex items-center justify-center overflow-hidden border border-border ring-2 ring-primary/80 shadow-[0_0_16px_rgba(255,107,0,0.35)]">
                 {user?.photoURL ? (
                   <img src={user.photoURL} alt="Profile" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
                 ) : (
@@ -148,13 +148,13 @@ export default function Profile() {
           
           <div className="flex items-center justify-between">
             <div className="flex flex-col">
-              <span className="font-semibold text-cyan-500">Cyber-Forge Haptics</span>
+              <span className="font-semibold text-[#FF7A32]">Cyber-Forge Haptics</span>
               <span className="text-sm text-muted-foreground">Synthesized cybernetic feedback & metallic lock sounds</span>
             </div>
             <Button 
               variant="outline" 
               size="icon" 
-              className={soundEnabled ? 'text-cyan-500 border-cyan-500/50 hover:bg-cyan-500/10' : ''}
+              className={soundEnabled ? 'text-[#FF7A32] border-[#FF7A32]/50 hover:bg-[#FF7A32]/10' : ''}
               onClick={() => {
                 const newState = soundFx.toggle();
                 setSoundEnabled(newState);

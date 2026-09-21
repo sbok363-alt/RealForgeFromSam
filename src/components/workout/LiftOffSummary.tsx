@@ -121,9 +121,9 @@ export function LiftOffSummary({ workout, allWorkouts = [], onClose }: LiftOffSu
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.9 }}
         transition={{ type: 'spring', damping: 25, stiffness: 400 }}
-        className="relative z-10 bg-card w-full max-w-md p-6 sm:p-8 rounded-3xl border border-border shadow-[0_0_50px_-12px_rgba(6,182,212,0.15)] flex flex-col overflow-hidden max-h-[90vh] overflow-y-auto"
+        className="relative z-10 bg-card w-full max-w-md p-6 sm:p-8 rounded-3xl border border-border shadow-[0_0_50px_-12px_rgba(255,122,50,0.2)] flex flex-col overflow-hidden max-h-[90vh] overflow-y-auto"
       >
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-cyan-500/10 blur-3xl rounded-full pointer-events-none" />
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-[#FF7A32]/10 blur-3xl rounded-full pointer-events-none" />
 
         <div className="flex flex-col items-center text-center relative">
           <motion.div

@@ -21,7 +21,7 @@ export function ForgeSparkBurst({ active, onComplete }: ForgeSparkBurstProps) {
   useEffect(() => {
     if (!active) return;
 
-    const colors = ['#f59e0b', '#f97316', '#06b6d4', '#10b981', '#fbbf24'];
+    const colors = ['#FF7A32', '#FF9457', '#FF5A12', '#F59E0B', '#FFA066'];
     const newSparks: Spark[] = Array.from({ length: 14 }).map((_, i) => {
       const angle = (i / 14) * 2 * Math.PI + (Math.random() - 0.5) * 0.4;
       const distance = Math.random() * 45 + 25;
@@ -53,7 +53,7 @@ export function ForgeSparkBurst({ active, onComplete }: ForgeSparkBurstProps) {
             initial={{ scale: 0.2, opacity: 0.9 }}
             animate={{ scale: 2.2, opacity: 0 }}
             transition={{ duration: 0.5, ease: 'easeOut' }}
-            className="absolute w-12 h-12 rounded-full border-2 border-cyan-400 bg-cyan-400/20 shadow-[0_0_15px_rgba(6,182,212,0.8)]"
+            className="absolute w-12 h-12 rounded-full border-2 border-[#FF7A32] bg-[#FF7A32]/20 shadow-[0_0_15px_rgba(255,122,50,0.8)]"
           />
 
           {/* Flying embers */}

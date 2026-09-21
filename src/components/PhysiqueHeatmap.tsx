@@ -644,8 +644,8 @@ export const PhysiqueHeatmap: React.FC<PhysiqueHeatmapProps> = ({
                 className={cn(
                   "h-7 px-2 text-xs gap-1 font-medium transition-all",
                   showScannerFx 
-                    ? "bg-cyan-500 hover:bg-cyan-400 text-black font-bold shadow-[0_0_12px_rgba(6,182,212,0.4)] border-cyan-400" 
-                    : "border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10"
+                    ? "bg-[#FF7A32] hover:bg-[#FF8847] text-black font-bold shadow-[0_0_12px_rgba(255,122,50,0.5)] border-[#FF7A32]" 
+                    : "border-[#FF7A32]/40 text-[#FF7A32] hover:bg-[#FF7A32]/10"
                 )}
                 title="Toggle Holographic Scanner FX & Biometric HUD"
               >
@@ -908,7 +908,7 @@ export const PhysiqueHeatmap: React.FC<PhysiqueHeatmapProps> = ({
                       className="px-2 py-0.5 rounded-lg bg-background/80 hover:bg-secondary text-[11px] font-mono flex items-center gap-1 text-muted-foreground hover:text-foreground border border-border/60 shadow-xs transition-colors backdrop-blur-xs"
                       title="180° Turntable Flip"
                     >
-                      <RotateCcw size={11} className="text-cyan-400" />
+                      <RotateCcw size={11} className="text-[#FF7A32]" />
                       <span>180°</span>
                     </button>
                   )}

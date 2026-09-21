@@ -133,6 +133,17 @@ function runHardeningSuite() {
   console.log('✔ Regression and fatigue identified: Suggested intelligent deload / volume reset.\n');
 
   // -------------------------------------------------------------
+  // Scenario F: Insufficient Data Boundary (0 or 1 Session)
+  // -------------------------------------------------------------
+  console.log('--- SCENARIO F: Insufficient Data Boundary Check ---');
+  const userFWorkouts: Workout[] = [];
+  const repF = analyzeExerciseProgression(userFWorkouts, 'bench_press', 'Barbell Bench Press');
+  console.assert(repF.state === 'INSUFFICIENT_DATA', `Expected INSUFFICIENT_DATA, got ${repF.state}`);
+  console.assert(repF.recentSessionsCount === 0, `Expected 0 sessions, got ${repF.recentSessionsCount}`);
+  console.assert(repF.nextTarget.action === 'BASELINE', `Expected BASELINE action, got ${repF.nextTarget.action}`);
+  console.log('✔ Insufficient data boundary check validated.\n');
+
+  // -------------------------------------------------------------
   // Scenario G: Security Gate & OCC Concurrency Lock Validation
   // -------------------------------------------------------------
   console.log('--- SCENARIO G: Security & OCC Concurrency Lock ---');

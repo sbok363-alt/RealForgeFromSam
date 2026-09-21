@@ -28,7 +28,7 @@ export function WeeklyRecapCard({ recap, onDismiss, compact = false }: WeeklyRec
   const weekLabel = `${recap.weekStart.slice(5)} → ${recap.weekEnd.slice(5)}`;
 
   return (
-    <Card className="border-primary/30 bg-gradient-to-br from-primary/10 via-card to-card overflow-hidden shadow-[0_0_28px_rgba(6,182,212,0.08)]">
+    <Card className="border-primary/30 bg-gradient-to-br from-primary/10 via-card to-card overflow-hidden shadow-[0_0_28px_rgba(255,122,50,0.1)]">
       <CardContent className={cn('p-4 sm:p-5 space-y-4', compact && 'p-4 space-y-3')}>
         {/* Header */}
         <div className="flex items-start justify-between gap-3">
