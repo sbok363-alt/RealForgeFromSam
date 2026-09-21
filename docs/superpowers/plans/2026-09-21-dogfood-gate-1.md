@@ -319,7 +319,7 @@ npx tsx tests/mutations.test.ts
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 
 ~~~bash
 git add src/lib/api.ts src/lib/idempotency-guard.ts server.ts src tests
@@ -391,6 +391,18 @@ if ((persisted as any).isModalOpen !== undefined)
   throw new Error('modal UI state must not persist');
 if (!persisted.pendingMutation)
   throw new Error('pending logical operation must persist across reload');
+
+let persistenceError = '';
+const throwingStorage = {
+  getItem: () => null,
+  setItem: () => { throw new Error('quota'); },
+  removeItem: () => undefined,
+};
+const safeStorage = createSafeStateStorage(throwingStorage as any, message => {
+  persistenceError = message;
+});
+safeStorage.setItem('forge-active-workout-v2', '{}');
+if (!persistenceError) throw new Error('persistence failure must surface through the error callback');
 ~~~
 
 - [ ] **Step 2: Verify failure**
@@ -442,24 +454,32 @@ Persist:
 
 Do not persist modal-open state.
 
-- [ ] **Step 5: Add explicit server reconciliation**
+- [ ] **Step 5: Make persistence failure safe and visible**
+
+Implement `createSafeStateStorage` as a `StateStorage` wrapper that catches read/write/remove exceptions, keeps Zustand in-memory state alive, and invokes an error callback. Configure the workout store with `createJSONStorage(() => safeStorage)`.
+
+Add non-persisted `persistenceWarning: string | null` to the workout store. After store construction, wire the safe-storage error callback to `useWorkoutStore.setState({ persistenceWarning: message })`.
+
+Render a compact warning in `ActiveWorkout` when present: `Local recovery is unavailable on this device right now. Keep this session open until storage works again.` Do not clear the active in-memory workout.
+
+- [ ] **Step 6: Add explicit server reconciliation**
 
 \`reconcileAuthoritativeWorkout(local, authoritative, capturedRevision, currentRevision)\` returns the authoritative object when no newer local edits exist. If the current local revision is newer than the captured revision, preserve local mutable session fields and merge only authoritative server identity/version/timestamps needed for the next OCC write.
 
-- [ ] **Step 6: Add safe conflict resolution**
+- [ ] **Step 7: Add safe conflict resolution**
 
 Store action:
 - \`resolveConflictWithServer()\` replaces the local active workout with the stored server snapshot, clears pending/conflict/error state, and resets the session revision baseline.
 - No “force local overwrite” action in Gate 1.
 
-- [ ] **Step 7: Re-run the state regression test**
+- [ ] **Step 8: Re-run the state regression test**
 
 Expected: PASS.
 
 - [ ] **Step 8: Commit**
 
 ~~~bash
-git add src/types.ts src/store/useWorkoutStore.ts src/lib/workout-reconcile.ts tests/dogfood_active_state_regression.test.ts
+git add src/types.ts src/store/useWorkoutStore.ts src/lib/workout-reconcile.ts src/lib/safe-storage.ts src/components/workout/ActiveWorkout.tsx tests/dogfood_active_state_regression.test.ts
 git commit -m "feat: persist workout sync operation state"
 ~~~
 
@@ -629,13 +649,13 @@ async function finishActiveWorkout(): Promise<Workout> {
 
   try {
     const authoritative = await deps.mutate(operation);
-    deps.cacheAuthoritativeWorkout(authoritative);
+    await deps.upsertAuthoritativeWorkoutCache(authoritative);
     deps.completeWorkout(authoritative);
     return authoritative;
   } catch (err: any) {
     if (err.status === 404) {
       const created = await deps.createCompletedWorkout(operation);
-      deps.cacheAuthoritativeWorkout(created);
+      await deps.upsertAuthoritativeWorkoutCache(created);
       deps.completeWorkout(created);
       return created;
     }
@@ -866,15 +886,21 @@ Core final assertions:
 
 ~~~ts
 assert(history.status === 'COMPLETED', 'history must contain completed authoritative workout');
-assert(history.version === expectedServerVersion, 'history version must be server authoritative');
+assert(history.version === 4, 'history version must be the server-returned v4');
 
-const ids = projectCompletedWorkingSets(history).map(s => s.id);
+const canonical = projectCompletedWorkingSets(history);
+const ids = canonical.map(s => s.id);
 assert(ids.includes('completed_a'), 'explicit completed set must survive');
 assert(!ids.includes('typed_incomplete_b'), 'typed but incomplete set must not become phantom history');
 
-assert(summarySetCount === ids.length, 'summary and history must use same canonical sets');
-assert(hypertrophyCount === expectedWorkingSets, 'hypertrophy must consume canonical working sets once');
-assert(allLogicalRetriesReusedIds, 'retries must reuse logical mutation IDs');
+const summarySetCount = canonical.length;
+assert(summarySetCount === 2, 'summary/history canonical set count must be exactly two');
+
+const audit = calculatePhysiqueHypertrophyVolume([history], { CHEST: 1 }, false);
+assert(audit.muscles.CHEST.week1Sets === 2, 'hypertrophy must count the two canonical working sets once');
+
+assert(transportCalls[0].mutationId === transportCalls[1].mutationId,
+  'lost-response retry must reuse the first logical mutation ID');
 ~~~
 
 - [ ] **Step 2: Run the integration test**
@@ -956,8 +982,8 @@ Expected: exit 0 and Vite/server bundle produced.
 - [ ] **Step 5: Review the final diff for Gate 1 scope**
 
 ~~~bash
-git diff --stat HEAD~9..HEAD
-git diff HEAD~9..HEAD -- src/lib src/store src/hooks src/components/workout src/layouts server.ts tests package.json README.md
+git diff --stat 825da5ad2dd27c0b7e3021ec59a61dd003ba050d..HEAD
+git diff 825da5ad2dd27c0b7e3021ec59a61dd003ba050d..HEAD -- src/lib src/store src/hooks src/components/workout src/layouts server.ts tests package.json README.md
 ~~~
 
 Reject unrelated Brain, naming, Home redesign, or advanced analytics changes.
