@@ -30,18 +30,19 @@ export function useWorkoutSessionSync() {
         volume: operation.volume,
       }
     ),
-    createCompletedWorkout: async (operation) => {
-      const current = useWorkoutStore.getState().activeWorkout;
-      if (!current) throw new Error('NO_ACTIVE_WORKOUT');
-      const completed = {
-        ...current,
-        ...operation.updates,
-        userId: user?.uid || current.userId,
+    createWorkout: async (operation) => {
+      const snapshot = operation.createSnapshot;
+      if (!snapshot) throw new Error('MISSING_CREATE_SNAPSHOT');
+      const workout = {
+        ...snapshot,
+        userId: user?.uid || snapshot.userId,
       } as Workout;
       return saveWorkout(
-        completed,
+        workout,
         'USER',
-        `Completed active session: ${completed.title}`,
+        operation.kind === 'FINISH'
+          ? `Completed active session: ${workout.title}`
+          : `Created active session during autosync: ${workout.title}`,
         { mutationId: operation.mutationId }
       );
     },
