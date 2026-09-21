@@ -185,10 +185,7 @@ export default function ActiveWorkout({ onWorkoutFinished }: { onWorkoutFinished
             exercises: completedWorkout.exercises,
             completedAt: completedWorkout.completedAt,
             totalVolume
-          },
-          duration,
-          totalVolume
-        );
+          }, { mutationId: crypto.randomUUID(), duration, volume: totalVolume });
       } catch (mutateErr: any) {
         if (mutateErr.message?.includes('not found') || mutateErr.message?.includes('NOT_FOUND') || mutateErr.status === 404) {
           await saveWorkout(completedWorkout, 'USER', `Completed active session: ${completedWorkout.title}`);
