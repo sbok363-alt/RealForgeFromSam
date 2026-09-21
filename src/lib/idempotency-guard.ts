@@ -1,3 +1,5 @@
+import { Workout } from '../types';
+
 export type IdempotencyStatus = 'NEW' | 'REPLAY' | 'CONFLICT';
 
 export interface IdempotencyEvaluation {
@@ -42,6 +44,20 @@ export function hashMutationPayload(targetId: string, payload: any): string {
     h2 = (h2 ^ char) * 16777619;
   }
   return `${(h1 >>> 0).toString(16)}_${(h2 >>> 0).toString(16)}`;
+}
+
+export function hashCreateWorkoutPayload(
+  workoutId: string,
+  workout: Workout,
+  actor?: string,
+  summary?: string
+): string {
+  const { createdAt: _createdAt, updatedAt: _updatedAt, ...stableWorkout } = workout;
+  return hashMutationPayload(workoutId, {
+    workout: stableWorkout,
+    actor: actor || 'USER',
+    summary: summary || 'Created initial workout routine',
+  });
 }
 
 /**
