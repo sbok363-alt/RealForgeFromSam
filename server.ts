@@ -981,7 +981,7 @@ CRITICAL SECURITY & EXECUTION RULES:
         const auditRef = adminDb.collection("mutation_audit_logs").doc();
         transaction.set(auditRef, {
           id: auditRef.id,
-          mutationId: mutationId || crypto.randomUUID(),
+          mutationId,
           userId: uid,
           actor: actor || 'USER',
           action: 'CREATE',
@@ -1075,7 +1075,7 @@ CRITICAL SECURITY & EXECUTION RULES:
       const dbId = firebaseConfig.firestoreDatabaseId || "(default)";
       const adminDb = getFirestore(dbId);
       const workoutRef = adminDb.collection("workouts").doc(id);
-      const idempRef = mutationId ? adminDb.collection("mutation_ids").doc(mutationId) : null;
+      const idempRef = adminDb.collection("mutation_ids").doc(mutationId);
 
       const result = await adminDb.runTransaction(async (transaction) => {
         // 1. Check Idempotency Record
@@ -1125,7 +1125,7 @@ CRITICAL SECURITY & EXECUTION RULES:
         const auditRef = adminDb.collection("mutation_audit_logs").doc();
         transaction.set(auditRef, {
           id: auditRef.id,
-          mutationId: mutationId || crypto.randomUUID(),
+          mutationId,
           userId: uid,
           actor: 'USER',
           targetEntityType: 'WORKOUT',
