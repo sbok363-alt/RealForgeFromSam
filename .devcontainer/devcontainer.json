@@ -1,0 +1,13 @@
+{
+  "name": "FORGE Dogfood",
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:22-bookworm",
+  "forwardPorts": [3000],
+  "portsAttributes": {
+    "3000": {
+      "label": "FORGE",
+      "onAutoForward": "notify"
+    }
+  },
+  "postCreateCommand": "npm ci",
+  "postStartCommand": "nohup npm run dev > /tmp/forge-dev.log 2>&1 &"
+}
