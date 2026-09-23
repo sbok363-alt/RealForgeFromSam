@@ -1,12 +1,12 @@
 {
-  "projectId": "gen-lang-client-0367580829",
-  "appId": "1:710798242935:web:6f8212bcf04ca68c8d4272",
-  "apiKey": "AIzaSyCxVYSR09MJjWX-O6BCBw3ULwqYzEaFA3E",
-  "authDomain": "gen-lang-client-0367580829.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-963399ce-d7ab-4fb4-a7f4-8e3f8337ee67",
-  "storageBucket": "gen-lang-client-0367580829.firebasestorage.app",
-  "messagingSenderId": "710798242935",
+  "projectId": "forge-dogfood-2026-09-23",
+  "appId": "1:88517635017:web:2082fdaf036940745d5618",
+  "apiKey": "AIzaSyA1pjPIZglE1H2iXDyixaW6PuOlnefL9ms",
+  "authDomain": "forge-dogfood-2026-09-23.firebaseapp.com",
+  "firestoreDatabaseId": "(default)",
+  "storageBucket": "forge-dogfood-2026-09-23.firebasestorage.app",
+  "messagingSenderId": "88517635017",
   "measurementId": "",
-  "oAuthClientId": "710798242935-pqct5k0k1n1hiu0jfvtg7ivltp19mg4u.apps.googleusercontent.com",
+  "oAuthClientId": "",
   "recaptchaSiteKey": ""
 }
