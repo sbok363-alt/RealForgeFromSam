@@ -560,18 +560,17 @@ export async function getRecentWorkouts(userId: string, limitCount: number = 10)
 }
 
 export async function getBodyweight(userId: string): Promise<BodyweightEntry[]> {
-  try {
-    const q = query(collection(db, 'bodyweight'), where('userId', '==', userId), orderBy('date', 'desc'));
-    const snap = await getDocs(q);
-    if (!snap.empty) {
-      return snap.docs.map(d => ({ id: d.id, ...d.data() } as BodyweightEntry));
-    }
-  } catch (e) {}
+  if (!isGuestUserId(userId)) {
+    try {
+      const q = query(collection(db, 'bodyweight'), where('userId', '==', userId), orderBy('date', 'desc'));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        return snap.docs.map(d => ({ id: d.id, ...d.data() } as BodyweightEntry));
+      }
+    } catch (e) {}
+  }
   const local = localStorage.getItem(`forge_bw_${userId}`);
-  return local ? JSON.parse(local) : [
-    { id: 'bw1', userId, weight: 78.5, date: Date.now() - 86400000 * 3 },
-    { id: 'bw2', userId, weight: 78.2, date: Date.now() - 86400000 * 7 }
-  ];
+  return local ? JSON.parse(local) : [];
 }
 
 export async function saveBodyweight(entry: BodyweightEntry): Promise<void> {
