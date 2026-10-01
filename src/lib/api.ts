@@ -299,8 +299,27 @@ export async function deleteWorkout(
   }
 
   const all = await getWorkouts(userId);
+  const current = all.find((workout) => workout.id === workoutId);
   const nextList = all.filter(w => w.id !== workoutId);
   localStorage.setItem(`forge_workouts_${userId}`, JSON.stringify(nextList));
+
+  if (isGuestUserId(userId) && current) {
+    await appendLocalAuditLog({
+      id: `audit_${crypto.randomUUID()}`,
+      mutationId: crypto.randomUUID(),
+      userId,
+      actor,
+      action: 'DELETE',
+      mutationType: 'DELETE_WORKOUT',
+      targetEntityType: 'WORKOUT',
+      targetEntityId: workoutId,
+      baseVersion: current.version,
+      resultVersion: current.version + 1,
+      summary: `Deleted workout "${current.title}"`,
+      inverseDelta: workoutInverseDelta(current),
+      createdAt: new Date().toISOString(),
+    });
+  }
 }
 
 // ==========================================
