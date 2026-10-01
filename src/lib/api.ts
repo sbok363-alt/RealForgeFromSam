@@ -1137,6 +1137,68 @@ export async function mutateWorkout(
 }
 
 
+
+function migrationWorkoutShape(workout: Workout) {
+  return {
+    title: workout.title,
+    scheduledDate: workout.scheduledDate,
+    status: workout.status,
+    sets: workout.sets || [],
+    exercises: workout.exercises || [],
+    exerciseNotes: workout.exerciseNotes || {},
+    totalVolume: workout.totalVolume,
+    completedAt: workout.completedAt,
+    startedAt: workout.startedAt,
+    duration: workout.duration,
+    volume: workout.volume,
+  };
+}
+
+export async function upsertWorkoutForCloudMigration(
+  workout: Workout,
+  targetUserId: string,
+  sourceGuestUserId: string
+): Promise<Workout> {
+  const desired = { ...workout, userId: targetUserId };
+  const existing = await getWorkout(workout.id, targetUserId);
+
+  if (!existing) {
+    return saveWorkout(
+      desired,
+      'USER',
+      'Migrated from local guest account',
+      {
+        mutationId: `guest-migration:create:${sourceGuestUserId}:${targetUserId}:${workout.id}:v${workout.version}`,
+      }
+    );
+  }
+
+  if (JSON.stringify(migrationWorkoutShape(existing)) === JSON.stringify(migrationWorkoutShape(desired))) {
+    return existing;
+  }
+
+  return mutateWorkout(
+    existing.id,
+    existing.version,
+    {
+      title: desired.title,
+      scheduledDate: desired.scheduledDate,
+      status: desired.status,
+      sets: desired.sets,
+      exercises: desired.exercises,
+      exerciseNotes: desired.exerciseNotes,
+      totalVolume: desired.totalVolume,
+      completedAt: desired.completedAt,
+      startedAt: desired.startedAt,
+    },
+    {
+      mutationId: `guest-migration:update:${sourceGuestUserId}:${targetUserId}:${workout.id}:cloudv${existing.version}:guestv${workout.version}`,
+      duration: desired.duration,
+      volume: desired.volume ?? desired.totalVolume,
+    }
+  );
+}
+
 export interface CloudMigrationExpectation {
   workoutIds: string[];
   planIds: string[];
