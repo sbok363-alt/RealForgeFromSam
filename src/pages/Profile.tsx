@@ -168,7 +168,7 @@ export default function Profile() {
                 {user?.photoURL ? (
                   <img src={user.photoURL} alt="Profile" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
                 ) : (
-                  <span className="text-2xl font-bold">{user?.email?.charAt(0).toUpperCase() || 'A'}</span>
+                  <span className="text-2xl font-bold">{(user?.displayName || user?.email || 'A').charAt(0).toUpperCase()}</span>
                 )}
               </div>
               <div>
