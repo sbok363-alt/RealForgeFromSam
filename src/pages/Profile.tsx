@@ -74,6 +74,13 @@ export default function Profile() {
         throw new Error('Guest workout migration could not be verified');
       }
 
+      if (guestProfile) {
+        const migratedProfile = await getUserProfile(result.user.uid);
+        if (!migratedProfile?.onboardingCompleted) {
+          throw new Error('Guest profile migration could not be verified');
+        }
+      }
+
       endGuestCloudMigration();
       setGuestSessionActive(false);
       localStorage.removeItem('forge_demo_session');
