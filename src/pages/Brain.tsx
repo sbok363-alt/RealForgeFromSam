@@ -286,6 +286,7 @@ export default function Brain() {
     await saveThread(updatedThread);
 
     try {
+      if (!user.getIdToken) return;
       const idToken = await user.getIdToken();
       
       // Send chat history and current target workout context
