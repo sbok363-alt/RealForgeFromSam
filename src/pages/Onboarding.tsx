@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/useAuthStore';
-import { saveUserProfile, seedForgeData, saveWorkout } from '../lib/api';
+import { saveUserProfile, saveWorkout } from '../lib/api';
 import { UserProfile, ExperienceLevel, PrimaryGoal, EquipmentAccess, Workout } from '../types';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent } from '../components/ui/Card';
@@ -118,6 +118,39 @@ function buildStarterWorkout(
     }
   }
 
+  const groupedExercises = Array.from(
+    sets.reduce((map, set) => {
+      const key = set.exercise;
+      const existing = map.get(key) || [];
+      existing.push({
+        id: set.id,
+        weight: set.weight,
+        reps: set.reps,
+        rir: set.rir,
+        rpe: set.rpe,
+        notes: set.notes,
+        setType: set.setType,
+        completed: false,
+      });
+      map.set(key, existing);
+      return map;
+    }, new Map<string, Array<{
+      id: string;
+      weight: number;
+      reps: number;
+      rir?: number;
+      rpe?: number;
+      notes?: string;
+      setType?: 'N' | 'W' | 'D' | 'F' | 'normal';
+      completed: boolean;
+    }>>())
+  ).map(([exerciseName, exerciseSets]) => ({
+    id: crypto.randomUUID(),
+    exerciseId: exerciseName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+    name: exerciseName,
+    sets: exerciseSets,
+  }));
+
   return {
     id: crypto.randomUUID(),
     userId,
@@ -126,6 +159,7 @@ function buildStarterWorkout(
     status: 'PLANNED',
     version: 1,
     sets,
+    exercises: groupedExercises,
     updatedAt: new Date().toISOString(),
   };
 }
@@ -175,9 +209,6 @@ export default function Onboarding() {
       const firstWorkout = buildStarterWorkout(user.uid, goal, experience, equipment);
       await saveWorkout(firstWorkout, 'SYSTEM_AUTONOMOUS', 'Onboarding starter session');
 
-      // Optional: still seed some history if empty (non-destructive)
-      await seedForgeData(user.uid);
-
       // Land on Home with a strong first Brain prompt ready
       navigate('/', { 
         replace: true,
@@ -222,7 +253,7 @@ export default function Onboarding() {
             {step === 4 && "What equipment do you have?"}
           </h1>
           <p className="text-sm text-muted-foreground">
-            {step === 1 && "This shapes every proposal FORGE makes."}
+            {step === 1 && "This shapes every proposal Hardstate makes."}
             {step === 2 && "We adjust volume, intensity and progression speed."}
             {step === 3 && "We'll build a realistic schedule around your life."}
             {step === 4 && "Exercises will match what you can actually do."}
@@ -376,7 +407,7 @@ export default function Onboarding() {
 
         {/* Tiny trust line */}
         <p className="text-[11px] text-muted-foreground text-center mt-6 max-w-xs">
-          FORGE never changes your program without your approval. Every suggestion is a versioned proposal.
+          Hardstate never changes your program without your approval. Every suggestion is a versioned proposal.
         </p>
       </div>
     </div>
