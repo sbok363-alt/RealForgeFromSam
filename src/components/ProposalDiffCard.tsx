@@ -27,6 +27,7 @@ interface ProposalDiffCardProps {
   onDiscard?: (proposalId: string) => Promise<void>;
   onRebase?: (proposal: Proposal) => void;
   compact?: boolean;
+  approvalDisabledReason?: string;
 }
 
 interface SetChange {
@@ -143,6 +144,7 @@ export function ProposalDiffCard({
   onDiscard,
   onRebase,
   compact = false,
+  approvalDisabledReason,
 }: ProposalDiffCardProps) {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -406,10 +408,11 @@ export function ProposalDiffCard({
                   className="flex-1 font-bold h-11"
                   size="sm"
                   onClick={handleApprove}
-                  disabled={loading}
+                  disabled={loading || Boolean(approvalDisabledReason)}
+                  title={approvalDisabledReason}
                 >
                   <Check size={16} className="mr-1.5" strokeWidth={2.5} />
-                  {loading ? 'Applying…' : 'Accept recommendation'}
+                  {loading ? 'Applying…' : approvalDisabledReason ? 'Google required' : 'Accept recommendation'}
                 </Button>
                 <Button
                   variant="outline"
@@ -451,7 +454,9 @@ export function ProposalDiffCard({
 
         {isPending && !hasVersionConflict && (
           <p className="text-[10px] text-center text-muted-foreground">
-            Nothing is written until you accept. Every change stays reversible in Audit Logs.
+            {approvalDisabledReason
+              ? approvalDisabledReason
+              : 'Nothing is written until you accept. Every change stays reversible in Audit Logs.'}
           </p>
         )}
       </CardContent>
