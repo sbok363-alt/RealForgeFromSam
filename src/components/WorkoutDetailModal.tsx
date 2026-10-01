@@ -122,33 +122,24 @@ export function WorkoutDetailModal({
   const [openNotes, setOpenNotes] = useState<Record<string, boolean>>({});
   const [activeExerciseHistory, setActiveExerciseHistory] = useState<string | null>(null);
 
-  // Sync with active workout if this is the active session
+  // Viewing or editing a workout must never implicitly start a session.
+  // Only mirror live store state when this modal belongs to the already-active workout.
   useEffect(() => {
     if (!isOpen) return;
     if (activeWorkout && activeWorkout.id === workout.id) {
       if (activeWorkout.exercises && activeWorkout.exercises.length > 0) {
-         setSets(activeWorkout.exercises.flatMap(ex => ex.sets.map(s => ({
-           ...s,
-           exercise: ex.name || ex.exerciseId,
-           setType: s.setType === 'normal' ? 'N' : s.setType
-         } as WorkoutSetItem))));
+        setSets(activeWorkout.exercises.flatMap(ex => ex.sets.map(s => ({
+          ...s,
+          exercise: ex.name || ex.exerciseId,
+          setType: s.setType === 'normal' ? 'N' : s.setType
+        } as WorkoutSetItem))));
       } else {
-         setSets(activeWorkout.sets || []);
+        setSets(activeWorkout.sets || []);
       }
       if (activeWorkout.title) setTitle(activeWorkout.title);
       if (activeWorkout.exerciseNotes) setExerciseNotes(activeWorkout.exerciseNotes);
-    } else if (workout.status === 'IN_PROGRESS' || !isEditMode) {
-      startActiveWorkout({
-        ...workout,
-        sets,
-        exercises: workout.exercises || [],
-        exerciseNotes,
-        title,
-        scheduledDate,
-        startedAt: workout.startedAt || Date.now()
-      });
     }
-  }, [isOpen, workout.id]);
+  }, [isOpen, workout.id, activeWorkout?.id]);
 
   // Duration timer
   useEffect(() => {
