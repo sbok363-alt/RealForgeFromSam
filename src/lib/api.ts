@@ -567,6 +567,13 @@ export async function undoMutation(
   const log = logs.find((item) => item.id === auditLogId);
   if (!log) return { success: false, error: 'Audit log entry not found' };
 
+  if (!isGuestUserId(userId) && log.storageScope !== 'SERVER') {
+    return {
+      success: false,
+      error: 'Preserved local Guest history is read-only after cloud sync'
+    };
+  }
+
   if (isGuestUserId(userId)) {
     try {
       const workouts = await getWorkouts(userId);
