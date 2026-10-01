@@ -259,7 +259,8 @@ export async function deleteWorkout(
 // ==========================================
 
 export async function getProposals(userId: string): Promise<Proposal[]> {
-  try {
+  if (!isGuestUserId(userId)) {
+    try {
     const q = query(
       collection(db, 'proposals'),
       where('userId', '==', userId),
@@ -270,7 +271,8 @@ export async function getProposals(userId: string): Promise<Proposal[]> {
       return snap.docs.map(d => ({ id: d.id, ...d.data() } as Proposal));
     }
   } catch (e) {
-    console.warn("Could not fetch proposals from Firestore:", e);
+      console.warn("Could not fetch proposals from Firestore:", e);
+    }
   }
 
   const local = localStorage.getItem(`forge_proposals_${userId}`);
@@ -288,10 +290,12 @@ export async function createProposal(userId: string, proposal: Omit<Proposal, 'c
     createdAt: new Date().toISOString()
   };
 
-  try {
-    await setDoc(doc(db, 'proposals', proposal.id), { ...newProposal, userId });
-  } catch (e) {
-    console.warn("Could not save proposal to Firestore:", e);
+  if (!isGuestUserId(userId)) {
+    try {
+      await setDoc(doc(db, 'proposals', proposal.id), { ...newProposal, userId });
+    } catch (e) {
+      console.warn("Could not save proposal to Firestore:", e);
+    }
   }
 
   const list = await getProposals(userId);
@@ -306,7 +310,11 @@ export async function executeProposal(
   userId: string,
   actor: 'USER' | 'AI_BRAIN' | 'SYSTEM_AUTONOMOUS' = 'USER'
 ): Promise<{ success: boolean; workout?: Workout; proposal?: Proposal; error?: string }> {
-  const token = (await auth.currentUser?.getIdToken()) || 'demo-token';
+  if (isGuestUserId(userId)) {
+    return { success: false, error: 'CLOUD_REQUIRED' };
+  }
+  const token = await auth.currentUser?.getIdToken();
+  if (!token) return { success: false, error: 'Not authenticated' };
   const mutationId = crypto.randomUUID();
 
   try {
@@ -466,7 +474,8 @@ export async function undoMutation(
 // ==========================================
 
 export async function getThreads(userId: string): Promise<Thread[]> {
-  try {
+  if (!isGuestUserId(userId)) {
+    try {
     const q = query(
       collection(db, 'threads'),
       where('userId', '==', userId),
@@ -477,7 +486,8 @@ export async function getThreads(userId: string): Promise<Thread[]> {
       return snap.docs.map(d => ({ id: d.id, ...d.data() } as Thread));
     }
   } catch (e) {
-    console.warn("Could not fetch threads from Firestore:", e);
+      console.warn("Could not fetch threads from Firestore:", e);
+    }
   }
 
   const local = localStorage.getItem(`forge_threads_${userId}`);
@@ -508,9 +518,11 @@ export async function createThread(userId: string, title: string, targetWorkoutI
     ]
   };
 
-  try {
-    await setDoc(doc(db, 'threads', newThread.id), newThread);
-  } catch (e) {}
+  if (!isGuestUserId(userId)) {
+    try {
+      await setDoc(doc(db, 'threads', newThread.id), newThread);
+    } catch (e) {}
+  }
 
   const threads = await getThreads(userId);
   localStorage.setItem(`forge_threads_${userId}`, JSON.stringify([newThread, ...threads]));
@@ -518,9 +530,11 @@ export async function createThread(userId: string, title: string, targetWorkoutI
 }
 
 export async function saveThread(thread: Thread): Promise<void> {
-  try {
-    await setDoc(doc(db, 'threads', thread.id), thread);
-  } catch (e) {}
+  if (!isGuestUserId(thread.userId)) {
+    try {
+      await setDoc(doc(db, 'threads', thread.id), thread);
+    } catch (e) {}
+  }
 
   const threads = await getThreads(thread.userId);
   const updated = threads.some(t => t.id === thread.id)
@@ -530,10 +544,12 @@ export async function saveThread(thread: Thread): Promise<void> {
 }
 
 export async function deleteThread(threadId: string, userId: string): Promise<void> {
-  try {
-    await deleteDoc(doc(db, 'threads', threadId));
-  } catch (e) {
-    console.warn("Firestore deleteThread failed, deleting locally:", e);
+  if (!isGuestUserId(userId)) {
+    try {
+      await deleteDoc(doc(db, 'threads', threadId));
+    } catch (e) {
+      console.warn("Firestore deleteThread failed, deleting locally:", e);
+    }
   }
 
   const threads = await getThreads(userId);
