@@ -13,6 +13,12 @@ import {
   writeBatch 
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
+import {
+  getOrCreateGuestIdentity,
+  guestProfileKey,
+  isGuestSessionActive,
+  isGuestUserId,
+} from './guest-session';
 import { 
   UserPermissions, 
   Proposal, 
@@ -85,18 +91,20 @@ export async function updateUserPermissions(
 // ==========================================
 
 export async function getWorkouts(userId: string): Promise<Workout[]> {
-  try {
-    const q = query(
-      collection(db, 'workouts'),
-      where('userId', '==', userId),
-      orderBy('scheduledDate', 'desc')
-    );
-    const snap = await getDocs(q);
-    if (!snap.empty) {
-      return snap.docs.map(d => ({ id: d.id, ...d.data() } as Workout));
+  if (!isGuestUserId(userId)) {
+    try {
+      const q = query(
+        collection(db, 'workouts'),
+        where('userId', '==', userId),
+        orderBy('scheduledDate', 'desc')
+      );
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        return snap.docs.map(d => ({ id: d.id, ...d.data() } as Workout));
+      }
+    } catch (e) {
+      console.warn("Firestore query failed for workouts, reading localStorage:", e);
     }
-  } catch (e) {
-    console.warn("Firestore query failed for workouts, reading localStorage:", e);
   }
 
   const local = localStorage.getItem(`forge_workouts_${userId}`);
@@ -162,10 +170,22 @@ export async function saveWorkout(
   summary: string = 'Created initial workout routine',
   options: SaveWorkoutOptions = {}
 ): Promise<Workout> {
-  const token = (await auth.currentUser?.getIdToken()) || 'demo-token';
+  if (isGuestUserId(workout.userId) || (isGuestSessionActive() && !auth.currentUser)) {
+    const identity = getOrCreateGuestIdentity();
+    const localWorkout: Workout = {
+      ...workout,
+      userId: workout.userId || identity.uid,
+      version: Math.max(1, workout.version || 1),
+      updatedAt: new Date().toISOString(),
+    };
+    await upsertAuthoritativeWorkoutCache(localWorkout);
+    return localWorkout;
+  }
+
+  const token = await auth.currentUser?.getIdToken();
+  if (!token) throw new Error('Not authenticated');
   const mutationId = options.mutationId || crypto.randomUUID();
 
-  // P0-2: Workouts must be created via the authoritative server API
   const res = await fetch('/api/workouts', {
     method: 'POST',
     headers: {
@@ -186,7 +206,6 @@ export async function saveWorkout(
   }
 
   const created: Workout = data.workout;
-
   await upsertAuthoritativeWorkoutCache(created);
   return created;
 }
@@ -712,16 +731,31 @@ export async function deletePlan(planId: string, userId?: string): Promise<void>
 }
 
 export async function getUserProfile(userId: string): Promise<UserProfile | null> {
+  if (isGuestUserId(userId)) {
+    const local = localStorage.getItem(guestProfileKey(userId));
+    if (!local) return null;
+    try {
+      return JSON.parse(local) as UserProfile;
+    } catch {
+      return null;
+    }
+  }
+
   try {
     const snap = await getDoc(doc(db, 'users', userId));
     if (snap.exists()) return snap.data() as UserProfile;
   } catch (e) {
     console.warn("Could not fetch user profile:", e);
   }
-  return { userId, name: 'Athlete', experience: 'intermediate', createdAt: Date.now() };
+  return null;
 }
 
 export async function saveUserProfile(profile: UserProfile): Promise<void> {
+  if (isGuestUserId(profile.userId)) {
+    localStorage.setItem(guestProfileKey(profile.userId), JSON.stringify(profile));
+    return;
+  }
+
   try {
     await setDoc(doc(db, 'users', profile.userId), profile);
   } catch (e) {
@@ -1026,7 +1060,40 @@ export async function mutateWorkout(
   updates: Partial<Workout>,
   options: WorkoutMutationOptions
 ): Promise<Workout> {
-  const token = (await auth.currentUser?.getIdToken()) || 'demo-token';
+  if (isGuestSessionActive() && !auth.currentUser) {
+    const identity = getOrCreateGuestIdentity();
+    const workouts = await getWorkouts(identity.uid);
+    const current = workouts.find((workout) => workout.id === workoutId);
+    if (!current) {
+      const err: any = new Error('Workout not found');
+      err.status = 404;
+      throw err;
+    }
+    if (current.version !== baseVersion) {
+      throw new WorkoutConflictError(
+        'Stale local version',
+        current.version,
+        current
+      );
+    }
+
+    const authoritative: Workout = {
+      ...current,
+      ...updates,
+      id: current.id,
+      userId: identity.uid,
+      version: current.version + 1,
+      duration: options.duration ?? updates.duration ?? current.duration,
+      volume: options.volume ?? updates.volume ?? current.volume,
+      totalVolume: options.volume ?? updates.totalVolume ?? current.totalVolume,
+      updatedAt: new Date().toISOString(),
+    };
+    await upsertAuthoritativeWorkoutCache(authoritative);
+    return authoritative;
+  }
+
+  const token = await auth.currentUser?.getIdToken();
+  if (!token) throw new Error('Not authenticated');
 
   const res = await fetch(`/api/workouts/${workoutId}/mutate`, {
     method: 'POST',
