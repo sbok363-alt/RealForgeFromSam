@@ -39,7 +39,7 @@ import { cn } from '../lib/utils';
 export default function WorkoutPage() {
   const { user } = useAuthStore();
   const navigate = useNavigate();
-  const { activeWorkout, startWorkout, discardWorkout, openWorkoutModal } = useWorkoutStore();
+  const { activeWorkout, startWorkout, discardWorkout } = useWorkoutStore();
 
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [loading, setLoading] = useState(true);
@@ -49,7 +49,6 @@ export default function WorkoutPage() {
   const [workoutToDelete, setWorkoutToDelete] = useState<Workout | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [filter, setFilter] = useState<'ALL' | 'PLANNED' | 'COMPLETED'>('ALL');
-  const [creating, setCreating] = useState(false);
 
   // Calculate historical PR counts for completed workouts using Epley's formula
   const workoutPRCounts = useMemo(() => {
@@ -429,7 +428,7 @@ export default function WorkoutPage() {
                           setSelectedWorkout(isActiveThis ? activeWorkout || workout : workout);
                         }}
                       >
-                        <Sparkles size={14} /> Optimize
+                        <Layers size={14} /> Details / Edit
                       </Button>
                       <Button 
                         className={cn(
