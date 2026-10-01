@@ -197,8 +197,7 @@ export default function Onboarding() {
         await saveWorkout(
           firstWorkout,
           'SYSTEM_AUTONOMOUS',
-          'Onboarding starter session',
-          { mutationId: `onboarding-starter:${user.uid}` }
+          'Onboarding starter session'
         );
       }
 
