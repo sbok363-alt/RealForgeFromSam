@@ -34,6 +34,7 @@ export function GymSetRow({
   disabled = false,
 }: GymSetRowProps) {
   const done = Boolean(set.completed);
+  const canComplete = done || ((set.weight || 0) >= 0 && (set.reps || 0) > 0);
   const [showBurst, setShowBurst] = useState(false);
 
   const bumpWeight = (dir: 1 | -1) => {
@@ -133,6 +134,7 @@ export function GymSetRow({
               type="number"
               inputMode="decimal"
               step={weightStep}
+              min={0}
               disabled={done || disabled}
               value={set.weight === 0 ? '' : set.weight}
               placeholder="0"
@@ -183,6 +185,8 @@ export function GymSetRow({
             <input
               type="number"
               inputMode="numeric"
+              min={0}
+              step={1}
               disabled={done || disabled}
               value={set.reps === 0 ? '' : set.reps}
               placeholder="0"
@@ -216,18 +220,20 @@ export function GymSetRow({
         <ForgeSparkBurst active={showBurst} onComplete={() => setShowBurst(false)} />
         <button
           type="button"
-          disabled={disabled}
+          disabled={disabled || !canComplete}
           aria-pressed={done}
           onClick={handleCompleteWithBurst}
           className={cn(
             'w-full min-h-12 rounded-xl font-black text-sm flex items-center justify-center gap-2 touch-manipulation active:scale-[0.98] transition-all relative z-10',
             done
               ? 'bg-primary text-black font-black shadow-[0_0_16px_rgba(255,122,50,0.45)]'
-              : 'bg-secondary hover:bg-secondary/80 text-foreground border border-border/80'
+              : canComplete
+                ? 'bg-secondary hover:bg-secondary/80 text-foreground border border-border/80'
+                : 'bg-secondary/40 text-muted-foreground border border-border/50'
           )}
         >
           <Check size={20} strokeWidth={2.5} />
-          {done ? 'Completed — tap to undo' : 'Complete set'}
+          {done ? 'Completed — tap to undo' : canComplete ? 'Complete set' : 'Enter reps to complete'}
         </button>
       </div>
     </div>
