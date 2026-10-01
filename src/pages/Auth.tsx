@@ -9,7 +9,8 @@ import {
   GoogleAuthProvider 
 } from 'firebase/auth';
 import { auth } from '../lib/firebase';
-import { useAuthStore, DEMO_USER } from '../store/useAuthStore';
+import { useAuthStore, createGuestUser } from '../store/useAuthStore';
+import { setGuestSessionActive } from '../lib/guest-session';
 import { 
   Dumbbell, 
   AlertCircle, 
@@ -59,6 +60,7 @@ export default function Auth() {
         if (!isMounted) return;
         if (result?.user) {
           localStorage.removeItem('forge_demo_session');
+          setGuestSessionActive(false);
           setUser(result.user);
           navigate('/', { replace: true });
         }
@@ -82,7 +84,7 @@ export default function Auth() {
       setErrorState({
         type: 'popup_blocked',
         title: 'Sign-In Popup Blocked',
-        message: 'Your browser or the preview frame blocked the Google sign-in popup. You can open FORGE in a new browser tab or use redirect sign-in.',
+        message: 'Your browser or the preview frame blocked the Google sign-in popup. You can open Hardstate in a new browser tab or use redirect sign-in.',
         code,
       });
     } else if (code === 'auth/unauthorized-domain') {
@@ -132,6 +134,7 @@ export default function Auth() {
       const result = await signInWithPopup(auth, provider);
       if (result.user) {
         localStorage.removeItem('forge_demo_session');
+          setGuestSessionActive(false);
         setUser(result.user);
         navigate('/', { replace: true });
       }
@@ -157,9 +160,10 @@ export default function Auth() {
     }
   };
 
-  const handleDemoLogin = () => {
-    localStorage.setItem('forge_demo_session', 'true');
-    setUser(DEMO_USER);
+  const handleGuestLogin = () => {
+    setGuestSessionActive(true);
+    localStorage.removeItem('forge_demo_session');
+    setUser(createGuestUser());
     navigate('/', { replace: true });
   };
 
@@ -194,9 +198,9 @@ export default function Auth() {
           
           {/* Header */}
           <div className="text-center space-y-1.5">
-            <h1 className="text-3xl font-display font-extrabold tracking-tight text-foreground">FORGE</h1>
+            <h1 className="text-3xl font-display font-extrabold tracking-tight text-foreground">Hardstate</h1>
             <p className="text-muted-foreground text-sm max-w-xs">
-              Autonomous Hypertrophy & Strength Intelligence System
+              Plan less. Train more.
             </p>
           </div>
 
@@ -210,7 +214,7 @@ export default function Auth() {
                   onClick={handleOpenInNewTab}
                   className="block mt-1 font-semibold text-primary hover:underline"
                 >
-                  Open FORGE in New Tab &rarr;
+                  Open Hardstate in New Tab &rarr;
                 </button>
               </div>
             </div>
@@ -323,7 +327,7 @@ export default function Auth() {
                 <div className="w-full border-t border-border/60" />
               </div>
               <span className="relative px-3 bg-card text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                or preview mode
+                or
               </span>
             </div>
 
@@ -332,14 +336,14 @@ export default function Auth() {
               variant="outline"
               size="lg"
               className="w-full flex items-center justify-center gap-2 border-border/80 hover:bg-secondary/60 hover:text-foreground group"
-              onClick={handleDemoLogin}
+              onClick={handleGuestLogin}
             >
               <Sparkles size={16} className="text-amber-500 group-hover:scale-110 transition-transform" />
-              <span className="font-semibold">Explore as Demo Athlete</span>
+              <span className="font-semibold">Continue as Guest</span>
               <ArrowRight size={14} className="text-muted-foreground group-hover:translate-x-0.5 transition-transform" />
             </Button>
             <p className="text-[11px] text-center text-muted-foreground">
-              Instant access with pre-configured workout logs, muscle heatmaps, and AI copilot.
+              No account needed. Your training stays on this device until you connect Google.
             </p>
           </div>
 
