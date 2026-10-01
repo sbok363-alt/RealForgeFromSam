@@ -5,7 +5,6 @@ on:
     branches:
       - dogfood-gate-1
       - dogfood-gate-1-android-apk
-      - "opencode/**"
   pull_request:
     branches:
       - dogfood-gate-1
