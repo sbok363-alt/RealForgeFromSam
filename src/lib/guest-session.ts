@@ -67,6 +67,50 @@ export function guestProfileKey(userId: string): string {
   return `${GUEST_PROFILE_PREFIX}${userId}`;
 }
 
+export function getStoredGuestIdentity(): GuestIdentity | null {
+  if (!canUseStorage()) return null;
+  const raw = window.localStorage.getItem(GUEST_IDENTITY_KEY);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as GuestIdentity;
+    if (!isGuestUserId(parsed.uid)) return null;
+    return {
+      uid: parsed.uid,
+      displayName: parsed.displayName?.trim() || 'Gast',
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function hasLocalGuestData(): boolean {
+  if (!canUseStorage()) return false;
+  const identity = getStoredGuestIdentity();
+  if (!identity) return false;
+
+  const keys = [
+    `forge_workouts_${identity.uid}`,
+    guestProfileKey(identity.uid),
+    `forge_plans_${identity.uid}`,
+    `forge_bw_${identity.uid}`,
+    `forge_prs_${identity.uid}`,
+    `forge_target_1rms_${identity.uid}`,
+    `forge_audit_logs_${identity.uid}`,
+  ];
+
+  return keys.some((key) => {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return false;
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed.length > 0;
+      return Boolean(parsed && typeof parsed === 'object');
+    } catch {
+      return raw.trim().length > 0;
+    }
+  });
+}
+
 let guestCloudMigrationInProgress = false;
 
 export function beginGuestCloudMigration(): void {
