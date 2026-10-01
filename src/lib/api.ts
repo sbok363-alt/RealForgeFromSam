@@ -191,6 +191,10 @@ function workoutInverseDelta(workout: Workout): Record<string, any> {
 
 async function appendLocalAuditLog(log: MutationAuditLog): Promise<void> {
   if (!log.userId) return;
+  const normalized: MutationAuditLog = {
+    ...log,
+    storageScope: log.storageScope || (isGuestUserId(log.userId) ? 'LOCAL' : 'LOCAL_MIGRATED'),
+  };
   const key = `forge_audit_logs_${log.userId}`;
   let existing: MutationAuditLog[] = [];
   try {
@@ -198,7 +202,7 @@ async function appendLocalAuditLog(log: MutationAuditLog): Promise<void> {
   } catch {}
   localStorage.setItem(
     key,
-    JSON.stringify([log, ...existing.filter((item) => item.id !== log.id)])
+    JSON.stringify([normalized, ...existing.filter((item) => item.id !== normalized.id)])
   );
 }
 
@@ -454,9 +458,32 @@ export async function discardProposal(proposalId: string, userId: string): Promi
 // MUTATION AUDIT LOGS & REVERSIBLE UNDO
 // ==========================================
 
-export async function getMutationAuditLogs(userId: string, targetEntityId?: string): Promise<MutationAuditLog[]> {
-  if (!isGuestUserId(userId)) {
+export async function getMutationAuditLogs(
+  userId: string,
+  targetEntityId?: string
+): Promise<MutationAuditLog[]> {
+  let localLogs: MutationAuditLog[] = [];
+  const local = localStorage.getItem(`forge_audit_logs_${userId}`);
+  if (local) {
     try {
+      localLogs = (JSON.parse(local) as MutationAuditLog[]).map((log) => ({
+        ...log,
+        storageScope: log.storageScope || (isGuestUserId(userId) ? 'LOCAL' : 'LOCAL_MIGRATED'),
+      }));
+    } catch {}
+  }
+
+  if (isGuestUserId(userId)) {
+    const guestLogs = targetEntityId
+      ? localLogs.filter((log) => log.targetEntityId === targetEntityId)
+      : localLogs;
+    return guestLogs.sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+  }
+
+  let serverLogs: MutationAuditLog[] = [];
+  try {
     let q = query(
       collection(db, 'mutation_audit_logs'),
       where('userId', '==', userId),
@@ -471,25 +498,60 @@ export async function getMutationAuditLogs(userId: string, targetEntityId?: stri
       );
     }
     const snap = await getDocs(q);
-    if (!snap.empty) {
-      return snap.docs.map(d => ({ id: d.id, ...d.data() } as MutationAuditLog));
-    }
-    } catch (e) {
-      console.warn("Could not fetch audit logs from Firestore:", e);
-    }
+    serverLogs = snap.docs.map((item) => ({
+      id: item.id,
+      ...item.data(),
+      storageScope: 'SERVER',
+    } as MutationAuditLog));
+  } catch (e) {
+    console.warn('Could not fetch audit logs from Firestore:', e);
   }
 
-  const local = localStorage.getItem(`forge_audit_logs_${userId}`);
-  if (local) {
-    try {
-      const parsed: MutationAuditLog[] = JSON.parse(local);
-      if (targetEntityId) {
-        return parsed.filter(l => l.targetEntityId === targetEntityId);
-      }
-      return parsed;
-    } catch (e) {}
+  const merged = new Map<string, MutationAuditLog>();
+  for (const log of localLogs) {
+    if (!targetEntityId || log.targetEntityId === targetEntityId) {
+      merged.set(log.id, log);
+    }
   }
-  return [];
+  for (const log of serverLogs) {
+    // Server truth wins if the same audit id exists in both places.
+    merged.set(log.id, log);
+  }
+
+  return Array.from(merged.values()).sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+}
+
+export function migrateLocalAuditHistory(
+  sourceUserId: string,
+  targetUserId: string
+): number {
+  let source: MutationAuditLog[] = [];
+  let target: MutationAuditLog[] = [];
+
+  try {
+    source = JSON.parse(localStorage.getItem(`forge_audit_logs_${sourceUserId}`) || '[]');
+  } catch {}
+  try {
+    target = JSON.parse(localStorage.getItem(`forge_audit_logs_${targetUserId}`) || '[]');
+  } catch {}
+
+  const merged = new Map<string, MutationAuditLog>();
+  for (const log of target) merged.set(log.id, log);
+  for (const log of source) {
+    merged.set(log.id, {
+      ...log,
+      userId: targetUserId,
+      storageScope: 'LOCAL_MIGRATED',
+    });
+  }
+
+  localStorage.setItem(
+    `forge_audit_logs_${targetUserId}`,
+    JSON.stringify(Array.from(merged.values()))
+  );
+  return source.length;
 }
 
 export async function recordMutationAuditLog(log: MutationAuditLog): Promise<void> {
