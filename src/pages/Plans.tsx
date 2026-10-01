@@ -130,23 +130,30 @@ export default function Plans() {
 
   const handleStartPlan = (plan: TrainingPlan) => {
     const todayStr = new Date().toISOString().split('T')[0];
-    const exercises = plan.days[0]?.exercises.map(ex => ({
-      id: crypto.randomUUID(),
-      exerciseId: ex.exerciseId,
-      sets: Array.from({ length: ex.targetSets }).map(() => ({
+    const exercises = plan.days[0]?.exercises.map((planExercise) => {
+      const definition = getExerciseById(planExercise.exerciseId);
+      const displayName = definition?.name || planExercise.exerciseId;
+      return {
         id: crypto.randomUUID(),
-        weight: 0,
-        reps: ex.targetRepsMin,
-        completed: false
-      }))
-    })) || [];
+        exerciseId: planExercise.exerciseId,
+        name: displayName,
+        sets: Array.from({ length: planExercise.targetSets }).map(() => ({
+          id: crypto.randomUUID(),
+          weight: 0,
+          reps: planExercise.targetRepsMin,
+          completed: false,
+          setType: 'N' as const
+        }))
+      };
+    }) || [];
 
-    const sets = exercises.flatMap(e => e.sets.map(s => ({
-      id: s.id,
-      exercise: e.exerciseId,
-      reps: s.reps,
-      weight: s.weight,
-      completed: false
+    const sets = exercises.flatMap((exercise) => exercise.sets.map((set) => ({
+      id: set.id,
+      exercise: exercise.name,
+      reps: set.reps,
+      weight: set.weight,
+      completed: false,
+      setType: 'N' as const
     })));
 
     const workout: Workout = {
