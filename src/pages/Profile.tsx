@@ -4,7 +4,22 @@ import { createGuestUser, useAuthStore } from '../store/useAuthStore';
 import { useThemeStore } from '../store/useThemeStore';
 import { auth } from '../lib/firebase';
 import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
-import { getUserProfile, getWorkouts, saveUserProfile, saveWorkout } from '../lib/api';
+import {
+  getBodyweight,
+  getPersonalRecords,
+  getPlans,
+  getTarget1RMs,
+  getUserPermissions,
+  getUserProfile,
+  getWorkouts,
+  saveBodyweight,
+  savePersonalRecord,
+  savePlan,
+  saveTarget1RM,
+  saveUserProfile,
+  saveWorkout,
+  updateUserPermissions,
+} from '../lib/api';
 import {
   beginGuestCloudMigration,
   endGuestCloudMigration,
@@ -42,8 +57,23 @@ export default function Profile() {
     setGoogleError(null);
 
     const guestUid = user.uid;
-    const guestWorkouts = await getWorkouts(guestUid);
-    const guestProfile = await getUserProfile(guestUid);
+    const [
+      guestWorkouts,
+      guestProfile,
+      guestPlans,
+      guestBodyweight,
+      guestPersonalRecords,
+      guestTargets,
+      guestPermissions,
+    ] = await Promise.all([
+      getWorkouts(guestUid),
+      getUserProfile(guestUid),
+      getPlans(guestUid),
+      getBodyweight(guestUid),
+      getPersonalRecords(guestUid),
+      getTarget1RMs(guestUid),
+      getUserPermissions(guestUid),
+    ]);
 
     beginGuestCloudMigration();
     try {
@@ -68,6 +98,24 @@ export default function Profile() {
         );
       }
 
+      for (const plan of guestPlans) {
+        await savePlan({ ...plan, userId: result.user.uid });
+      }
+
+      for (const entry of guestBodyweight) {
+        await saveBodyweight({ ...entry, userId: result.user.uid });
+      }
+
+      for (const record of guestPersonalRecords) {
+        await savePersonalRecord({ ...record, userId: result.user.uid });
+      }
+
+      for (const target of guestTargets) {
+        await saveTarget1RM({ ...target, userId: result.user.uid });
+      }
+
+      await updateUserPermissions(result.user.uid, guestPermissions.autonomyLevel);
+
       const migratedWorkouts = await getWorkouts(result.user.uid);
       const migratedIds = new Set(migratedWorkouts.map((workout) => workout.id));
       if (guestWorkouts.some((workout) => !migratedIds.has(workout.id))) {
@@ -79,6 +127,41 @@ export default function Profile() {
         if (!migratedProfile?.onboardingCompleted) {
           throw new Error('Guest profile migration could not be verified');
         }
+      }
+
+      const [
+        migratedPlans,
+        migratedBodyweight,
+        migratedPersonalRecords,
+        migratedTargets,
+        migratedPermissions,
+      ] = await Promise.all([
+        getPlans(result.user.uid),
+        getBodyweight(result.user.uid),
+        getPersonalRecords(result.user.uid),
+        getTarget1RMs(result.user.uid),
+        getUserPermissions(result.user.uid),
+      ]);
+
+      const allIdsPresent = (source: Array<{ id: string }>, target: Array<{ id: string }>) => {
+        const targetIds = new Set(target.map((item) => item.id));
+        return source.every((item) => targetIds.has(item.id));
+      };
+
+      if (!allIdsPresent(guestPlans, migratedPlans)) {
+        throw new Error('Guest plan migration could not be verified');
+      }
+      if (!allIdsPresent(guestBodyweight, migratedBodyweight)) {
+        throw new Error('Guest bodyweight migration could not be verified');
+      }
+      if (!allIdsPresent(guestPersonalRecords, migratedPersonalRecords)) {
+        throw new Error('Guest personal-record migration could not be verified');
+      }
+      if (!allIdsPresent(guestTargets, migratedTargets)) {
+        throw new Error('Guest target migration could not be verified');
+      }
+      if (migratedPermissions.autonomyLevel !== guestPermissions.autonomyLevel) {
+        throw new Error('Guest preference migration could not be verified');
       }
 
       endGuestCloudMigration();
