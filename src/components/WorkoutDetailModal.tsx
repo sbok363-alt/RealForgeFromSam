@@ -655,6 +655,8 @@ export function WorkoutDetailModal({
                   <Input 
                     value={title} 
                     onChange={(e) => setTitle(e.target.value)}
+                    readOnly={!isEditMode}
+                    aria-readonly={!isEditMode}
                     className="font-bold text-base sm:text-lg h-9 bg-background/80 border-border/80 flex-1 max-w-sm"
                     placeholder="Workout Title"
                   />
@@ -691,19 +693,21 @@ export function WorkoutDetailModal({
                 </div>
               </div>
 
-              {/* Persistent Rest Timer Bar (Hevy-style) */}
-              <div className="px-3.5 sm:px-4 py-2 border-b border-border/60 bg-background/80 shrink-0">
-                <RestTimer
-                  restRemaining={restRemaining}
-                  defaultDuration={defaultRestDuration}
-                  onStartRest={handleStartRestTimer}
-                  onAdjustTime={handleAdjustRestTime}
-                  onTogglePause={handleTogglePauseRest}
-                  onSkipRest={handleSkipRest}
-                  onDefaultDurationChange={(sec) => setDefaultRestDuration(sec)}
-                  isPaused={isRestPaused}
-                />
-              </div>
+              {/* Rest controls only exist for the actual live workout. */}
+              {isLiveSession && (
+                <div className="px-3.5 sm:px-4 py-2 border-b border-border/60 bg-background/80 shrink-0">
+                  <RestTimer
+                    restRemaining={restRemaining}
+                    defaultDuration={defaultRestDuration}
+                    onStartRest={handleStartRestTimer}
+                    onAdjustTime={handleAdjustRestTime}
+                    onTogglePause={handleTogglePauseRest}
+                    onSkipRest={handleSkipRest}
+                    onDefaultDurationChange={(sec) => setDefaultRestDuration(sec)}
+                    isPaused={isRestPaused}
+                  />
+                </div>
+              )}
 
               {/* Workout Metrics & Quick Action Bar */}
               <div className={cn(
@@ -914,7 +918,7 @@ export function WorkoutDetailModal({
                                   size="icon" 
                                   className="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-primary/10"
                                   onClick={() => setOpenNotes(prev => ({ ...prev, [group.exercise]: !prev[group.exercise] }))}
-                                  title="Exercise Notes"
+                                  title={isEditMode || isLiveSession ? "Exercise Notes" : "View Exercise Notes"}
                                 >
                                   <MessageSquare size={14} className={exerciseNotes[group.exercise] ? "text-primary fill-primary/20" : ""} />
                                 </Button>
@@ -956,6 +960,8 @@ export function WorkoutDetailModal({
                                     <textarea 
                                       value={exerciseNotes[group.exercise] || ''}
                                       onChange={(e) => setExerciseNotes(prev => ({ ...prev, [group.exercise]: e.target.value }))}
+                                      readOnly={!isEditMode && !isLiveSession}
+                                      aria-readonly={!isEditMode && !isLiveSession}
                                       placeholder="Add equipment settings, seat height, form cues..."
                                       className="w-full bg-background/50 rounded-lg p-2 border border-border/50 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary resize-none min-h-[44px] placeholder:text-muted-foreground/60"
                                     />
