@@ -17,8 +17,8 @@ import {
   savePlan,
   saveTarget1RM,
   saveUserProfile,
-  saveWorkout,
   updateUserPermissions,
+  upsertWorkoutForCloudMigration,
   verifyCloudMigration,
 } from '../lib/api';
 import {
@@ -92,10 +92,10 @@ export default function Profile() {
       }
 
       for (const workout of guestWorkouts) {
-        await saveWorkout(
-          { ...workout, userId: result.user.uid },
-          'USER',
-          'Migrated from local guest account'
+        await upsertWorkoutForCloudMigration(
+          workout,
+          result.user.uid,
+          guestUid
         );
       }
 
