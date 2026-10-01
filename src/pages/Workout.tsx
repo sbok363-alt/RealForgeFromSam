@@ -134,9 +134,6 @@ export default function WorkoutPage() {
 
     const saved = await saveWorkout(newW, 'USER', `Created empty workout: ${newW.title}`);
     setWorkouts(prev => [saved, ...prev]);
-    
-    // Automatically open as active workout
-    startWorkout(saved);
     setSelectedWorkout(saved);
   };
 
@@ -171,7 +168,7 @@ export default function WorkoutPage() {
 
   const filteredWorkouts = workouts.filter(w => {
     if (filter === 'ALL') return true;
-    return w.status === filter;
+    return String(w.status).toUpperCase() === filter;
   });
 
   const getStatusBadge = (status: Workout['status']) => {
@@ -243,7 +240,7 @@ export default function WorkoutPage() {
             filter === 'PLANNED' ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"
           )}
         >
-          Planned ({workouts.filter(w => w.status === 'PLANNED').length})
+          Planned ({workouts.filter(w => String(w.status).toUpperCase() === 'PLANNED').length})
         </button>
         <button
           onClick={() => setFilter('COMPLETED')}
@@ -252,7 +249,7 @@ export default function WorkoutPage() {
             filter === 'COMPLETED' ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"
           )}
         >
-          Completed ({workouts.filter(w => w.status === 'COMPLETED').length})
+          Completed ({workouts.filter(w => String(w.status).toUpperCase() === 'COMPLETED').length})
         </button>
       </div>
 
@@ -415,7 +412,7 @@ export default function WorkoutPage() {
 
                 {/* Card Actions */}
                 <div className="p-3 bg-card border-t border-border/40">
-                  {workout.status === 'COMPLETED' ? (
+                  {String(workout.status).toUpperCase() === 'COMPLETED' ? (
                      <Button 
                        variant="secondary" 
                        className="w-full font-bold h-11 text-xs"
