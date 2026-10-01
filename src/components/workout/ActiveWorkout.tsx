@@ -59,6 +59,7 @@ export default function ActiveWorkout({
   const [saving, setSaving] = useState(false);
   const [showSelector, setShowSelector] = useState(false);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+  const [exercisePendingRemoval, setExercisePendingRemoval] = useState<{ id: string; name: string } | null>(null);
   const [allUserWorkouts, setAllUserWorkouts] = useState<Workout[]>([]);
 
   // Keep screen awake while a session is in progress (gym-friendly)
@@ -330,14 +331,21 @@ export default function ActiveWorkout({
                   </div>
                   <div className="text-xs text-muted-foreground">{def?.primaryMuscle} • {def?.equipment}</div>
                 </div>
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
-                  className="text-muted-foreground hover:text-destructive h-8 w-8 -mr-2" 
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-10 w-10 -mr-2 text-muted-foreground hover:text-destructive"
                   disabled={isFinishing}
-                  onClick={() => !isFinishing && removeExercise(ex.id)}
+                  onClick={() => {
+                    if (isFinishing) return;
+                    setExercisePendingRemoval({
+                      id: ex.id,
+                      name: def?.name || ex.exerciseId,
+                    });
+                  }}
+                  aria-label={`Remove ${def?.name || ex.exerciseId}`}
                 >
-                  <X size={16} />
+                  <X size={17} />
                 </Button>
               </CardHeader>
 
@@ -477,6 +485,49 @@ export default function ActiveWorkout({
         <Plus size={16} className="mr-2 text-primary" /> Add Exercise
       </Button>
       
+      {exercisePendingRemoval && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-3 backdrop-blur-sm sm:items-center"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="remove-exercise-title"
+          onClick={() => setExercisePendingRemoval(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-3xl border border-white/10 bg-[#101012] p-5 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h3 id="remove-exercise-title" className="text-lg font-black text-white">
+              Remove {exercisePendingRemoval.name}?
+            </h3>
+            <p className="mt-2 text-sm leading-relaxed text-neutral-400">
+              Its sets and any progress logged in this active workout will be removed.
+            </p>
+            <div className="mt-5 space-y-2">
+              <Button
+                className="min-h-12 w-full font-bold"
+                onClick={() => setExercisePendingRemoval(null)}
+                autoFocus
+              >
+                Keep exercise
+              </Button>
+              <Button
+                variant="danger"
+                className="min-h-12 w-full font-bold"
+                disabled={isFinishing}
+                onClick={() => {
+                  const target = exercisePendingRemoval;
+                  setExercisePendingRemoval(null);
+                  removeExercise(target.id);
+                }}
+              >
+                Remove exercise
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showDiscardConfirm && (
         <div
           className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-3 backdrop-blur-sm sm:items-center"
