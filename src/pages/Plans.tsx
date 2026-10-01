@@ -162,9 +162,8 @@ export default function Plans() {
       title: plan.name,
       name: plan.name,
       scheduledDate: todayStr,
-      status: 'IN_PROGRESS',
+      status: 'PLANNED',
       version: 1,
-      startedAt: Date.now(),
       planId: plan.id,
       sets,
       exercises
@@ -178,7 +177,7 @@ export default function Plans() {
     const saved = await saveWorkout(
       workout,
       'USER',
-      `Started workout from plan: ${plan.name}`
+      `Created workout from plan: ${plan.name}`
     );
     startWorkout(saved);
     navigate('/workout');
@@ -190,7 +189,7 @@ export default function Plans() {
     const saved = await saveWorkout(
       target,
       'USER',
-      `Started workout from plan: ${target.title}`
+      `Created workout from plan: ${target.title}`
     );
     discardWorkout();
     startWorkout(saved);
