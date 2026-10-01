@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { PendingWorkoutMutation, Workout, WorkoutExercise, WorkoutSet, WorkoutSetItem, WorkoutSyncConflict } from '../types';
 import { createSafeStateStorage } from '../lib/safe-storage';
+import { prepareWorkoutStart } from '../lib/workout-start';
 
 export interface WorkoutState {
   activeWorkout: Workout | null;
@@ -73,19 +74,12 @@ export const useWorkoutStore = create<WorkoutState>()(
       persistenceWarning: null,
 
       startWorkout: (workout) => {
-        const startTime = workout.startedAt || Date.now();
-        const initializedWorkout: Workout = {
-          ...workout,
-          status: 'IN_PROGRESS',
-          startedAt: startTime,
-          // Ensure both sets and exercises default strictly to empty arrays if undefined
-          sets: workout.sets || [],
-          exercises: workout.exercises || []
-        };
+        const prepared = prepareWorkoutStart(get().activeWorkout, workout);
+        if (!prepared) return;
 
         set({
-          activeWorkout: initializedWorkout,
-          startedAt: startTime,
+          activeWorkout: prepared.workout,
+          startedAt: prepared.startedAt,
           isModalOpen: true,
           restEndTime: null,
           activePRSetIds: [],
