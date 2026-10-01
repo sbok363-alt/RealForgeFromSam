@@ -56,6 +56,7 @@ assert(lightStart >= 0, 'light theme token block must exist');
 assert(!lightBlock.includes('--background: #050505'), 'light theme must not reuse the dark background');
 assert(!home.includes('bg-[#101012]'), 'Home must not force dark card backgrounds');
 assert(!home.includes('text-white'), 'Home must use semantic foreground tokens');
+assert(!home.includes('bg-white'), 'Home CTAs must use semantic inverse colors');
 
 assert(
   session.includes('exercise: exercise.name || exercise.exerciseId'),
