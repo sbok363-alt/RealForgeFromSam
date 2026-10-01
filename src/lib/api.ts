@@ -39,34 +39,44 @@ import {
 // ==========================================
 
 export async function getUserPermissions(userId: string): Promise<UserPermissions> {
-  try {
-    const docRef = doc(db, 'user_permissions', userId);
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-      return docSnap.data() as UserPermissions;
-    }
-  } catch (e) {
-    console.warn("Could not fetch user_permissions from Firestore, fallback to local:", e);
+  const localKey = `forge_permissions_${userId}`;
+  const local = localStorage.getItem(localKey);
+  if (local) {
+    try {
+      return JSON.parse(local) as UserPermissions;
+    } catch {}
   }
-  
-  // Default permissions
+
+  if (!isGuestUserId(userId)) {
+    try {
+      const docRef = doc(db, 'user_permissions', userId);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        return docSnap.data() as UserPermissions;
+      }
+    } catch (e) {
+      console.warn("Could not fetch user_permissions from Firestore, fallback to local:", e);
+    }
+  }
+
   const defaultPermissions: UserPermissions = {
     userId,
     autonomyLevel: 'L2_GUIDED_AUTONOMY',
     permissionEpoch: 1
   };
-  
-  try {
-    await setDoc(doc(db, 'user_permissions', userId), defaultPermissions);
-  } catch (err) {
-    // Ignore if offline
+  localStorage.setItem(localKey, JSON.stringify(defaultPermissions));
+
+  if (!isGuestUserId(userId)) {
+    try {
+      await setDoc(doc(db, 'user_permissions', userId), defaultPermissions);
+    } catch {}
   }
-  
+
   return defaultPermissions;
 }
 
 export async function updateUserPermissions(
-  userId: string, 
+  userId: string,
   autonomyLevel: AutonomyLevel
 ): Promise<UserPermissions> {
   const current = await getUserPermissions(userId);
@@ -76,10 +86,12 @@ export async function updateUserPermissions(
     permissionEpoch: (current.permissionEpoch || 1) + 1
   };
 
-  try {
-    await setDoc(doc(db, 'user_permissions', userId), updated);
-  } catch (e) {
-    console.warn("Could not update Firestore user_permissions:", e);
+  if (!isGuestUserId(userId)) {
+    try {
+      await setDoc(doc(db, 'user_permissions', userId), updated);
+    } catch (e) {
+      console.warn("Could not update Firestore user_permissions:", e);
+    }
   }
 
   localStorage.setItem(`forge_permissions_${userId}`, JSON.stringify(updated));
@@ -574,11 +586,16 @@ export async function getBodyweight(userId: string): Promise<BodyweightEntry[]> 
 }
 
 export async function saveBodyweight(entry: BodyweightEntry): Promise<void> {
-  try {
-    await setDoc(doc(db, 'bodyweight', entry.id), entry);
-  } catch (e) {}
+  if (!isGuestUserId(entry.userId)) {
+    try {
+      await setDoc(doc(db, 'bodyweight', entry.id), entry);
+    } catch (e) {}
+  }
   const all = await getBodyweight(entry.userId);
-  localStorage.setItem(`forge_bw_${entry.userId}`, JSON.stringify([entry, ...all]));
+  localStorage.setItem(
+    `forge_bw_${entry.userId}`,
+    JSON.stringify([entry, ...all.filter((item) => item.id !== entry.id)])
+  );
 }
 
 // ==========================================
@@ -586,67 +603,28 @@ export async function saveBodyweight(entry: BodyweightEntry): Promise<void> {
 // ==========================================
 
 export async function getTarget1RMs(userId: string): Promise<Target1RM[]> {
-  try {
-    const q = query(
-      collection(db, 'target_1rms'),
-      where('userId', '==', userId)
-    );
-    const snap = await getDocs(q);
-    if (!snap.empty) {
-      return snap.docs.map(d => ({ id: d.id, ...d.data() } as Target1RM));
+  if (!isGuestUserId(userId)) {
+    try {
+      const q = query(
+        collection(db, 'target_1rms'),
+        where('userId', '==', userId)
+      );
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        return snap.docs.map(d => ({ id: d.id, ...d.data() } as Target1RM));
+      }
+    } catch (e) {
+      console.warn("Could not fetch target_1rms from Firestore, reading local:", e);
     }
-  } catch (e) {
-    console.warn("Could not fetch target_1rms from Firestore, reading local:", e);
   }
 
   const local = localStorage.getItem(`forge_target_1rms_${userId}`);
   if (local) {
     try {
       return JSON.parse(local);
-    } catch (e) {}
+    } catch {}
   }
-
-  // Default seed target 1RMs for a motivating experience
-  const defaultTargets: Target1RM[] = [
-    {
-      id: `target_bench_${userId}`,
-      userId,
-      exerciseId: 'bench_press',
-      exerciseName: 'Bench Press',
-      target1RM: 100,
-      createdAt: Date.now() - 86400000 * 7,
-      updatedAt: Date.now() - 86400000 * 7,
-      notes: 'Road to 100kg (2 plates)'
-    },
-    {
-      id: `target_squat_${userId}`,
-      userId,
-      exerciseId: 'squat',
-      exerciseName: 'Squat',
-      target1RM: 140,
-      createdAt: Date.now() - 86400000 * 7,
-      updatedAt: Date.now() - 86400000 * 7,
-      notes: '3 plates milestone'
-    },
-    {
-      id: `target_ohp_${userId}`,
-      userId,
-      exerciseId: 'overhead_press',
-      exerciseName: 'Overhead Press',
-      target1RM: 60,
-      createdAt: Date.now() - 86400000 * 7,
-      updatedAt: Date.now() - 86400000 * 7,
-      notes: 'Bodyweight overhead press goal'
-    }
-  ];
-
-  localStorage.setItem(`forge_target_1rms_${userId}`, JSON.stringify(defaultTargets));
-  for (const t of defaultTargets) {
-    try {
-      await setDoc(doc(db, 'target_1rms', t.id), t);
-    } catch (e) {}
-  }
-  return defaultTargets;
+  return [];
 }
 
 export async function saveTarget1RM(target: Target1RM): Promise<Target1RM> {
@@ -655,10 +633,12 @@ export async function saveTarget1RM(target: Target1RM): Promise<Target1RM> {
     updatedAt: Date.now()
   };
 
-  try {
-    await setDoc(doc(db, 'target_1rms', updated.id), updated);
-  } catch (e) {
-    console.warn("Could not save target 1RM to Firestore, saving locally:", e);
+  if (!isGuestUserId(updated.userId)) {
+    try {
+      await setDoc(doc(db, 'target_1rms', updated.id), updated);
+    } catch (e) {
+      console.warn("Could not save target 1RM to Firestore, saving locally:", e);
+    }
   }
 
   const all = await getTarget1RMs(updated.userId);
@@ -672,10 +652,12 @@ export async function saveTarget1RM(target: Target1RM): Promise<Target1RM> {
 }
 
 export async function deleteTarget1RM(targetId: string, userId: string): Promise<void> {
-  try {
-    await deleteDoc(doc(db, 'target_1rms', targetId));
-  } catch (e) {
-    console.warn("Could not delete target 1RM from Firestore:", e);
+  if (!isGuestUserId(userId)) {
+    try {
+      await deleteDoc(doc(db, 'target_1rms', targetId));
+    } catch (e) {
+      console.warn("Could not delete target 1RM from Firestore:", e);
+    }
   }
 
   const all = await getTarget1RMs(userId);
@@ -684,28 +666,34 @@ export async function deleteTarget1RM(targetId: string, userId: string): Promise
 }
 
 export async function getPlans(userId: string): Promise<any[]> {
-  try {
-    const q = query(collection(db, 'plans'), where('userId', '==', userId));
-    const snap = await getDocs(q);
-    if (!snap.empty) return snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  } catch (e) {}
+  if (!isGuestUserId(userId)) {
+    try {
+      const q = query(collection(db, 'plans'), where('userId', '==', userId));
+      const snap = await getDocs(q);
+      if (!snap.empty) return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch (e) {}
+  }
   const local = localStorage.getItem(`forge_plans_${userId}`);
   return local ? JSON.parse(local) : [];
 }
 
 export async function savePlan(plan: any): Promise<void> {
-  try {
-    await setDoc(doc(db, 'plans', plan.id), plan);
-  } catch (e) {}
+  if (!isGuestUserId(plan.userId)) {
+    try {
+      await setDoc(doc(db, 'plans', plan.id), plan);
+    } catch (e) {}
+  }
   const all = await getPlans(plan.userId);
   localStorage.setItem(`forge_plans_${plan.userId}`, JSON.stringify([plan, ...all.filter(p => p.id !== plan.id)]));
 }
 
 export async function deletePlan(planId: string, userId?: string): Promise<void> {
-  try {
-    await deleteDoc(doc(db, 'plans', planId));
-  } catch (e) {
-    console.warn("Could not delete plan from Firestore:", e);
+  if (!userId || !isGuestUserId(userId)) {
+    try {
+      await deleteDoc(doc(db, 'plans', planId));
+    } catch (e) {
+      console.warn("Could not delete plan from Firestore:", e);
+    }
   }
 
   if (userId) {
@@ -758,24 +746,32 @@ export async function saveUserProfile(profile: UserProfile): Promise<void> {
 }
 
 export async function getPersonalRecords(userId: string): Promise<PersonalRecord[]> {
-  try {
-    const q = query(collection(db, 'personal_records'), where('userId', '==', userId));
-    const snap = await getDocs(q);
-    if (!snap.empty) return snap.docs.map(d => ({ id: d.id, ...d.data() } as PersonalRecord));
-  } catch (e) {
-    console.warn("Could not fetch personal records:", e);
+  if (!isGuestUserId(userId)) {
+    try {
+      const q = query(collection(db, 'personal_records'), where('userId', '==', userId));
+      const snap = await getDocs(q);
+      if (!snap.empty) return snap.docs.map(d => ({ id: d.id, ...d.data() } as PersonalRecord));
+    } catch (e) {
+      console.warn("Could not fetch personal records:", e);
+    }
   }
-  return [];
+
+  const local = localStorage.getItem(`forge_prs_${userId}`);
+  if (!local) return [];
+  try {
+    return JSON.parse(local) as PersonalRecord[];
+  } catch {
+    return [];
+  }
 }
 
 export async function getPreviousPerformance(userId: string, exerciseId: string): Promise<any | null> {
   const workouts = await getRecentWorkouts(userId, 30);
   const normId = exerciseId.toLowerCase().replace(/[-_\s]+/g, '');
-  
+
   for (const w of workouts) {
     if (w.status !== 'COMPLETED' && w.status !== 'completed') continue;
 
-    // Check exercises array
     if (w.exercises && Array.isArray(w.exercises)) {
       const match = w.exercises.find((e: any) => {
         const eId = (e.exerciseId || '').toLowerCase().replace(/[-_\s]+/g, '');
@@ -784,7 +780,6 @@ export async function getPreviousPerformance(userId: string, exerciseId: string)
       if (match) return w;
     }
 
-    // Check flat sets array
     if (w.sets && Array.isArray(w.sets)) {
       const match = w.sets.find((s: any) => {
         const sEx = (s.exercise || '').toLowerCase().replace(/[-_\s]+/g, '');
@@ -797,11 +792,17 @@ export async function getPreviousPerformance(userId: string, exerciseId: string)
 }
 
 export async function savePersonalRecord(record: PersonalRecord): Promise<void> {
-  try {
-    await setDoc(doc(db, 'personal_records', record.id), record);
-  } catch (e) {
-    console.warn("Could not save personal record:", e);
+  if (!isGuestUserId(record.userId)) {
+    try {
+      await setDoc(doc(db, 'personal_records', record.id), record);
+    } catch (e) {
+      console.warn("Could not save personal record:", e);
+    }
   }
+
+  const all = await getPersonalRecords(record.userId);
+  const next = [record, ...all.filter((item) => item.id !== record.id)];
+  localStorage.setItem(`forge_prs_${record.userId}`, JSON.stringify(next));
 }
 
 // ==========================================
