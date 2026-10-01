@@ -47,9 +47,13 @@ assert(
   api.includes('inverseDelta: workoutInverseDelta(current)'),
   'Guest mutations must preserve exact local inverse deltas'
 );
+const auditReadStart = api.indexOf('export async function getMutationAuditLogs');
+const auditReadEnd = api.indexOf('export async function recordMutationAuditLog', auditReadStart);
+const auditRead = api.slice(auditReadStart, auditReadEnd);
 assert(
-  api.includes("if (!isGuestUserId(userId)) {\n    try {\n    let q = query("),
-  'Guest audit reads must bypass Firestore'
+  auditRead.includes('if (isGuestUserId(userId))') &&
+  auditRead.indexOf('if (isGuestUserId(userId))') < auditRead.indexOf("collection(db, 'mutation_audit_logs')"),
+  'Guest audit reads must return from local truth before any Firestore audit query'
 );
 assert(
   !api.includes("|| 'demo-token'"),
