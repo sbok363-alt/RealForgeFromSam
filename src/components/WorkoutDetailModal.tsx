@@ -590,10 +590,10 @@ export function WorkoutDetailModal({
     if (!targetUserId) return;
     setDeleting(true);
     try {
+      await deleteWorkout(workout.id, targetUserId);
       if (activeWorkout?.id === workout.id) {
         discardActiveWorkout();
       }
-      await deleteWorkout(workout.id, targetUserId);
       if (onDelete) {
         onDelete(workout.id);
       }
