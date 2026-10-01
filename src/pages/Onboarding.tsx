@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/useAuthStore';
-import { saveUserProfile, saveWorkout } from '../lib/api';
+import { getWorkout, saveUserProfile, saveWorkout } from '../lib/api';
 import { UserProfile, ExperienceLevel, PrimaryGoal, EquipmentAccess, Workout } from '../types';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent } from '../components/ui/Card';
@@ -152,7 +152,7 @@ function buildStarterWorkout(
   }));
 
   return {
-    id: crypto.randomUUID(),
+    id: `onboarding-starter-${userId}`,
     userId,
     title,
     scheduledDate: today,
@@ -174,6 +174,7 @@ export default function Onboarding() {
   const [daysPerWeek, setDaysPerWeek] = useState<number | null>(null);
   const [equipment, setEquipment] = useState<EquipmentAccess | null>(null);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const canNext =
     (step === 1 && goal) ||
@@ -184,8 +185,24 @@ export default function Onboarding() {
   const handleFinish = async () => {
     if (!user || !goal || !experience || !daysPerWeek || !equipment) return;
     setSaving(true);
+    setSaveError(null);
 
     try {
+      const firstWorkout = buildStarterWorkout(user.uid, goal, experience, equipment);
+
+      // Durable-first and retry-safe: create the stable starter workout before
+      // declaring onboarding complete. A retry reuses the same workout id.
+      const existingStarter = await getWorkout(firstWorkout.id, user.uid);
+      if (!existingStarter) {
+        await saveWorkout(
+          firstWorkout,
+          'SYSTEM_AUTONOMOUS',
+          'Onboarding starter session',
+          { mutationId: `onboarding-starter:${user.uid}` }
+        );
+      }
+
+      const existingProfileCreatedAt = Date.now();
       const profile: UserProfile = {
         userId: user.uid,
         name: user.displayName || 'Athlete',
@@ -196,33 +213,28 @@ export default function Onboarding() {
         equipment,
         onboardingCompleted: true,
         onboardingCompletedAt: Date.now(),
-        createdAt: Date.now(),
+        createdAt: existingProfileCreatedAt,
       };
 
       await saveUserProfile(profile);
 
-      // Mark as seeded so Home doesn't overwrite with demo data
-      localStorage.setItem(`forge_seeded_${user.uid}`, 'true');
+      // Only publish completion markers after both durable writes succeeded.
       localStorage.setItem(`forge_onboarded_${user.uid}`, 'true');
 
-      // Create a real first workout tailored to answers
-      const firstWorkout = buildStarterWorkout(user.uid, goal, experience, equipment);
-      await saveWorkout(firstWorkout, 'SYSTEM_AUTONOMOUS', 'Onboarding starter session');
-
-      // Land on Home with a strong first Brain prompt ready
-      navigate('/', { 
+      navigate('/', {
         replace: true,
-        state: { 
+        state: {
           justOnboarded: true,
           firstWorkoutId: firstWorkout.id,
-          autoBrainPrompt: `I just finished onboarding. Goal: ${goal}. Experience: ${experience}. ${daysPerWeek} days/week. Equipment: ${equipment}. Analyze my starter session and give me the single best progressive overload tip for my first real workout.`
         }
       });
-    } catch (e) {
+    } catch (e: any) {
       console.error('Onboarding save failed:', e);
-      // Still proceed so user is not stuck
-      localStorage.setItem(`forge_onboarded_${user.uid}`, 'true');
-      navigate('/', { replace: true });
+      setSaveError(
+        e?.message
+          ? `Could not finish setup: ${e.message}`
+          : 'Could not finish setup. Your answers are still here — retry when ready.'
+      );
     } finally {
       setSaving(false);
     }
@@ -363,6 +375,15 @@ export default function Onboarding() {
             </button>
           ))}
         </div>
+
+        {saveError && (
+          <div
+            role="alert"
+            className="w-full mb-4 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive"
+          >
+            {saveError}
+          </div>
+        )}
 
         {/* Navigation */}
         <div className="w-full flex items-center gap-3">
