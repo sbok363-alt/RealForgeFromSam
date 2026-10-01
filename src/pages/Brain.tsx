@@ -324,7 +324,7 @@ export default function Brain() {
          }
          return;
       }
-      if (!res.ok) throw new Error("Failed to connect to FORGE Brain");
+      if (!res.ok) throw new Error("Failed to connect to Hardstate Brain");
       if (!res.body) throw new Error("No stream returned");
 
       const reader = res.body.getReader();
@@ -400,7 +400,7 @@ export default function Brain() {
         }
       }
     } catch (err: any) {
-      console.error("FORGE Brain error:", err);
+      console.error("Hardstate Brain error:", err);
       const errorMessage: ThreadMessage = {
         id: crypto.randomUUID(),
         role: 'assistant',
@@ -514,7 +514,7 @@ export default function Brain() {
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 sm:gap-2">
               <h1 className="text-base sm:text-2xl font-display font-black truncate tracking-widest text-[#FF7A32] drop-shadow-[0_0_12px_rgba(255,122,50,0.5)]">
-                FORGE AI TERMINAL
+                HARDSTATE BRAIN
               </h1>
               <span className="text-[9px] sm:text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-[#FF7A32]/10 text-[#FF7A32] border border-[#FF7A32]/20">
                 Active
@@ -706,7 +706,7 @@ export default function Brain() {
               <div className="max-w-[85%] sm:max-w-[80%] rounded-2xl px-4 py-3 text-xs bg-[#141418] text-zinc-300 rounded-tl-xs border border-zinc-800 flex items-center gap-2.5 shadow-md">
                 <BrainIcon size={15} className="text-primary animate-pulse shrink-0" />
                 <span className="font-medium">
-                  {toolStatus || "FORGE Brain is thinking..."}
+                  {toolStatus || "Hardstate Brain is thinking..."}
                 </span>
               </div>
             </div>
