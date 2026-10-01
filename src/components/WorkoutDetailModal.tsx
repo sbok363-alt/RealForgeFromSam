@@ -82,7 +82,9 @@ export function WorkoutDetailModal({
 
   const [title, setTitle] = useState(workout.title || 'Workout Session');
   const [scheduledDate, setScheduledDate] = useState(workout.scheduledDate);
-  const [isEditMode, setIsEditMode] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(
+    () => (workout.exercises?.length || 0) === 0 && (workout.sets?.length || 0) === 0
+  );
   
   // Consume workout.exercises if available, otherwise fallback to flat sets
   const initialSets = useMemo(() => {
