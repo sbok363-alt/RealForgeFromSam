@@ -8,7 +8,6 @@ export interface ForgeUser {
   email?: string | null;
   photoURL?: string | null;
   isAnonymous?: boolean;
-  isDemo?: boolean;
   isGuest?: boolean;
   getIdToken?: (forceRefresh?: boolean) => Promise<string>;
 }
