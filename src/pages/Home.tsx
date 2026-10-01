@@ -23,6 +23,17 @@ function isPlanned(workout: Workout) {
   return workout.status === 'PLANNED' || workout.status === 'planned';
 }
 
+function workoutExerciseCount(workout: Workout): number {
+  if (Array.isArray(workout.exercises) && workout.exercises.length > 0) {
+    return workout.exercises.length;
+  }
+  return new Set(
+    (workout.sets || [])
+      .map((set) => set.exercise)
+      .filter((name): name is string => Boolean(name))
+  ).size;
+}
+
 function workoutSets(workout: Workout) {
   const nested = workout.exercises?.flatMap((exercise) => exercise.sets) || [];
   return nested.length > 0 ? nested : workout.sets || [];
@@ -189,7 +200,7 @@ export default function Home() {
   });
 
   const startPrimaryWorkout = () => {
-    if (!todayWorkout) {
+    if (!todayWorkout || workoutExerciseCount(todayWorkout) === 0) {
       navigate('/workout');
       return;
     }
@@ -249,7 +260,7 @@ export default function Home() {
                   {todayWorkout.title || todayWorkout.name || 'Workout'}
                 </h2>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {todayWorkout.exercises?.length || 0} exercises
+                  {workoutExerciseCount(todayWorkout)} exercises
                 </p>
               </div>
               <Dumbbell size={22} className="mt-1 shrink-0 text-muted-foreground" />
@@ -260,8 +271,17 @@ export default function Home() {
               onClick={startPrimaryWorkout}
               className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-full bg-foreground px-5 py-2.5 text-sm font-bold text-background transition-transform active:scale-[0.98]"
             >
-              <Play size={14} className="fill-current" />
-              Start workout
+              {workoutExerciseCount(todayWorkout) > 0 ? (
+                <>
+                  <Play size={14} className="fill-current" />
+                  Start workout
+                </>
+              ) : (
+                <>
+                  <ArrowRight size={14} />
+                  Add exercises
+                </>
+              )}
             </button>
           </>
         ) : (
