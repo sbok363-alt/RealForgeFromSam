@@ -12,6 +12,7 @@ import {
   getUserPermissions,
   getUserProfile,
   getWorkouts,
+  migrateLocalAuditHistory,
   saveBodyweight,
   savePersonalRecord,
   savePlan,
@@ -127,6 +128,10 @@ export default function Profile() {
         autonomyLevel: guestPermissions.autonomyLevel,
       });
 
+      // Server audit logs are server-authoritative and cannot be forged by the client.
+      // Preserve Guest audit history locally under the cloud UID instead of pretending to upload it.
+      migrateLocalAuditHistory(guestUid, result.user.uid);
+
       endGuestCloudMigration();
       setGuestSessionActive(false);
       localStorage.removeItem('forge_demo_session');
@@ -228,7 +233,7 @@ export default function Profile() {
               </div>
             </div>
 
-            {/* If in demo mode, provide Save & sync with Google button */}
+            {/* Guest upgrade: verified cloud sync plus local audit-history preservation. */}
             {isGuest && (
               <div className="w-full sm:w-auto">
                 <Button
