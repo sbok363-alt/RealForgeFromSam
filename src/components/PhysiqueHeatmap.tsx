@@ -16,7 +16,6 @@ import {
   CheckCircle2, 
   RotateCcw, 
   ChevronRight, 
-  Sparkles, 
   Target, 
   X,
   Activity,
