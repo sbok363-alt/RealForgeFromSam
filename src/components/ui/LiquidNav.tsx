@@ -55,7 +55,7 @@ export function LiquidNav({ items: customItems }: LiquidNavProps) {
     <nav 
       id="forge-bottom-nav"
       aria-label="Bottom Navigation"
-      className="md:hidden fixed bottom-0 left-0 right-0 z-50 select-none bg-[#09090b]/95 backdrop-blur-xl border-t border-white/[0.08]"
+      className="md:hidden fixed bottom-0 left-0 right-0 z-50 select-none bg-background/95 backdrop-blur-xl border-t border-border"
       style={{ height: `${BAR_HEIGHT}px` }}
     >
       <div className="relative w-full h-full grid grid-cols-5 max-w-lg mx-auto px-2">
@@ -70,7 +70,7 @@ export function LiquidNav({ items: customItems }: LiquidNavProps) {
               onClick={() => soundFx.playClick(1200)}
               className={cn(
                 "group relative flex flex-col items-center justify-center h-full w-full transition-all focus:outline-none select-none py-1",
-                isActive ? "text-[#FF7A32]" : "text-[#737373] hover:text-[#D4D4D4]"
+                isActive ? "text-primary" : "text-muted-foreground hover:text-foreground"
               )}
             >
               {/* Tab Icon with Badge */}
@@ -80,15 +80,15 @@ export function LiquidNav({ items: customItems }: LiquidNavProps) {
                   className={cn(
                     "transition-all duration-200",
                     isActive 
-                      ? "text-[#FF7A32] drop-shadow-[0_0_8px_rgba(255,122,50,0.4)]" 
-                      : "text-[#737373] group-hover:text-[#D4D4D4]"
+                      ? "text-primary drop-shadow-[0_0_8px_rgba(255,122,50,0.4)]" 
+                      : "text-muted-foreground group-hover:text-foreground"
                   )} 
                 />
 
                 {item.badge !== undefined && (
                   <span className={cn(
-                    "absolute -top-1 -right-2.5 px-1 min-w-[14px] h-3.5 flex items-center justify-center text-[9px] font-black rounded-full leading-none border border-black/60",
-                    item.badgeColor || "bg-[#FF7A32] text-black"
+                    "absolute -top-1 -right-2.5 px-1 min-w-[14px] h-3.5 flex items-center justify-center text-[9px] font-black rounded-full leading-none border border-background/60",
+                    item.badgeColor || "bg-primary text-primary-foreground"
                   )}>
                     {item.badge}
                   </span>
@@ -98,7 +98,7 @@ export function LiquidNav({ items: customItems }: LiquidNavProps) {
               {/* Tab Label */}
               <span className={cn(
                 "text-[10px] font-medium tracking-tight mt-1 transition-colors leading-none",
-                isActive ? "text-white font-semibold" : "text-[#737373] group-hover:text-[#A3A3A3]"
+                isActive ? "text-foreground font-semibold" : "text-muted-foreground group-hover:text-foreground"
               )}>
                 {item.name}
               </span>
@@ -107,7 +107,7 @@ export function LiquidNav({ items: customItems }: LiquidNavProps) {
               {isActive && (
                 <motion.div
                   layoutId="bottomNavActiveDot"
-                  className="w-1.5 h-1.5 rounded-full bg-[#FF7A32] shadow-[0_0_6px_#FF7A32] mt-1"
+                  className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_6px_rgba(255,122,50,0.55)] mt-1"
                   transition={{
                     type: "spring",
                     stiffness: 450,
