@@ -193,7 +193,7 @@ async function appendLocalAuditLog(log: MutationAuditLog): Promise<void> {
   if (!log.userId) return;
   const normalized: MutationAuditLog = {
     ...log,
-    storageScope: log.storageScope || (isGuestUserId(log.userId) ? 'LOCAL' : 'LOCAL_MIGRATED'),
+    storageScope: log.storageScope || 'LOCAL',
   };
   const key = `forge_audit_logs_${log.userId}`;
   let existing: MutationAuditLog[] = [];
@@ -468,7 +468,7 @@ export async function getMutationAuditLogs(
     try {
       localLogs = (JSON.parse(local) as MutationAuditLog[]).map((log) => ({
         ...log,
-        storageScope: log.storageScope || (isGuestUserId(userId) ? 'LOCAL' : 'LOCAL_MIGRATED'),
+        storageScope: log.storageScope || 'LOCAL',
       }));
     } catch {}
   }
