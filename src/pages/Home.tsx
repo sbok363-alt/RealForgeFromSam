@@ -258,7 +258,7 @@ export default function Home() {
             <button
               type="button"
               onClick={startPrimaryWorkout}
-              className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-bold text-primary-foreground transition-transform active:scale-[0.98]"
+              className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-full bg-foreground px-5 py-2.5 text-sm font-bold text-background transition-transform active:scale-[0.98]"
             >
               <Play size={14} className="fill-current" />
               Start workout
@@ -281,7 +281,7 @@ export default function Home() {
               <button
                 type="button"
                 onClick={() => navigate('/workout')}
-                className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-bold text-primary-foreground transition-transform active:scale-[0.98]"
+                className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-full bg-foreground px-5 py-2.5 text-sm font-bold text-background transition-transform active:scale-[0.98]"
               >
                 Choose workout
                 <ArrowRight size={14} />
