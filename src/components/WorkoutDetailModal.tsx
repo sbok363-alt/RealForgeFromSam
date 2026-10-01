@@ -79,6 +79,7 @@ export function WorkoutDetailModal({
     activeWorkout?.id === workout.id &&
     (activeWorkout.status === 'IN_PROGRESS' || activeWorkout.status === 'in-progress')
   );
+  const canOptimize = String(workout.status).toUpperCase() === 'PLANNED';
 
   const [title, setTitle] = useState(workout.title || 'Workout Session');
   const [scheduledDate, setScheduledDate] = useState(workout.scheduledDate);
@@ -437,6 +438,7 @@ export function WorkoutDetailModal({
 
   // Run Optimization Engine
   const handleRunOptimization = async (chosenStrategy: OptimizationStrategy = strategy) => {
+    if (!canOptimize) return;
     setStrategy(chosenStrategy);
     setOptimizing(true);
     setShowOptimizer(true);
@@ -515,10 +517,10 @@ export function WorkoutDetailModal({
         weight: idx === 0 && isCompound(s.exercise) ? Number((s.weight + 2.5).toFixed(1)) : s.weight,
         reps: idx > 0 ? s.reps + 1 : s.reps
       }));
-      summaryText = `AI Neuromuscular Optimization (Targeted Overload & Intensity Curve)`;
+      summaryText = `Balanced Load & Rep Tuning`;
       rationales = [
-        "Calibrated load distribution based on historical workout sets.",
-        "Optimized working sets for peak rate of force development."
+        "Balanced load and rep changes across the existing working sets.",
+        "Kept the adjustment local and reviewable before application."
       ];
     }
 
@@ -529,7 +531,7 @@ export function WorkoutDetailModal({
   };
 
   const handleApplyOptimization = async () => {
-    if (!proposedSets) return;
+    if (!canOptimize || !proposedSets) return;
     setSaving(true);
     try {
       const updatedExercises = rebuildExercisesPreservingIdentity(proposedSets, workout.exercises || []);
@@ -735,30 +737,34 @@ export function WorkoutDetailModal({
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <Button 
-                    size="sm" 
-                    variant={showOptimizer ? "secondary" : "outline"}
-                    className="h-7 text-xs font-semibold gap-1 border-primary/30 text-primary hover:bg-primary/10"
-                    onClick={() => {
-                      if (!showOptimizer) {
-                        handleRunOptimization('OVERLOAD');
-                      } else {
-                        setShowOptimizer(false);
-                      }
-                    }}
-                  >
-                    <Sparkles size={12} /> 
-                    <span>{showOptimizer ? "Sets View" : "⚡ Optimize"}</span>
-                  </Button>
+                  {canOptimize && (
+                    <Button 
+                      size="sm" 
+                      variant={showOptimizer ? "secondary" : "outline"}
+                      className="h-7 text-xs font-semibold gap-1 border-primary/30 text-primary hover:bg-primary/10"
+                      onClick={() => {
+                        if (!showOptimizer) {
+                          handleRunOptimization('OVERLOAD');
+                        } else {
+                          setShowOptimizer(false);
+                        }
+                      }}
+                    >
+                      <Sparkles size={12} /> 
+                      <span>{showOptimizer ? "Sets View" : "Tune Plan"}</span>
+                    </Button>
+                  )}
 
-                  <Button
-                    size="sm"
-                    onClick={() => setShowExercisePicker(true)}
-                    className="h-7 text-xs font-bold gap-1 bg-primary text-primary-foreground shadow-2xs"
-                  >
-                    <Plus size={13} />
-                    <span>Add Exercise</span>
-                  </Button>
+                  {isEditMode && (
+                    <Button
+                      size="sm"
+                      onClick={() => setShowExercisePicker(true)}
+                      className="h-7 text-xs font-bold gap-1 bg-primary text-primary-foreground shadow-2xs"
+                    >
+                      <Plus size={13} />
+                      <span>Add Exercise</span>
+                    </Button>
+                  )}
                 </div>
               </div>
 
@@ -778,7 +784,7 @@ export function WorkoutDetailModal({
                       { id: 'OVERLOAD', label: 'Overload', desc: '+2.5-5kg Load', icon: TrendingUp },
                       { id: 'VOLUME', label: 'Hypertrophy', desc: '+2 Reps & Back-off', icon: Layers },
                       { id: 'DELOAD', label: 'Deload', desc: '-35% Load Reset', icon: RotateCcw },
-                      { id: 'CUSTOM_AI', label: 'Neural AI', desc: 'Custom Curve', icon: BrainIcon }
+                      { id: 'CUSTOM_AI', label: 'Balanced', desc: 'Mixed Load + Reps', icon: BrainIcon }
                     ].map(item => {
                       const Icon = item.icon;
                       const active = strategy === item.id;
