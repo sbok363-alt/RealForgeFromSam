@@ -117,14 +117,16 @@ export async function getWorkouts(userId: string): Promise<Workout[]> {
 }
 
 export async function getWorkout(workoutId: string, userId: string): Promise<Workout | null> {
-  try {
-    const docRef = doc(db, 'workouts', workoutId);
-    const snap = await getDoc(docRef);
-    if (snap.exists()) {
-      return { id: snap.id, ...snap.data() } as Workout;
+  if (!isGuestUserId(userId)) {
+    try {
+      const docRef = doc(db, 'workouts', workoutId);
+      const snap = await getDoc(docRef);
+      if (snap.exists()) {
+        return { id: snap.id, ...snap.data() } as Workout;
+      }
+    } catch (e) {
+      console.warn("Could not fetch workout from Firestore:", e);
     }
-  } catch (e) {
-    console.warn("Could not fetch workout from Firestore:", e);
   }
 
   const list = await getWorkouts(userId);
@@ -211,37 +213,30 @@ export async function saveWorkout(
 }
 
 export async function deleteWorkout(
-  workoutId: string, 
+  workoutId: string,
   userId: string,
   actor: 'USER' | 'AI_BRAIN' = 'USER'
 ): Promise<void> {
-  const token = (await auth.currentUser?.getIdToken()) || 'demo-token';
-  const mutationId = crypto.randomUUID();
+  if (!isGuestUserId(userId)) {
+    const token = await auth.currentUser?.getIdToken();
+    if (!token) throw new Error('Not authenticated');
+    const mutationId = crypto.randomUUID();
 
-  try {
     const res = await fetch(`/api/workouts/${workoutId}`, {
       method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`
       },
-      body: JSON.stringify({ mutationId })
+      body: JSON.stringify({ mutationId, actor })
     });
 
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       throw new Error(data.error || 'Failed to delete workout');
     }
-  } catch (e: any) {
-    console.warn("Server deleteWorkout failed, attempting fallback:", e);
-    if (!token || token === 'demo-token') {
-      // Proceed with local deletion
-    } else {
-      throw e;
-    }
   }
 
-  // Remove from localStorage cache
   const all = await getWorkouts(userId);
   const nextList = all.filter(w => w.id !== workoutId);
   localStorage.setItem(`forge_workouts_${userId}`, JSON.stringify(nextList));
