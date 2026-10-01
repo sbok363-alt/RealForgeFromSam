@@ -1120,3 +1120,60 @@ export async function mutateWorkout(
   return authoritative;
 }
 
+
+export interface CloudMigrationExpectation {
+  workoutIds: string[];
+  planIds: string[];
+  bodyweightIds: string[];
+  personalRecordIds: string[];
+  targetIds: string[];
+  requireCompletedProfile: boolean;
+  autonomyLevel: AutonomyLevel;
+}
+
+export async function verifyCloudMigration(
+  userId: string,
+  expected: CloudMigrationExpectation
+): Promise<void> {
+  const requireIds = (label: string, expectedIds: string[], actualIds: string[]) => {
+    const actual = new Set(actualIds);
+    const missing = expectedIds.filter((id) => !actual.has(id));
+    if (missing.length > 0) {
+      throw new Error(`${label} cloud verification failed: missing ${missing.join(', ')}`);
+    }
+  };
+
+  const [
+    profileSnap,
+    permissionsSnap,
+    workoutSnap,
+    planSnap,
+    bodyweightSnap,
+    personalRecordSnap,
+    targetSnap,
+  ] = await Promise.all([
+    getDoc(doc(db, 'users', userId)),
+    getDoc(doc(db, 'user_permissions', userId)),
+    getDocs(query(collection(db, 'workouts'), where('userId', '==', userId))),
+    getDocs(query(collection(db, 'plans'), where('userId', '==', userId))),
+    getDocs(query(collection(db, 'bodyweight'), where('userId', '==', userId))),
+    getDocs(query(collection(db, 'personal_records'), where('userId', '==', userId))),
+    getDocs(query(collection(db, 'target_1rms'), where('userId', '==', userId))),
+  ]);
+
+  if (expected.requireCompletedProfile) {
+    if (!profileSnap.exists() || !Boolean(profileSnap.data()?.onboardingCompleted)) {
+      throw new Error('profile cloud verification failed');
+    }
+  }
+
+  if (!permissionsSnap.exists() || permissionsSnap.data()?.autonomyLevel !== expected.autonomyLevel) {
+    throw new Error('permissions cloud verification failed');
+  }
+
+  requireIds('workout', expected.workoutIds, workoutSnap.docs.map((item) => item.id));
+  requireIds('plan', expected.planIds, planSnap.docs.map((item) => item.id));
+  requireIds('bodyweight', expected.bodyweightIds, bodyweightSnap.docs.map((item) => item.id));
+  requireIds('personal record', expected.personalRecordIds, personalRecordSnap.docs.map((item) => item.id));
+  requireIds('target', expected.targetIds, targetSnap.docs.map((item) => item.id));
+}
