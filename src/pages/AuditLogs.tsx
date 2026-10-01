@@ -18,6 +18,7 @@ import {
   Calendar
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { isGuestUserId } from '../lib/guest-session';
 
 export default function AuditLogsPage() {
   const { user } = useAuthStore();
@@ -27,6 +28,7 @@ export default function AuditLogsPage() {
   const [undoingId, setUndoingId] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [actorFilter, setActorFilter] = useState<string>('ALL');
+  const isGuest = Boolean(user && isGuestUserId(user.uid));
 
   const fetchData = async () => {
     if (!user) return;
@@ -56,7 +58,9 @@ export default function AuditLogsPage() {
       if (res.success) {
         setMessage({
           type: 'success',
-          text: `Successfully rolled back mutation! ${res.workout?.title || 'Workout'} restored to OCC v${res.workout?.version}.`
+          text: res.deleted
+            ? 'Workout creation rolled back. The locally created workout was removed.'
+            : `${res.workout?.title || 'Workout'} restored as OCC v${res.workout?.version}.`
         });
         await fetchData();
       } else {
@@ -111,11 +115,13 @@ export default function AuditLogsPage() {
           <div className="flex items-center gap-2">
             <h1 className="text-2xl md:text-3xl font-display font-bold">Mutation Audit Trail</h1>
             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-              <ShieldCheck size={13} /> Append-Only
+              <ShieldCheck size={13} /> {isGuest ? 'Local Audit' : 'Server Audit'}
             </span>
           </div>
           <p className="text-muted-foreground text-sm mt-1">
-            Complete cryptographic audit log of all manual edits, AI proposals, and autonomous adjustments with contiguous rollback support.
+            {isGuest
+              ? 'Device-local mutation history with contiguous rollback for Guest workouts.'
+              : 'Server-authoritative mutation history for manual edits, AI proposals, and autonomous adjustments with contiguous rollback support.'}
           </p>
         </div>
       </header>
@@ -172,7 +178,9 @@ export default function AuditLogsPage() {
           <History size={40} className="mx-auto opacity-30 text-primary" />
           <h3 className="font-semibold text-base text-foreground">No audit entries recorded</h3>
           <p className="text-xs max-w-sm mx-auto">
-            Every workout set modification or AI proposal approval records an immutable record here with full inverse delta snapshots.
+            {isGuest
+              ? 'Guest workout changes will appear here with local inverse-delta snapshots.'
+              : 'Server-authoritative workout and proposal mutations appear here with inverse-delta snapshots.'}
           </p>
         </div>
       ) : (
