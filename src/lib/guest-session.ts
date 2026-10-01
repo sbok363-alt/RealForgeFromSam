@@ -111,6 +111,33 @@ export function hasLocalGuestData(): boolean {
   });
 }
 
+export function retireGuestTrainingDataAfterUpgrade(userId: string): void {
+  if (!canUseStorage() || !isGuestUserId(userId)) return;
+
+  const stored = getStoredGuestIdentity();
+  if (stored?.uid === userId) {
+    window.localStorage.removeItem(GUEST_IDENTITY_KEY);
+  }
+  window.localStorage.removeItem(GUEST_SESSION_KEY);
+
+  const keys = [
+    `forge_workouts_${userId}`,
+    guestProfileKey(userId),
+    `forge_plans_${userId}`,
+    `forge_bw_${userId}`,
+    `forge_prs_${userId}`,
+    `forge_target_1rms_${userId}`,
+    `forge_permissions_${userId}`,
+    `forge_audit_logs_${userId}`,
+    `forge_onboarded_${userId}`,
+    `forge_seeded_${userId}`,
+  ];
+
+  for (const key of keys) {
+    window.localStorage.removeItem(key);
+  }
+}
+
 let guestCloudMigrationInProgress = false;
 
 export function beginGuestCloudMigration(): void {
