@@ -52,8 +52,14 @@ export function MutationAuditModal({
     setErrorMsg(null);
     try {
       const res = await undoMutation(log.id, userId);
-      if (res.success && res.workout) {
-        if (onWorkoutRestored) onWorkoutRestored(res.workout);
+      if (res.success) {
+        if (res.workout && onWorkoutRestored) {
+          onWorkoutRestored(res.workout);
+        }
+        if (res.deleted) {
+          onClose();
+          return;
+        }
         await fetchLogs();
       } else {
         setErrorMsg(res.error || 'Failed to perform contiguous undo');
