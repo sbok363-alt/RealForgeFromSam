@@ -26,6 +26,7 @@ import {
   beginGuestCloudMigration,
   endGuestCloudMigration,
   isGuestUserId,
+  retireGuestTrainingDataAfterUpgrade,
   setGuestSessionActive,
   updateGuestDisplayName,
 } from '../lib/guest-session';
@@ -131,6 +132,7 @@ export default function Profile() {
       // Server audit logs are server-authoritative and cannot be forged by the client.
       // Preserve Guest audit history locally under the cloud UID instead of pretending to upload it.
       migrateLocalAuditHistory(guestUid, result.user.uid);
+      retireGuestTrainingDataAfterUpgrade(guestUid);
 
       endGuestCloudMigration();
       setGuestSessionActive(false);
