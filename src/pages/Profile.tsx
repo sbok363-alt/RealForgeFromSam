@@ -6,6 +6,8 @@ import { auth } from '../lib/firebase';
 import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { getUserProfile, getWorkouts, saveUserProfile, saveWorkout } from '../lib/api';
 import {
+  beginGuestCloudMigration,
+  endGuestCloudMigration,
   isGuestUserId,
   setGuestSessionActive,
   updateGuestDisplayName,
@@ -43,6 +45,7 @@ export default function Profile() {
     const guestWorkouts = await getWorkouts(guestUid);
     const guestProfile = await getUserProfile(guestUid);
 
+    beginGuestCloudMigration();
     try {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
@@ -71,11 +74,13 @@ export default function Profile() {
         throw new Error('Guest workout migration could not be verified');
       }
 
+      endGuestCloudMigration();
       setGuestSessionActive(false);
       localStorage.removeItem('forge_demo_session');
       setUser(result.user);
     } catch (err: any) {
       console.error("Connect Google migration error:", err);
+      endGuestCloudMigration();
       setGuestSessionActive(true);
       try {
         await auth.signOut();
@@ -85,6 +90,7 @@ export default function Profile() {
         'Google sync was not completed. Your local guest data is still on this device.'
       );
     } finally {
+      endGuestCloudMigration();
       setConnectingGoogle(false);
     }
   };
