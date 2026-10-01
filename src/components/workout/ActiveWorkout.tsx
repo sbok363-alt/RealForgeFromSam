@@ -58,6 +58,8 @@ export default function ActiveWorkout({
   const [restTimeLeft, setRestTimeLeft] = useState(0);
   const [saving, setSaving] = useState(false);
   const [showSelector, setShowSelector] = useState(false);
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+  const [exercisePendingRemoval, setExercisePendingRemoval] = useState<{ id: string; name: string } | null>(null);
   const [allUserWorkouts, setAllUserWorkouts] = useState<Workout[]>([]);
 
   // Keep screen awake while a session is in progress (gym-friendly)
@@ -222,17 +224,36 @@ export default function ActiveWorkout({
 
   return (
     <div className="space-y-6 pb-24 relative max-w-3xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between sticky top-0 bg-background/95 backdrop-blur z-20 py-2 border-b border-border -mx-4 px-4 md:-mx-8 md:px-8">
-        <div>
-          <h2 className="text-xl font-bold font-display">{activeWorkout.title || activeWorkout.name || 'Workout Session'}</h2>
-          <div className="text-xs text-muted-foreground">Active Session Logger</div>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="ghost" size="sm" onClick={() => discardWorkout()} disabled={isFinishing}>Cancel</Button>
-          <Button variant="default" size="sm" onClick={handleSaveWorkout} disabled={saving || isFinishing || Boolean(syncConflict)} className="font-semibold">
-            {saving || isFinishing ? 'Finishing...' : 'Finish & Save'}
-          </Button>
+      {/* Mobile-first active session header */}
+      <div className="sticky top-0 z-20 -mx-4 border-b border-border bg-background/95 px-4 py-2.5 backdrop-blur md:-mx-8 md:px-8">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="truncate text-lg font-bold font-display sm:text-xl">
+              {activeWorkout.title || activeWorkout.name || 'Workout Session'}
+            </h2>
+            <div className="text-[11px] text-muted-foreground">Workout in progress</div>
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowDiscardConfirm(true)}
+              disabled={isFinishing}
+              className="min-h-10 px-3 text-muted-foreground hover:text-destructive"
+            >
+              Discard
+            </Button>
+            <Button
+              variant="default"
+              size="sm"
+              onClick={handleSaveWorkout}
+              disabled={saving || isFinishing || Boolean(syncConflict)}
+              className="min-h-10 px-4 font-semibold"
+            >
+              <span className="sm:hidden">{saving || isFinishing ? 'Finishing…' : 'Finish'}</span>
+              <span className="hidden sm:inline">{saving || isFinishing ? 'Finishing…' : 'Finish & Save'}</span>
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -256,17 +277,38 @@ export default function ActiveWorkout({
         </div>
       )}
 
-      {/* Rest Timer Banner */}
+      {/* Contextual rest timer: visible, compact, and thumb-friendly */}
       {restTimeLeft > 0 && (
-        <div className="bg-primary/15 border border-primary/30 rounded-xl p-3 flex items-center justify-between sticky top-14 z-10 backdrop-blur shadow-lg shadow-primary/5">
-          <div className="flex items-center gap-2">
-            <Timer className="text-primary animate-pulse" size={20} />
-            <span className="font-mono font-bold text-lg text-primary">{formatTime(restTimeLeft)}</span>
-            <span className="text-xs text-muted-foreground hidden sm:inline">Rest in progress</span>
+        <div
+          className="sticky top-[61px] z-10 flex items-center justify-between gap-3 rounded-xl border border-primary/30 bg-background/95 p-2.5 shadow-lg shadow-primary/5 backdrop-blur"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="flex min-w-0 items-center gap-2">
+            <Timer className="shrink-0 text-primary" size={19} />
+            <span className="font-mono text-xl font-black tabular-nums text-primary">
+              {formatTime(restTimeLeft)}
+            </span>
+            <span className="hidden text-xs text-muted-foreground sm:inline">Rest</span>
           </div>
-          <div className="flex gap-2">
-            <Button size="sm" variant="outline" className="h-8 text-xs bg-background/60" onClick={() => setRestTimer(restTimeLeft + 30)}>+30s</Button>
-            <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={clearRestTimer}><X size={16}/></Button>
+          <div className="flex shrink-0 gap-1.5">
+            <Button
+              size="sm"
+              variant="outline"
+              className="min-h-10 bg-background/60 px-3 text-xs font-bold"
+              onClick={() => setRestTimer(restTimeLeft + 30)}
+            >
+              +30s
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-10 w-10 p-0"
+              onClick={clearRestTimer}
+              aria-label="Dismiss rest timer"
+            >
+              <X size={17}/>
+            </Button>
           </div>
         </div>
       )}
@@ -278,6 +320,15 @@ export default function ActiveWorkout({
           const report = progressionReports[ex.exerciseId];
           const lastPerf = report?.lastPerformance;
           const target = report?.nextTarget;
+          const previousSession = getPreviousExerciseSession(
+            allUserWorkouts,
+            def?.name || ex.exerciseId,
+            activeWorkout.id
+          );
+          const currentVolume = currentExerciseVolume(ex.sets);
+          const volumeDelta = previousSession
+            ? volumeDeltaPct(currentVolume, previousSession.sessionVolume)
+            : null;
 
           return (
             <Card key={ex.id} className="overflow-hidden shadow-xs border-border/80">
@@ -285,87 +336,29 @@ export default function ActiveWorkout({
                 <div className="space-y-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <CardTitle className="text-base font-bold text-foreground">{def?.name || ex.exerciseId}</CardTitle>
-                    {report && getProgressionBadge(report.state, report.deltaE1RM)}
                   </div>
                   <div className="text-xs text-muted-foreground">{def?.primaryMuscle} • {def?.equipment}</div>
                 </div>
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
-                  className="text-muted-foreground hover:text-destructive h-8 w-8 -mr-2" 
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-10 w-10 -mr-2 text-muted-foreground hover:text-destructive"
                   disabled={isFinishing}
-                  onClick={() => !isFinishing && removeExercise(ex.id)}
+                  onClick={() => {
+                    if (isFinishing) return;
+                    setExercisePendingRemoval({
+                      id: ex.id,
+                      name: def?.name || ex.exerciseId,
+                    });
+                  }}
+                  aria-label={`Remove ${def?.name || ex.exerciseId}`}
                 >
-                  <X size={16} />
+                  <X size={17} />
                 </Button>
               </CardHeader>
 
               <CardContent className="p-0">
-                {/* Previous Performance & Next Target Banner */}
-                <div className="bg-secondary/15 px-4 py-2.5 border-b border-border/50 space-y-1.5 text-xs">
-                  {lastPerf && (
-                    <div className="flex items-center justify-between text-muted-foreground">
-                      <span>Last Performance:</span>
-                      <span className="font-mono font-medium text-foreground">
-                        {lastPerf.weight}kg × {lastPerf.reps} reps {lastPerf.rir !== undefined ? `@ RIR ${lastPerf.rir}` : ''} (e1RM: {lastPerf.e1RM}kg)
-                      </span>
-                    </div>
-                  )}
-
-                  {target && (
-                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/30">
-                      <div className="flex items-center gap-1.5 font-medium text-primary">
-                        <Target size={13} className="shrink-0" />
-                        <span>Next Target: <strong>{target.targetWeight}kg</strong> × {target.targetRepsMin}–{target.targetRepsMax} reps {target.suggestedRIR !== undefined ? `@ RIR ${target.suggestedRIR}` : ''}</span>
-                      </div>
-                      <Button 
-                        size="sm" 
-                        variant="outline" 
-                        className="h-6 px-2 text-[10px] font-bold border-primary/30 text-primary hover:bg-primary/10 shrink-0"
-                        disabled={isFinishing}
-                        onClick={() => handleApplyNextTarget(ex.id)}
-                      >
-                        Apply Target
-                      </Button>
-                    </div>
-                  )}
-                </div>
-                
-                {/* Exercise volume vs last session */}
-                {(() => {
-                  const prev = getPreviousExerciseSession(
-                    allUserWorkouts,
-                    def?.name || ex.exerciseId,
-                    activeWorkout.id
-                  );
-                  const curVol = currentExerciseVolume(ex.sets);
-                  const dPct = prev ? volumeDeltaPct(curVol, prev.sessionVolume) : null;
-                  if (!prev) return null;
-                  return (
-                    <div className="px-3 pt-2 flex items-center justify-between text-[11px]">
-                      <span className="text-muted-foreground font-mono">
-                        Last session vol:{' '}
-                        <span className="text-foreground font-semibold">
-                          {Math.round(prev.sessionVolume).toLocaleString()} kg
-                        </span>
-                      </span>
-                      {dPct !== null && curVol > 0 && (
-                        <span
-                          className={cn(
-                            'font-bold px-2 py-0.5 rounded-full border',
-                            dPct > 0 && 'bg-emerald-500/15 text-emerald-600 border-emerald-500/30',
-                            dPct < 0 && 'bg-amber-500/15 text-amber-600 border-amber-500/30',
-                            dPct === 0 && 'bg-secondary text-muted-foreground border-border'
-                          )}
-                        >
-                          {dPct > 0 ? `+${dPct}%` : dPct < 0 ? `${dPct}%` : '='} vs last
-                        </span>
-                      )}
-                    </div>
-                  );
-                })()}
-
-                {/* Gym-first set rows: big steppers + full-width complete + vs last */}
+                {/* Core loop first: the logger is always the first interactive content. */}
                 <div className="p-3 space-y-3">
                   {ex.sets.map((set, setIndex) => {
                     const cmp = compareLiveSet(
@@ -415,6 +408,82 @@ export default function ActiveWorkout({
                     <Plus size={14} className="mr-1" /> Add Set
                   </Button>
                 </div>
+
+                {(report || lastPerf || target || previousSession) && (
+                  <details className="border-t border-border/40 bg-secondary/10 group">
+                    <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-4 py-2.5 text-xs font-bold text-muted-foreground touch-manipulation">
+                      <span>Session guidance</span>
+                      <span className="text-[10px] font-medium text-muted-foreground/80 group-open:hidden">
+                        Optional
+                      </span>
+                      <span className="hidden text-[10px] font-medium text-muted-foreground/80 group-open:inline">
+                        Hide
+                      </span>
+                    </summary>
+                    <div className="space-y-3 border-t border-border/30 px-4 py-3 text-xs">
+                      {report && (
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="text-muted-foreground">Progress</span>
+                          {getProgressionBadge(report.state, report.deltaE1RM)}
+                        </div>
+                      )}
+
+                      {lastPerf && (
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-muted-foreground">
+                          <span>Last performance</span>
+                          <span className="font-mono font-medium text-foreground">
+                            {lastPerf.weight}kg × {lastPerf.reps}
+                            {lastPerf.rir !== undefined ? ` @ RIR ${lastPerf.rir}` : ''}
+                          </span>
+                        </div>
+                      )}
+
+                      {target && (
+                        <div className="flex items-center justify-between gap-3 rounded-xl border border-primary/20 bg-primary/5 p-2.5">
+                          <div className="flex min-w-0 items-start gap-1.5 text-primary">
+                            <Target size={13} className="mt-0.5 shrink-0" />
+                            <span>
+                              Target <strong>{target.targetWeight}kg</strong> × {target.targetRepsMin}–{target.targetRepsMax}
+                              {target.suggestedRIR !== undefined ? ` @ RIR ${target.suggestedRIR}` : ''}
+                            </span>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="min-h-9 shrink-0 border-primary/30 px-2 text-[10px] font-bold text-primary hover:bg-primary/10"
+                            disabled={isFinishing}
+                            onClick={() => handleApplyNextTarget(ex.id)}
+                          >
+                            Apply
+                          </Button>
+                        </div>
+                      )}
+
+                      {previousSession && (
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-muted-foreground">
+                          <span>
+                            Last session volume{' '}
+                            <strong className="font-mono text-foreground">
+                              {Math.round(previousSession.sessionVolume).toLocaleString()} kg
+                            </strong>
+                          </span>
+                          {volumeDelta !== null && currentVolume > 0 && (
+                            <span
+                              className={cn(
+                                'font-bold px-2 py-0.5 rounded-full border',
+                                volumeDelta > 0 && 'bg-emerald-500/15 text-emerald-600 border-emerald-500/30',
+                                volumeDelta < 0 && 'bg-amber-500/15 text-amber-600 border-amber-500/30',
+                                volumeDelta === 0 && 'bg-secondary text-muted-foreground border-border'
+                              )}
+                            >
+                              {volumeDelta > 0 ? `+${volumeDelta}%` : volumeDelta < 0 ? `${volumeDelta}%` : '='} vs last
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </details>
+                )}
               </CardContent>
             </Card>
           );
@@ -436,6 +505,91 @@ export default function ActiveWorkout({
         <Plus size={16} className="mr-2 text-primary" /> Add Exercise
       </Button>
       
+      {exercisePendingRemoval && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-3 backdrop-blur-sm sm:items-center"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="remove-exercise-title"
+          onClick={() => setExercisePendingRemoval(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-3xl border border-white/10 bg-[#101012] p-5 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h3 id="remove-exercise-title" className="text-lg font-black text-white">
+              Remove {exercisePendingRemoval.name}?
+            </h3>
+            <p className="mt-2 text-sm leading-relaxed text-neutral-400">
+              Its sets and any progress logged in this active workout will be removed.
+            </p>
+            <div className="mt-5 space-y-2">
+              <Button
+                className="min-h-12 w-full font-bold"
+                onClick={() => setExercisePendingRemoval(null)}
+                autoFocus
+              >
+                Keep exercise
+              </Button>
+              <Button
+                variant="danger"
+                className="min-h-12 w-full font-bold"
+                disabled={isFinishing}
+                onClick={() => {
+                  const target = exercisePendingRemoval;
+                  setExercisePendingRemoval(null);
+                  removeExercise(target.id);
+                }}
+              >
+                Remove exercise
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDiscardConfirm && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-3 backdrop-blur-sm sm:items-center"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="discard-workout-title"
+          onClick={() => setShowDiscardConfirm(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-3xl border border-white/10 bg-[#101012] p-5 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h3 id="discard-workout-title" className="text-lg font-black text-white">
+              Discard this workout?
+            </h3>
+            <p className="mt-2 text-sm leading-relaxed text-neutral-400">
+              Your active session will be removed from this device. This cannot be undone.
+            </p>
+            <div className="mt-5 space-y-2">
+              <Button
+                className="min-h-12 w-full font-bold"
+                onClick={() => setShowDiscardConfirm(false)}
+                autoFocus
+              >
+                Keep workout
+              </Button>
+              <Button
+                variant="danger"
+                className="min-h-12 w-full font-bold"
+                disabled={isFinishing}
+                onClick={() => {
+                  setShowDiscardConfirm(false);
+                  discardWorkout();
+                }}
+              >
+                Discard workout
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showSelector && (
         <ExerciseSelector 
           onClose={() => setShowSelector(false)} 
