@@ -67,8 +67,6 @@ export function WorkoutDetailModal({
   onOpenBrain,
   onOpenAudit
 }: WorkoutDetailModalProps) {
-  if (!isOpen) return null;
-
   const { status: geminiStatus, apiKey: geminiApiKey, openModal: openBYOKModal } = useGeminiStore();
   const { 
     activeWorkout, 
@@ -78,6 +76,10 @@ export function WorkoutDetailModal({
     clearRestTimer: clearStoreRestTimer
   } = useWorkoutStore();
   const { user } = useAuthStore();
+  const isLiveSession = Boolean(
+    activeWorkout?.id === workout.id &&
+    (activeWorkout.status === 'IN_PROGRESS' || activeWorkout.status === 'in-progress')
+  );
 
   const [title, setTitle] = useState(workout.title || 'Workout Session');
   const [scheduledDate, setScheduledDate] = useState(workout.scheduledDate);
@@ -139,16 +141,21 @@ export function WorkoutDetailModal({
     }
   }, [isOpen, workout.id, activeWorkout?.id]);
 
-  // Duration timer
+  // Duration only ticks for the actually active session. History/detail views stay static.
   useEffect(() => {
     if (!isOpen) return;
-    const startMs = workout.startedAt || activeWorkout?.startedAt || Date.now();
+    if (!isLiveSession) {
+      setDuration(workout.duration || 0);
+      return;
+    }
+
+    const startMs = activeWorkout?.startedAt || workout.startedAt || Date.now();
     setDuration(Math.floor((Date.now() - startMs) / 1000));
     const interval = setInterval(() => {
       setDuration(Math.floor((Date.now() - startMs) / 1000));
     }, 1000);
     return () => clearInterval(interval);
-  }, [isOpen, workout.startedAt, activeWorkout?.startedAt]);
+  }, [isOpen, isLiveSession, workout.duration, workout.startedAt, activeWorkout?.startedAt]);
 
   // Rest countdown ticker
   useEffect(() => {
@@ -325,6 +332,7 @@ export function WorkoutDetailModal({
   };
 
   const handleUpdateSet = (index: number, field: keyof WorkoutSetItem, value: any) => {
+    if (!isEditMode && !isLiveSession) return;
     const updated = [...sets];
     updated[index] = { ...updated[index], [field]: value };
     setSets(updated);
@@ -335,7 +343,7 @@ export function WorkoutDetailModal({
 
   /** Gym-friendly quick adjust: weight steps 2.5kg, reps ±1, never negative */
   const handleQuickAdjust = (index: number, field: 'weight' | 'reps', delta: number) => {
-    if (isEditMode) return;
+    if (isEditMode || !isLiveSession) return;
     const current = sets[index];
     if (!current) return;
     if (field === 'weight') {
@@ -351,7 +359,7 @@ export function WorkoutDetailModal({
 
   // Handle toggling set completion -> auto triggers rest timer on complete!
   const handleToggleSet = (index: number) => {
-    if (isEditMode) return;
+    if (isEditMode || !isLiveSession) return;
     
     const wasCompleted = sets[index].completed;
     const isCompleted = !wasCompleted;
@@ -534,7 +542,7 @@ export function WorkoutDetailModal({
         {
           title,
           scheduledDate,
-          status: isEditMode ? workout.status : 'IN_PROGRESS',
+          status: workout.status,
           sets: proposedSets,
           exercises: updatedExercises,
           exerciseNotes
@@ -549,32 +557,24 @@ export function WorkoutDetailModal({
   };
 
   const handleSave = async () => {
+    if (!isEditMode) return;
     setSaving(true);
     try {
-      const isCompleting = !isEditMode;
-      const newStatus = isCompleting ? 'COMPLETED' : workout.status;
-      
       const updatedExercises = rebuildExercisesPreservingIdentity(sets, workout.exercises || []);
 
       const updates = {
         title,
         scheduledDate,
-        status: newStatus,
+        status: workout.status,
         sets,
         exercises: updatedExercises,
         exerciseNotes
       };
       
       const vol = calculateVolume(sets);
-      const result = await mutateWorkout(workout.id, workout.version, updates, { mutationId: crypto.randomUUID(), duration, volume: vol });
-      
-      if (isCompleting) {
-        setShowCelebration(true);
-        onSave(result);
-      } else {
-        onSave(result);
-        onClose();
-      }
+      const result = await mutateWorkout(workout.id, workout.version, updates, { mutationId: crypto.randomUUID(), duration: workout.duration, volume: vol });
+      onSave(result);
+      onClose();
     } catch (e: any) {
       console.error(e);
       if (e.status === 409) {
@@ -651,6 +651,8 @@ export function WorkoutDetailModal({
   }, [sets]);
 
   const uniqueExerciseNames = groupedExercises.map(g => g.exercise);
+
+  if (!isOpen) return null;
 
   return (
     <>
@@ -1090,6 +1092,7 @@ export function WorkoutDetailModal({
                                         placeholder={rep?.nextTarget ? rep.nextTarget.targetWeight.toString() : "0"}
                                         title={rep?.nextTarget ? `Overload Target: ${rep.nextTarget.targetWeight}kg × ${rep.nextTarget.targetRepsMax} reps` : undefined}
                                         onChange={(e) => handleUpdateSet(index, 'weight', parseFloat(e.target.value) || 0)}
+                                        disabled={!isEditMode && !isLiveSession}
                                         className={cn(
                                           "w-full h-8 text-xs text-center font-mono font-bold rounded-lg border transition-all focus:outline-none focus:ring-1 focus:ring-primary px-1 placeholder:text-muted-foreground/40",
                                           isCompleted
@@ -1107,6 +1110,7 @@ export function WorkoutDetailModal({
                                         placeholder={rep?.nextTarget ? rep.nextTarget.targetRepsMax.toString() : "0"}
                                         title={rep?.nextTarget ? `Overload Target: ${rep.nextTarget.targetWeight}kg × ${rep.nextTarget.targetRepsMax} reps` : undefined}
                                         onChange={(e) => handleUpdateSet(index, 'reps', parseInt(e.target.value) || 0)}
+                                        disabled={!isEditMode && !isLiveSession}
                                         className={cn(
                                           "w-full h-8 text-xs text-center font-mono font-bold rounded-lg border transition-all focus:outline-none focus:ring-1 focus:ring-primary px-1 placeholder:text-muted-foreground/40",
                                           isCompleted
@@ -1125,6 +1129,7 @@ export function WorkoutDetailModal({
                                         value={set.rir !== undefined ? set.rir : ''}
                                         placeholder="—"
                                         onChange={(e) => handleUpdateSet(index, 'rir', e.target.value === '' ? undefined : parseInt(e.target.value))}
+                                        disabled={!isEditMode && !isLiveSession}
                                         className={cn(
                                           "w-full h-8 text-xs text-center font-mono rounded-lg border transition-all focus:outline-none focus:ring-1 focus:ring-primary px-1",
                                           isCompleted
@@ -1137,19 +1142,19 @@ export function WorkoutDetailModal({
                                     {/* Hevy-Style Checkmark Toggle Button */}
                                     <div className="flex justify-center">
                                       <motion.button
-                                        whileTap={!isEditMode ? { scale: 0.88 } : {}}
+                                        whileTap={isLiveSession && !isEditMode ? { scale: 0.88 } : {}}
                                         animate={isCompleted ? { scale: [1, 1.2, 1] } : {}}
                                         transition={{ duration: 0.25 }}
                                         onClick={() => handleToggleSet(index)}
                                         className={cn(
                                           "flex items-center justify-center h-7 w-7 rounded-lg border transition-all shadow-xs",
-                                          isEditMode ? "opacity-40 cursor-not-allowed" : "cursor-pointer",
+                                          !isLiveSession || isEditMode ? "opacity-40 cursor-not-allowed" : "cursor-pointer",
                                           isCompleted 
                                             ? "bg-emerald-500 text-white border-emerald-600 shadow-[0_0_10px_rgba(16,185,129,0.4)]" 
                                             : "bg-secondary/70 text-muted-foreground border-border/80 hover:bg-secondary hover:border-primary/50"
                                         )}
-                                        disabled={isEditMode}
-                                        title={isCompleted ? "Completed (Tap to undo)" : "Mark set complete"}
+                                        disabled={isEditMode || !isLiveSession}
+                                        title={!isLiveSession ? "Start this workout to log sets" : isCompleted ? "Completed (Tap to undo)" : "Mark set complete"}
                                       >
                                         {isCompleted && <Check size={14} strokeWidth={3} />}
                                       </motion.button>
@@ -1174,7 +1179,7 @@ export function WorkoutDetailModal({
                               })}
 
                               {/* Add Set Button for this exercise */}
-                              <div className="pt-1.5">
+                              {isEditMode && <div className="pt-1.5">
                                 <Button 
                                   size="sm" 
                                   variant="ghost" 
@@ -1183,14 +1188,14 @@ export function WorkoutDetailModal({
                                 >
                                   <Plus size={13} className="mr-1" /> Add Set
                                 </Button>
-                              </div>
+                              </div>}
                             </div>
                           </div>
                         );
                       })}
 
                       {/* Bottom Add Exercise CTA Button */}
-                      <div className="pt-2">
+                      {isEditMode && <div className="pt-2">
                         <Button
                           size="default"
                           variant="outline"
@@ -1200,7 +1205,7 @@ export function WorkoutDetailModal({
                           <Plus size={15} />
                           Add Another Exercise
                         </Button>
-                      </div>
+                      </div>}
                     </div>
                   )}
                 </div>
@@ -1238,18 +1243,17 @@ export function WorkoutDetailModal({
                       <Button variant="outline" size="sm" className="h-9 text-xs flex-1 sm:flex-none" onClick={onClose}>
                         Close
                       </Button>
-                      <Button 
-                        size="sm" 
-                        className={cn(
-                          "h-9 text-xs font-bold gap-1.5 text-white flex-1 sm:flex-none shadow-sm",
-                          isEditMode ? "bg-primary hover:bg-primary/90" : "bg-emerald-600 hover:bg-emerald-700"
-                        )} 
-                        onClick={handleSave} 
-                        disabled={saving}
-                      >
-                        {isEditMode ? <Save size={14} /> : <CheckCircle2 size={14} />}
-                        {saving ? 'Saving...' : (isEditMode ? 'Save Structure' : 'Finish Workout')}
-                      </Button>
+                      {isEditMode && (
+                        <Button 
+                          size="sm" 
+                          className="h-9 text-xs font-bold gap-1.5 bg-primary text-primary-foreground flex-1 sm:flex-none shadow-sm"
+                          onClick={handleSave} 
+                          disabled={saving}
+                        >
+                          <Save size={14} />
+                          {saving ? 'Saving...' : 'Save Structure'}
+                        </Button>
+                      )}
                     </>
                   )}
                 </div>
