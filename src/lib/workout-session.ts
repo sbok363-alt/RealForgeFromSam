@@ -28,7 +28,7 @@ export function projectCompletedWorkingSets(workout: Workout): WorkoutSetItem[] 
     return projectCompletedWorkingExercises(workout).flatMap((exercise) =>
       exercise.sets.map((set) => ({
         id: set.id,
-        exercise: exercise.exerciseId,
+        exercise: exercise.name || exercise.exerciseId,
         weight: set.weight,
         reps: set.reps,
         rir: set.rir,
