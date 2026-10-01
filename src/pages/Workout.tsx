@@ -35,11 +35,13 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '../lib/utils';
+import { isGuestUserId } from '../lib/guest-session';
 
 export default function WorkoutPage() {
   const { user } = useAuthStore();
   const navigate = useNavigate();
   const { activeWorkout, startWorkout, discardWorkout } = useWorkoutStore();
+  const isGuest = Boolean(user && isGuestUserId(user.uid));
 
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,6 +50,8 @@ export default function WorkoutPage() {
   const [conflictTargetWorkout, setConflictTargetWorkout] = useState<Workout | null>(null);
   const [workoutToDelete, setWorkoutToDelete] = useState<Workout | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [filter, setFilter] = useState<'ALL' | 'PLANNED' | 'COMPLETED'>('ALL');
 
   // Calculate historical PR counts for completed workouts using Epley's formula
@@ -117,23 +121,32 @@ export default function WorkoutPage() {
   };
 
   const handleCreateEmptyWorkout = async () => {
-    if (!user) return;
-    const todayStr = new Date().toISOString().split('T')[0];
-    const newW: Workout = {
-      id: crypto.randomUUID(),
-      userId: user.uid,
-      title: `Workout Session #${workouts.length + 1}`,
-      scheduledDate: todayStr,
-      status: 'PLANNED',
-      version: 1,
-      sets: [],        // NO HARDCODED SETS
-      exercises: [],   // STRICTLY EMPTY
-      updatedAt: new Date().toISOString()
-    };
+    if (!user || creating) return;
+    setCreating(true);
+    setActionError(null);
+    try {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const newW: Workout = {
+        id: crypto.randomUUID(),
+        userId: user.uid,
+        title: `Workout Session #${workouts.length + 1}`,
+        scheduledDate: todayStr,
+        status: 'PLANNED',
+        version: 1,
+        sets: [],
+        exercises: [],
+        updatedAt: new Date().toISOString()
+      };
 
-    const saved = await saveWorkout(newW, 'USER', `Created empty workout: ${newW.title}`);
-    setWorkouts(prev => [saved, ...prev]);
-    setSelectedWorkout(saved);
+      const saved = await saveWorkout(newW, 'USER', `Created empty workout: ${newW.title}`);
+      setWorkouts(prev => [saved, ...prev]);
+      setSelectedWorkout(saved);
+    } catch (error: any) {
+      console.error('Failed to create workout:', error);
+      setActionError(error?.message || 'Could not create the workout. Retry without losing your existing training.');
+    } finally {
+      setCreating(false);
+    }
   };
 
   const handleOpenBrainForWorkout = (workout: Workout) => {
@@ -148,6 +161,7 @@ export default function WorkoutPage() {
   const handleDeleteWorkout = async (workout: Workout) => {
     if (!user) return;
     setDeleting(true);
+    setActionError(null);
     try {
       await deleteWorkout(workout.id, user.uid);
       if (activeWorkout?.id === workout.id) {
@@ -158,8 +172,9 @@ export default function WorkoutPage() {
         setSelectedWorkout(null);
       }
       setWorkoutToDelete(null);
-    } catch (e) {
+    } catch (e: any) {
       console.error("Failed to delete workout:", e);
+      setActionError(e?.message || 'Could not delete the workout. Nothing was removed locally.');
     } finally {
       setDeleting(false);
     }
@@ -214,12 +229,19 @@ export default function WorkoutPage() {
           <Button 
             size="sm"
             onClick={handleCreateEmptyWorkout}
+            disabled={creating}
             className="text-xs font-semibold gap-1.5"
           >
-            <Plus size={15} /> New Workout
+            <Plus size={15} /> {creating ? 'Creating…' : 'New Workout'}
           </Button>
         </div>
       </header>
+
+      {actionError && (
+        <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2.5 text-xs text-destructive">
+          {actionError}
+        </div>
+      )}
 
       {/* Filter Tabs */}
       <div className="flex items-center gap-2 border-b border-border pb-2">
@@ -304,10 +326,12 @@ export default function WorkoutPage() {
           <Dumbbell size={40} className="mx-auto opacity-30 text-primary" />
           <h3 className="font-semibold text-base text-foreground">No workouts found</h3>
           <p className="text-xs max-w-sm mx-auto">
-            Create a custom workout or ask Hardstate Brain to construct a progressive overload routine for you.
+            {isGuest
+              ? 'Create a custom workout locally. Connect Google later if you want Hardstate Brain suggestions.'
+              : 'Create a custom workout or ask Hardstate Brain to construct a progressive overload routine for you.'}
           </p>
-          <Button size="sm" onClick={handleCreateEmptyWorkout}>
-            Create First Workout
+          <Button size="sm" onClick={handleCreateEmptyWorkout} disabled={creating}>
+            {creating ? 'Creating…' : 'Create First Workout'}
           </Button>
         </div>
       ) : (
