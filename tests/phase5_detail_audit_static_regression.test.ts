@@ -60,8 +60,10 @@ assert(
   'Guest rollback and proposal paths must never revive the legacy demo token fallback'
 );
 assert(
-  auditPage.includes("isGuest ? 'Local Audit' : 'Server Audit'"),
-  'Audit page must label Guest history as local rather than cryptographic/server authoritative'
+  auditPage.includes("isGuest ? 'Local Audit'") &&
+  auditPage.includes("'Server + Local History'") &&
+  auditPage.includes("'Server Audit'"),
+  'Audit page must distinguish Guest-local, mixed migrated, and server-authoritative history'
 );
 assert(
   auditModal.includes('if (res.deleted)'),
