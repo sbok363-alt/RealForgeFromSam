@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { User } from 'firebase/auth';
+import { getOrCreateGuestIdentity } from '../lib/guest-session';
 
 export interface ForgeUser {
   uid: string;
@@ -8,17 +9,21 @@ export interface ForgeUser {
   photoURL?: string | null;
   isAnonymous?: boolean;
   isDemo?: boolean;
+  isGuest?: boolean;
   getIdToken?: (forceRefresh?: boolean) => Promise<string>;
 }
 
-export const DEMO_USER: ForgeUser = {
-  uid: 'demo-athlete-forge',
-  displayName: 'Alex Rivers (Demo)',
-  email: 'athlete@forge.local',
-  photoURL: null,
-  isDemo: true,
-  getIdToken: async () => 'demo-token',
-};
+export function createGuestUser(): ForgeUser {
+  const identity = getOrCreateGuestIdentity();
+  return {
+    uid: identity.uid,
+    displayName: identity.displayName,
+    email: null,
+    photoURL: null,
+    isAnonymous: true,
+    isGuest: true,
+  };
+}
 
 interface AuthState {
   user: User | ForgeUser | null;
