@@ -320,6 +320,15 @@ export default function ActiveWorkout({
           const report = progressionReports[ex.exerciseId];
           const lastPerf = report?.lastPerformance;
           const target = report?.nextTarget;
+          const previousSession = getPreviousExerciseSession(
+            allUserWorkouts,
+            def?.name || ex.exerciseId,
+            activeWorkout.id
+          );
+          const currentVolume = currentExerciseVolume(ex.sets);
+          const volumeDelta = previousSession
+            ? volumeDeltaPct(currentVolume, previousSession.sessionVolume)
+            : null;
 
           return (
             <Card key={ex.id} className="overflow-hidden shadow-xs border-border/80">
@@ -327,7 +336,6 @@ export default function ActiveWorkout({
                 <div className="space-y-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <CardTitle className="text-base font-bold text-foreground">{def?.name || ex.exerciseId}</CardTitle>
-                    {report && getProgressionBadge(report.state, report.deltaE1RM)}
                   </div>
                   <div className="text-xs text-muted-foreground">{def?.primaryMuscle} • {def?.equipment}</div>
                 </div>
@@ -350,71 +358,7 @@ export default function ActiveWorkout({
               </CardHeader>
 
               <CardContent className="p-0">
-                {/* Previous Performance & Next Target Banner */}
-                <div className="bg-secondary/15 px-4 py-2.5 border-b border-border/50 space-y-1.5 text-xs">
-                  {lastPerf && (
-                    <div className="flex items-center justify-between text-muted-foreground">
-                      <span>Last Performance:</span>
-                      <span className="font-mono font-medium text-foreground">
-                        {lastPerf.weight}kg × {lastPerf.reps} reps {lastPerf.rir !== undefined ? `@ RIR ${lastPerf.rir}` : ''} (e1RM: {lastPerf.e1RM}kg)
-                      </span>
-                    </div>
-                  )}
-
-                  {target && (
-                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/30">
-                      <div className="flex items-center gap-1.5 font-medium text-primary">
-                        <Target size={13} className="shrink-0" />
-                        <span>Next Target: <strong>{target.targetWeight}kg</strong> × {target.targetRepsMin}–{target.targetRepsMax} reps {target.suggestedRIR !== undefined ? `@ RIR ${target.suggestedRIR}` : ''}</span>
-                      </div>
-                      <Button 
-                        size="sm" 
-                        variant="outline" 
-                        className="h-6 px-2 text-[10px] font-bold border-primary/30 text-primary hover:bg-primary/10 shrink-0"
-                        disabled={isFinishing}
-                        onClick={() => handleApplyNextTarget(ex.id)}
-                      >
-                        Apply Target
-                      </Button>
-                    </div>
-                  )}
-                </div>
-                
-                {/* Exercise volume vs last session */}
-                {(() => {
-                  const prev = getPreviousExerciseSession(
-                    allUserWorkouts,
-                    def?.name || ex.exerciseId,
-                    activeWorkout.id
-                  );
-                  const curVol = currentExerciseVolume(ex.sets);
-                  const dPct = prev ? volumeDeltaPct(curVol, prev.sessionVolume) : null;
-                  if (!prev) return null;
-                  return (
-                    <div className="px-3 pt-2 flex items-center justify-between text-[11px]">
-                      <span className="text-muted-foreground font-mono">
-                        Last session vol:{' '}
-                        <span className="text-foreground font-semibold">
-                          {Math.round(prev.sessionVolume).toLocaleString()} kg
-                        </span>
-                      </span>
-                      {dPct !== null && curVol > 0 && (
-                        <span
-                          className={cn(
-                            'font-bold px-2 py-0.5 rounded-full border',
-                            dPct > 0 && 'bg-emerald-500/15 text-emerald-600 border-emerald-500/30',
-                            dPct < 0 && 'bg-amber-500/15 text-amber-600 border-amber-500/30',
-                            dPct === 0 && 'bg-secondary text-muted-foreground border-border'
-                          )}
-                        >
-                          {dPct > 0 ? `+${dPct}%` : dPct < 0 ? `${dPct}%` : '='} vs last
-                        </span>
-                      )}
-                    </div>
-                  );
-                })()}
-
-                {/* Gym-first set rows: big steppers + full-width complete + vs last */}
+                {/* Core loop first: the logger is always the first interactive content. */}
                 <div className="p-3 space-y-3">
                   {ex.sets.map((set, setIndex) => {
                     const cmp = compareLiveSet(
@@ -464,6 +408,82 @@ export default function ActiveWorkout({
                     <Plus size={14} className="mr-1" /> Add Set
                   </Button>
                 </div>
+
+                {(report || lastPerf || target || previousSession) && (
+                  <details className="border-t border-border/40 bg-secondary/10 group">
+                    <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-4 py-2.5 text-xs font-bold text-muted-foreground touch-manipulation">
+                      <span>Session guidance</span>
+                      <span className="text-[10px] font-medium text-muted-foreground/80 group-open:hidden">
+                        Optional
+                      </span>
+                      <span className="hidden text-[10px] font-medium text-muted-foreground/80 group-open:inline">
+                        Hide
+                      </span>
+                    </summary>
+                    <div className="space-y-3 border-t border-border/30 px-4 py-3 text-xs">
+                      {report && (
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="text-muted-foreground">Progress</span>
+                          {getProgressionBadge(report.state, report.deltaE1RM)}
+                        </div>
+                      )}
+
+                      {lastPerf && (
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-muted-foreground">
+                          <span>Last performance</span>
+                          <span className="font-mono font-medium text-foreground">
+                            {lastPerf.weight}kg × {lastPerf.reps}
+                            {lastPerf.rir !== undefined ? ` @ RIR ${lastPerf.rir}` : ''}
+                          </span>
+                        </div>
+                      )}
+
+                      {target && (
+                        <div className="flex items-center justify-between gap-3 rounded-xl border border-primary/20 bg-primary/5 p-2.5">
+                          <div className="flex min-w-0 items-start gap-1.5 text-primary">
+                            <Target size={13} className="mt-0.5 shrink-0" />
+                            <span>
+                              Target <strong>{target.targetWeight}kg</strong> × {target.targetRepsMin}–{target.targetRepsMax}
+                              {target.suggestedRIR !== undefined ? ` @ RIR ${target.suggestedRIR}` : ''}
+                            </span>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="min-h-9 shrink-0 border-primary/30 px-2 text-[10px] font-bold text-primary hover:bg-primary/10"
+                            disabled={isFinishing}
+                            onClick={() => handleApplyNextTarget(ex.id)}
+                          >
+                            Apply
+                          </Button>
+                        </div>
+                      )}
+
+                      {previousSession && (
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-muted-foreground">
+                          <span>
+                            Last session volume{' '}
+                            <strong className="font-mono text-foreground">
+                              {Math.round(previousSession.sessionVolume).toLocaleString()} kg
+                            </strong>
+                          </span>
+                          {volumeDelta !== null && currentVolume > 0 && (
+                            <span
+                              className={cn(
+                                'font-bold px-2 py-0.5 rounded-full border',
+                                volumeDelta > 0 && 'bg-emerald-500/15 text-emerald-600 border-emerald-500/30',
+                                volumeDelta < 0 && 'bg-amber-500/15 text-amber-600 border-amber-500/30',
+                                volumeDelta === 0 && 'bg-secondary text-muted-foreground border-border'
+                              )}
+                            >
+                              {volumeDelta > 0 ? `+${volumeDelta}%` : volumeDelta < 0 ? `${volumeDelta}%` : '='} vs last
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </details>
+                )}
               </CardContent>
             </Card>
           );
