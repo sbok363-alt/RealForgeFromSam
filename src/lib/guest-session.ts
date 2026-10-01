@@ -66,3 +66,17 @@ export function updateGuestDisplayName(name: string): GuestIdentity {
 export function guestProfileKey(userId: string): string {
   return `${GUEST_PROFILE_PREFIX}${userId}`;
 }
+
+let guestCloudMigrationInProgress = false;
+
+export function beginGuestCloudMigration(): void {
+  guestCloudMigrationInProgress = true;
+}
+
+export function endGuestCloudMigration(): void {
+  guestCloudMigrationInProgress = false;
+}
+
+export function isGuestCloudMigrationInProgress(): boolean {
+  return guestCloudMigrationInProgress;
+}
