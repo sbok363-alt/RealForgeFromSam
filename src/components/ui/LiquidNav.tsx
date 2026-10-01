@@ -24,7 +24,7 @@ interface LiquidNavProps {
   items?: LiquidNavItem[];
 }
 
-// Token values matching the FORGE Visual Reference:
+// Token values matching the Hardstate visual reference:
 const BAR_HEIGHT = 64; // Compact native bar height
 
 export function LiquidNav({ items: customItems }: LiquidNavProps) {
