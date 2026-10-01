@@ -53,7 +53,7 @@ export function Layout() {
   const [auditTargetWorkout, setAuditTargetWorkout] = useState<Workout | null>(null);
   const [liftOffWorkout, setLiftOffWorkout] = useState<Workout | null>(null);
   const { status: geminiStatus, openModal: openBYOKModal } = useGeminiStore();
-  const { activeWorkout, isModalOpen, closeWorkoutModal, updateActiveWorkout, finishWorkout } = useWorkoutStore();
+  const { activeWorkout, isModalOpen, closeWorkoutModal, updateActiveWorkout } = useWorkoutStore();
 
   const isBrainPage = location.pathname === '/brain';
 
@@ -321,9 +321,6 @@ export function Layout() {
           onClose={() => closeWorkoutModal()}
           onSave={(updated) => {
             updateActiveWorkout(updated);
-            if (updated.status === 'COMPLETED') {
-              finishWorkout();
-            }
           }}
           onOpenBrain={(w) => {
             closeWorkoutModal();
