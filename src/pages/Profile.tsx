@@ -1,10 +1,16 @@
 import React, { useState } from 'react';
 import { Button } from '../components/ui/Button';
-import { useAuthStore } from '../store/useAuthStore';
+import { createGuestUser, useAuthStore } from '../store/useAuthStore';
 import { useThemeStore } from '../store/useThemeStore';
 import { auth } from '../lib/firebase';
 import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
-import { LogOut, Moon, Sun, Sparkles, ShieldCheck, RefreshCw, AlertCircle, Volume2, VolumeX } from 'lucide-react';
+import { getUserProfile, getWorkouts, saveUserProfile, saveWorkout } from '../lib/api';
+import {
+  isGuestUserId,
+  setGuestSessionActive,
+  updateGuestDisplayName,
+} from '../lib/guest-session';
+import { LogOut, Moon, Sun, Sparkles, ShieldCheck, RefreshCw, AlertCircle, Volume2, VolumeX, Pencil } from 'lucide-react';
 import { Card, CardContent } from '../components/ui/Card';
 import { soundFx } from '../lib/soundFx';
 
@@ -14,9 +20,12 @@ export default function Profile() {
   const [connectingGoogle, setConnectingGoogle] = useState(false);
   const [googleError, setGoogleError] = useState<string | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(soundFx.isEnabled());
+  const [editingName, setEditingName] = useState(false);
+  const [guestName, setGuestName] = useState(user?.displayName || 'Gast');
 
   const handleSignOut = async () => {
     localStorage.removeItem('forge_demo_session');
+    setGuestSessionActive(false);
     try {
       await auth.signOut();
     } catch (e) {
@@ -26,25 +35,55 @@ export default function Profile() {
   };
 
   const handleConnectGoogle = async () => {
+    if (!user || !isGuestUserId(user.uid)) return;
     setConnectingGoogle(true);
     setGoogleError(null);
+
+    const guestUid = user.uid;
+    const guestWorkouts = await getWorkouts(guestUid);
+    const guestProfile = await getUserProfile(guestUid);
+
     try {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
       const result = await signInWithPopup(auth, provider);
-      if (result?.user) {
-        localStorage.removeItem('forge_demo_session');
-        setUser(result.user);
+      if (!result?.user) throw new Error('Google sign-in did not return a user');
+
+      if (guestProfile) {
+        await saveUserProfile({
+          ...guestProfile,
+          userId: result.user.uid,
+          name: guestProfile.name || user.displayName || 'Athlete',
+        });
       }
+
+      for (const workout of guestWorkouts) {
+        await saveWorkout(
+          { ...workout, userId: result.user.uid },
+          'USER',
+          'Migrated from local guest account'
+        );
+      }
+
+      setGuestSessionActive(false);
+      localStorage.removeItem('forge_demo_session');
+      setUser(result.user);
     } catch (err: any) {
-      console.error("Connect Google error:", err);
-      setGoogleError(err.message || 'Failed to connect Google account');
+      console.error("Connect Google migration error:", err);
+      setGuestSessionActive(true);
+      try {
+        await auth.signOut();
+      } catch {}
+      setUser(createGuestUser());
+      setGoogleError(
+        'Google sync was not completed. Your local guest data is still on this device.'
+      );
     } finally {
       setConnectingGoogle(false);
     }
   };
 
-  const isDemo = Boolean(user && 'isDemo' in user && (user as any).isDemo);
+  const isGuest = Boolean(user && isGuestUserId(user.uid));
 
   return (
     <div className="space-y-6 max-w-2xl mx-auto">
@@ -69,26 +108,63 @@ export default function Profile() {
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h2 className="text-lg font-bold">{user?.displayName || "Athlete"}</h2>
-                  {isDemo ? (
+                  {isGuest && editingName ? (
+                    <div className="flex items-center gap-2">
+                      <input
+                        value={guestName}
+                        onChange={(event) => setGuestName(event.target.value)}
+                        maxLength={40}
+                        autoFocus
+                        className="h-9 min-w-0 rounded-lg border border-border bg-background px-2 text-sm font-semibold"
+                      />
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          const identity = updateGuestDisplayName(guestName);
+                          setUser(createGuestUser());
+                          setGuestName(identity.displayName);
+                          setEditingName(false);
+                        }}
+                      >
+                        Save
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-lg font-bold">{user?.displayName || "Athlete"}</h2>
+                      {isGuest && (
+                        <button
+                          type="button"
+                          onClick={() => setEditingName(true)}
+                          className="rounded-lg p-1.5 text-muted-foreground hover:bg-secondary"
+                          aria-label="Edit guest name"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  {isGuest ? (
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-500 border border-amber-500/30 flex items-center gap-1">
                       <Sparkles size={11} />
-                      Demo Session
+                      Local only
                     </span>
                   ) : (
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-500 border border-emerald-500/30 flex items-center gap-1">
                       <ShieldCheck size={11} />
-                      Google Verified
+                      Cloud synced
                     </span>
                   )}
                 </div>
-                <p className="text-sm text-muted-foreground">{user?.email || "No email associated"}</p>
+                <p className="text-sm text-muted-foreground">
+                  {isGuest ? 'Stored on this device only' : user?.email || "No email associated"}
+                </p>
                 <p className="text-[11px] text-muted-foreground font-mono mt-0.5">UID: {user?.uid}</p>
               </div>
             </div>
 
-            {/* If in demo mode, provide Connect Google Account button */}
-            {isDemo && (
+            {/* If in demo mode, provide Save & sync with Google button */}
+            {isGuest && (
               <div className="w-full sm:w-auto">
                 <Button
                   size="sm"
@@ -119,7 +195,7 @@ export default function Profile() {
                       />
                     </svg>
                   )}
-                  <span>Connect Google Account</span>
+                  <span>Save & sync with Google</span>
                 </Button>
                 {googleError && (
                   <p className="text-[11px] text-destructive mt-1 flex items-center gap-1">
@@ -170,7 +246,7 @@ export default function Profile() {
       <div className="pt-2">
         <Button variant="danger" className="w-full flex items-center justify-center gap-2" onClick={handleSignOut}>
           <LogOut size={18} />
-          {isDemo ? 'Exit Demo Session' : 'Sign Out'}
+          {isGuest ? 'Exit Local only' : 'Sign Out'}
         </Button>
       </div>
     </div>
