@@ -52,7 +52,7 @@ export type HeatmapMetricMode = 'HYPERTROPHY_PCT' | 'RAW_VOLUME' | 'RECOVERY_REA
 export type BodyFocusRegion = 'ALL' | 'UPPER' | 'LOWER';
 
 /**
- * Mapping from FORGE's internal MuscleGroup to MuscleMapJS's 36 anatomical muscles.
+ * Mapping from Hardstate's internal MuscleGroup to MuscleMapJS's 36 anatomical muscles.
  */
 export const MUSCLE_GROUP_TO_MUSCLES: Record<MuscleGroup, Muscle[]> = {
   CHEST: ['chest', 'upper-chest', 'lower-chest'],
@@ -65,7 +65,7 @@ export const MUSCLE_GROUP_TO_MUSCLES: Record<MuscleGroup, Muscle[]> = {
 };
 
 /**
- * Reverse mapping from MuscleMapJS muscle to FORGE internal MuscleGroup for interactive selection.
+ * Reverse mapping from MuscleMapJS muscle to Hardstate internal MuscleGroup for interactive selection.
  */
 export const MUSCLE_TO_GROUP: Record<string, MuscleGroup> = {
   // Chest
