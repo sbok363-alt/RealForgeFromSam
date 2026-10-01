@@ -322,7 +322,7 @@ export default function ActiveWorkout({
           const target = report?.nextTarget;
           const previousSession = getPreviousExerciseSession(
             allUserWorkouts,
-            def?.name || ex.exerciseId,
+            def?.name || ex.name || ex.exerciseId,
             activeWorkout.id
           );
           const currentVolume = currentExerciseVolume(ex.sets);
@@ -335,7 +335,7 @@ export default function ActiveWorkout({
               <CardHeader className="bg-secondary/40 pb-3 py-3 px-4 flex flex-row items-center justify-between border-b border-border/60">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <CardTitle className="text-base font-bold text-foreground">{def?.name || ex.exerciseId}</CardTitle>
+                    <CardTitle className="text-base font-bold text-foreground">{def?.name || ex.name || ex.exerciseId}</CardTitle>
                   </div>
                   <div className="text-xs text-muted-foreground">{def?.primaryMuscle} • {def?.equipment}</div>
                 </div>
@@ -348,10 +348,10 @@ export default function ActiveWorkout({
                     if (isFinishing) return;
                     setExercisePendingRemoval({
                       id: ex.id,
-                      name: def?.name || ex.exerciseId,
+                      name: def?.name || ex.name || ex.exerciseId,
                     });
                   }}
-                  aria-label={`Remove ${def?.name || ex.exerciseId}`}
+                  aria-label={`Remove ${def?.name || ex.name || ex.exerciseId}`}
                 >
                   <X size={17} />
                 </Button>
@@ -363,7 +363,7 @@ export default function ActiveWorkout({
                   {ex.sets.map((set, setIndex) => {
                     const cmp = compareLiveSet(
                       allUserWorkouts,
-                      def?.name || ex.exerciseId,
+                      def?.name || ex.name || ex.exerciseId,
                       setIndex,
                       { weight: set.weight, reps: set.reps, completed: set.completed },
                       activeWorkout.id
