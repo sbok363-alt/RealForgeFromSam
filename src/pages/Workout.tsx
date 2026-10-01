@@ -39,7 +39,7 @@ import { cn } from '../lib/utils';
 export default function WorkoutPage() {
   const { user } = useAuthStore();
   const navigate = useNavigate();
-  const { activeWorkout, startWorkout, finishWorkout, discardWorkout, openWorkoutModal } = useWorkoutStore();
+  const { activeWorkout, startWorkout, discardWorkout, openWorkoutModal } = useWorkoutStore();
 
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [loading, setLoading] = useState(true);
@@ -111,7 +111,7 @@ export default function WorkoutPage() {
 
   const handleConfirmConflict = () => {
     if (!conflictTargetWorkout) return;
-    finishWorkout();
+    discardWorkout();
     startWorkout(conflictTargetWorkout);
     setSelectedWorkout(conflictTargetWorkout);
     setConflictTargetWorkout(null);
