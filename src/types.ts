@@ -162,6 +162,8 @@ export interface MutationAuditLog {
   inverseDelta: Record<string, any>;
   createdAt: string;
   proposalId?: string;
+  action?: string;
+  mutationType?: string;
 }
 
 export type ThreadStatus = 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'ARCHIVED' | 'EXPIRED';
