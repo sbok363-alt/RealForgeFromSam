@@ -438,12 +438,22 @@ export default function WorkoutPage() {
                         onClick={() => {
                           if (isActiveThis) {
                             setSelectedWorkout(activeWorkout || workout);
+                          } else if (uniqueExercises.length === 0) {
+                            setSelectedWorkout(workout);
                           } else {
                             handleStartWorkout(workout);
                           }
                         }}
                       >
-                        <Play size={14} fill="currentColor" /> {isActiveThis ? "Resume" : "Start"}
+                        {uniqueExercises.length === 0 ? (
+                          <>
+                            <Plus size={14} /> Add exercises
+                          </>
+                        ) : (
+                          <>
+                            <Play size={14} fill="currentColor" /> {isActiveThis ? "Resume" : "Start"}
+                          </>
+                        )}
                       </Button>
                     </div>
                   )}
