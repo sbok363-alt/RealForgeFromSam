@@ -77,18 +77,30 @@ export default function Plans() {
     const plan = plans.find(p => p.id === editingPlanId);
     if (!plan) return;
 
-    const updatedPlan = { ...plan };
-    if (updatedPlan.days.length === 0) {
-      updatedPlan.days.push({ id: crypto.randomUUID(), name: 'Day 1', exercises: [] });
-    }
-    
-    updatedPlan.days[0].exercises.push({
+    const firstDay = plan.days[0] || {
       id: crypto.randomUUID(),
-      exerciseId: def.id,
-      targetSets: 3,
-      targetRepsMin: 8,
-      targetRepsMax: 12
-    });
+      name: 'Day 1',
+      exercises: []
+    };
+    const updatedPlan: TrainingPlan = {
+      ...plan,
+      days: [
+        {
+          ...firstDay,
+          exercises: [
+            ...firstDay.exercises,
+            {
+              id: crypto.randomUUID(),
+              exerciseId: def.id,
+              targetSets: 3,
+              targetRepsMin: 8,
+              targetRepsMax: 12
+            }
+          ]
+        },
+        ...plan.days.slice(1)
+      ]
+    };
 
     await savePlan(updatedPlan);
     setShowExerciseSelector(false);
@@ -99,8 +111,19 @@ export default function Plans() {
     const plan = plans.find(p => p.id === planId);
     if (!plan) return;
     
-    const updatedPlan = { ...plan };
-    updatedPlan.days[0].exercises = updatedPlan.days[0].exercises.filter(ex => ex.id !== exerciseIdToRemove);
+    const firstDay = plan.days[0];
+    if (!firstDay) return;
+
+    const updatedPlan: TrainingPlan = {
+      ...plan,
+      days: [
+        {
+          ...firstDay,
+          exercises: firstDay.exercises.filter(ex => ex.id !== exerciseIdToRemove)
+        },
+        ...plan.days.slice(1)
+      ]
+    };
     await savePlan(updatedPlan);
     loadPlans();
   };
