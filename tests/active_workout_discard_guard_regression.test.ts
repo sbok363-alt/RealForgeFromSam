@@ -25,3 +25,20 @@ assert(
   source.includes('Discard workout'),
   'discard confirmation must name the destructive action explicitly'
 );
+
+assert(
+  !source.includes('onClick={() => !isFinishing && removeExercise(ex.id)}'),
+  'exercise removal must not be a one-tap destructive action'
+);
+assert(
+  source.includes('exercisePendingRemoval'),
+  'exercise removal must pass through explicit confirmation state'
+);
+assert(
+  source.includes('Keep exercise'),
+  'exercise removal confirmation must provide a safe keep-exercise action'
+);
+assert(
+  source.includes('Remove exercise'),
+  'exercise removal confirmation must name the destructive action explicitly'
+);
