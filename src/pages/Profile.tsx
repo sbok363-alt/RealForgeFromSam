@@ -294,13 +294,13 @@ export default function Profile() {
           
           <div className="flex items-center justify-between">
             <div className="flex flex-col">
-              <span className="font-semibold text-[#FF7A32]">Cyber-Forge Haptics</span>
+              <span className="font-semibold text-primary">Hardstate Haptics</span>
               <span className="text-sm text-muted-foreground">Synthesized cybernetic feedback & metallic lock sounds</span>
             </div>
             <Button 
               variant="outline" 
               size="icon" 
-              className={soundEnabled ? 'text-[#FF7A32] border-[#FF7A32]/50 hover:bg-[#FF7A32]/10' : ''}
+              className={soundEnabled ? 'text-primary border-primary/50 hover:bg-primary/10' : ''}
               onClick={() => {
                 const newState = soundFx.toggle();
                 setSoundEnabled(newState);
