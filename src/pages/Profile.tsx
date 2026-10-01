@@ -19,6 +19,7 @@ import {
   saveUserProfile,
   saveWorkout,
   updateUserPermissions,
+  verifyCloudMigration,
 } from '../lib/api';
 import {
   beginGuestCloudMigration,
@@ -116,53 +117,15 @@ export default function Profile() {
 
       await updateUserPermissions(result.user.uid, guestPermissions.autonomyLevel);
 
-      const migratedWorkouts = await getWorkouts(result.user.uid);
-      const migratedIds = new Set(migratedWorkouts.map((workout) => workout.id));
-      if (guestWorkouts.some((workout) => !migratedIds.has(workout.id))) {
-        throw new Error('Guest workout migration could not be verified');
-      }
-
-      if (guestProfile) {
-        const migratedProfile = await getUserProfile(result.user.uid);
-        if (!migratedProfile?.onboardingCompleted) {
-          throw new Error('Guest profile migration could not be verified');
-        }
-      }
-
-      const [
-        migratedPlans,
-        migratedBodyweight,
-        migratedPersonalRecords,
-        migratedTargets,
-        migratedPermissions,
-      ] = await Promise.all([
-        getPlans(result.user.uid),
-        getBodyweight(result.user.uid),
-        getPersonalRecords(result.user.uid),
-        getTarget1RMs(result.user.uid),
-        getUserPermissions(result.user.uid),
-      ]);
-
-      const allIdsPresent = (source: Array<{ id: string }>, target: Array<{ id: string }>) => {
-        const targetIds = new Set(target.map((item) => item.id));
-        return source.every((item) => targetIds.has(item.id));
-      };
-
-      if (!allIdsPresent(guestPlans, migratedPlans)) {
-        throw new Error('Guest plan migration could not be verified');
-      }
-      if (!allIdsPresent(guestBodyweight, migratedBodyweight)) {
-        throw new Error('Guest bodyweight migration could not be verified');
-      }
-      if (!allIdsPresent(guestPersonalRecords, migratedPersonalRecords)) {
-        throw new Error('Guest personal-record migration could not be verified');
-      }
-      if (!allIdsPresent(guestTargets, migratedTargets)) {
-        throw new Error('Guest target migration could not be verified');
-      }
-      if (migratedPermissions.autonomyLevel !== guestPermissions.autonomyLevel) {
-        throw new Error('Guest preference migration could not be verified');
-      }
+      await verifyCloudMigration(result.user.uid, {
+        workoutIds: guestWorkouts.map((item) => item.id),
+        planIds: guestPlans.map((item) => item.id),
+        bodyweightIds: guestBodyweight.map((item) => item.id),
+        personalRecordIds: guestPersonalRecords.map((item) => item.id),
+        targetIds: guestTargets.map((item) => item.id),
+        requireCompletedProfile: Boolean(guestProfile?.onboardingCompleted),
+        autonomyLevel: guestPermissions.autonomyLevel,
+      });
 
       endGuestCloudMigration();
       setGuestSessionActive(false);
