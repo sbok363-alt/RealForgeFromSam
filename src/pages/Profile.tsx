@@ -189,8 +189,15 @@ export default function Profile() {
                       />
                       <Button
                         size="sm"
-                        onClick={() => {
+                        onClick={async () => {
                           const identity = updateGuestDisplayName(guestName);
+                          const profile = await getUserProfile(identity.uid);
+                          if (profile) {
+                            await saveUserProfile({
+                              ...profile,
+                              name: identity.displayName,
+                            });
+                          }
                           setUser(createGuestUser());
                           setGuestName(identity.displayName);
                           setEditingName(false);
@@ -316,7 +323,7 @@ export default function Profile() {
       <div className="pt-2">
         <Button variant="danger" className="w-full flex items-center justify-center gap-2" onClick={handleSignOut}>
           <LogOut size={18} />
-          {isGuest ? 'Exit Local only' : 'Sign Out'}
+          {isGuest ? 'Exit Guest Session' : 'Sign Out'}
         </Button>
       </div>
     </div>
