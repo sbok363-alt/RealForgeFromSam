@@ -10,7 +10,7 @@ import {
 } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 import { useAuthStore, createGuestUser } from '../store/useAuthStore';
-import { setGuestSessionActive } from '../lib/guest-session';
+import { hasLocalGuestData, setGuestSessionActive } from '../lib/guest-session';
 import { 
   Dumbbell, 
   AlertCircle, 
@@ -40,6 +40,8 @@ export default function Auth() {
   const [redirecting, setRedirecting] = useState(false);
   const [errorState, setErrorState] = useState<AuthErrorState | null>(null);
   const [copiedDomain, setCopiedDomain] = useState(false);
+  const [routeGuestUpgrade, setRouteGuestUpgrade] = useState(false);
+  const hasGuestData = hasLocalGuestData();
 
   const isInIframe = typeof window !== 'undefined' && window.self !== window.top;
   const currentHostname = typeof window !== 'undefined' ? window.location.hostname : '';
@@ -48,9 +50,9 @@ export default function Auth() {
   // 1. If user is already authenticated or becomes authenticated, immediately redirect to app root
   useEffect(() => {
     if (user) {
-      navigate('/', { replace: true });
+      navigate(routeGuestUpgrade ? '/profile' : '/', { replace: true });
     }
-  }, [user, navigate]);
+  }, [user, navigate, routeGuestUpgrade]);
 
   // 2. Check for redirect result in case signInWithRedirect was used
   useEffect(() => {
@@ -59,6 +61,13 @@ export default function Auth() {
       .then((result) => {
         if (!isMounted) return;
         if (result?.user) {
+          if (hasLocalGuestData()) {
+            await auth.signOut();
+            setRouteGuestUpgrade(true);
+            setGuestSessionActive(true);
+            setUser(createGuestUser());
+            return;
+          }
           localStorage.removeItem('forge_demo_session');
           setGuestSessionActive(false);
           setUser(result.user);
@@ -125,7 +134,17 @@ export default function Auth() {
     }
   };
 
+  const routeThroughGuestUpgrade = () => {
+    setRouteGuestUpgrade(true);
+    setGuestSessionActive(true);
+    setUser(createGuestUser());
+  };
+
   const handleGooglePopupLogin = async () => {
+    if (hasGuestData) {
+      routeThroughGuestUpgrade();
+      return;
+    }
     setLoading(true);
     setErrorState(null);
     try {
@@ -147,6 +166,10 @@ export default function Auth() {
   };
 
   const handleGoogleRedirectLogin = async () => {
+    if (hasGuestData) {
+      routeThroughGuestUpgrade();
+      return;
+    }
     setRedirecting(true);
     setErrorState(null);
     try {
@@ -316,7 +339,7 @@ export default function Auth() {
                       d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
                     />
                   </svg>
-                  <span>Continue with Google</span>
+                  <span>{hasGuestData ? 'Save Guest data with Google' : 'Continue with Google'}</span>
                 </>
               )}
             </Button>
@@ -331,7 +354,7 @@ export default function Auth() {
               </span>
             </div>
 
-            {/* Instant Demo Athlete Access */}
+            {/* Local Guest access */}
             <Button
               variant="outline"
               size="lg"
