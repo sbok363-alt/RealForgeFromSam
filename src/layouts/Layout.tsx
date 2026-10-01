@@ -89,7 +89,7 @@ export function Layout() {
   const desktopNavItems = [
     { name: 'Dashboard', path: '/', icon: Activity },
     { name: 'Workouts', path: '/workout', icon: Dumbbell },
-    { name: 'FORGE Brain', path: '/brain', icon: Brain, highlight: true, badge: pendingProposalsCount > 0 ? pendingProposalsCount : undefined },
+    { name: 'Hardstate Brain', path: '/brain', icon: Brain, highlight: true, badge: pendingProposalsCount > 0 ? pendingProposalsCount : undefined },
     { 
       name: 'Progress', 
       path: '/progress', 
@@ -139,7 +139,7 @@ export function Layout() {
     <div className="flex h-[100dvh] max-h-[100dvh] bg-background/50 text-foreground flex-col md:flex-row pb-[74px] md:pb-0 overflow-hidden relative">
       <AmbientBackground />
       {/* Mobile Top Bar */}
-      <header className="md:hidden flex items-center justify-between px-4 py-2.5 border-b border-white/[0.08] bg-[#09090b]/95 backdrop-blur-md z-10 shrink-0">
+      <header className="md:hidden flex items-center justify-between px-4 py-2.5 border-b border-border bg-background/95 backdrop-blur-md z-10 shrink-0">
         <div className="flex items-center gap-2">
           <ForgeLogo className="h-3.5 w-auto" />
         </div>
@@ -152,7 +152,7 @@ export function Layout() {
               "flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full border transition-colors",
               geminiStatus === 'CONNECTED' 
                 ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20 hover:bg-emerald-500/20" 
-                : "bg-neutral-800 text-neutral-400 border-white/10 hover:text-white"
+                : "bg-secondary text-muted-foreground border-border hover:text-foreground"
             )}
             title={geminiStatus === 'CONNECTED' ? "Brain Copilot Active" : "BYOK Gemini Setup"}
           >
@@ -168,13 +168,13 @@ export function Layout() {
           <button
             onClick={() => navigate('/profile')}
             aria-label="Profile"
-            className="w-7 h-7 rounded-full border border-white/15 overflow-hidden bg-neutral-800 flex items-center justify-center text-xs font-bold text-white hover:border-[#FF7A32]/60 transition-all focus:outline-none"
+            className="w-7 h-7 rounded-full border border-border overflow-hidden bg-secondary flex items-center justify-center text-xs font-bold text-foreground hover:border-primary/60 transition-all focus:outline-none"
           >
             {user?.photoURL ? (
               <img src={user.photoURL} alt={user.displayName || "User"} className="w-full h-full object-cover" />
             ) : (
-              <span className="text-[10px] font-mono font-bold text-neutral-300">
-                {(user?.displayName || 'Samuel').slice(0, 1).toUpperCase()}
+              <span className="text-[10px] font-mono font-bold text-foreground">
+                {(user?.displayName || user?.email || 'A').slice(0, 1).toUpperCase()}
               </span>
             )}
           </button>
@@ -279,7 +279,7 @@ export function Layout() {
 
         {/* Footer Info */}
         <div className="px-3 py-2 border-t border-border/50 text-[11px] text-muted-foreground flex items-center justify-between">
-          <span>FORGE Engine</span>
+          <span>Hardstate Engine</span>
           <span className="font-mono">v2.5.0 OCC</span>
         </div>
       </aside>
