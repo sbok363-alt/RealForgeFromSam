@@ -33,6 +33,11 @@ assert(
   'plan-started workouts must preserve human exercise names in nested and flat forms'
 );
 assert(
+  plans.includes('const saved = await saveWorkout(') &&
+  plans.indexOf('const saved = await saveWorkout(') < plans.indexOf('startWorkout(saved)'),
+  'plan-started workouts must become durable before the live session starts'
+);
+assert(
   plans.includes("setType: 'N' as const"),
   'plan-started workout sets must use canonical set types'
 );
@@ -57,4 +62,11 @@ assert(
   !detail.includes('handleSimulateExternalEdit') &&
   !detail.includes('simulatingConflict'),
   'detail view must not retain unreachable completion or conflict-simulator code'
+);
+const deleteStart = detail.indexOf('const handleDeleteWorkout');
+const deleteEnd = detail.indexOf('// Group sets by exercise name', deleteStart);
+const deleteBlock = detail.slice(deleteStart, deleteEnd);
+assert(
+  deleteBlock.indexOf('await deleteWorkout(') < deleteBlock.indexOf('discardActiveWorkout()'),
+  'active session state must only be discarded after persistent deletion succeeds'
 );
