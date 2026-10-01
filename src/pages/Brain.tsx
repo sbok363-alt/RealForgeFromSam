@@ -50,6 +50,7 @@ import {
 import { useLocation } from 'react-router-dom';
 import { cn } from '../lib/utils';
 import { useGeminiStore } from '../store/useGeminiStore';
+import { isGuestUserId } from '../lib/guest-session';
 
 const TypingMessage = ({ content, timestamp, onScroll }: { content: string, timestamp?: string, onScroll: (smooth?: boolean) => void }) => {
   const [displayedContent, setDisplayedContent] = useState('');
@@ -98,6 +99,7 @@ const TypingMessage = ({ content, timestamp, onScroll }: { content: string, time
 export default function Brain() {
   const { user } = useAuthStore();
   const location = useLocation();
+  const isGuest = Boolean(user && isGuestUserId(user.uid));
   
   const [threads, setThreads] = useState<Thread[]>([]);
   const [activeThread, setActiveThread] = useState<Thread | null>(null);
@@ -260,6 +262,7 @@ export default function Brain() {
     const thread = customThread || activeThread;
     const textToSend = customPrompt || input;
     if (!textToSend.trim() || !user || !thread) return;
+    if (isGuest) return;
 
     const userMessage: ThreadMessage = {
       id: crypto.randomUUID(),
@@ -713,13 +716,18 @@ export default function Brain() {
 
         {/* Prompt Input & Suggestions */}
         <div className="p-2 sm:p-3 md:p-4 border-t border-border bg-background/90 backdrop-blur-sm space-y-2 sm:space-y-3 shrink-0">
+          {isGuest && (
+            <div className="rounded-xl border border-border bg-secondary/60 px-3 py-2 text-xs text-muted-foreground">
+              Hardstate Brain currently requires a Google account because its server tools read your synced training data. Your local workouts remain fully usable as Guest.
+            </div>
+          )}
           {/* Quick Prompts Bar */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar">
             {quickPrompts.map((qp, idx) => (
               <button
                 key={idx}
                 onClick={() => handleSend(qp.text)}
-                disabled={loading}
+                disabled={loading || isGuest}
                 className="whitespace-nowrap px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg text-[11px] sm:text-xs font-medium bg-secondary/60 hover:bg-secondary text-foreground border border-border/50 transition-colors shrink-0 flex items-center gap-1"
               >
                 <span>{qp.label}</span>
@@ -732,14 +740,14 @@ export default function Brain() {
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
-              placeholder="Ask FORGE Brain to optimize..."
-              disabled={loading}
+              placeholder={isGuest ? "Connect Google to use Hardstate Brain" : "Ask Hardstate Brain to optimize..."}
+              disabled={loading || isGuest}
               className="flex-1 bg-secondary/40 border-secondary focus:bg-background text-xs sm:text-sm h-9 sm:h-10"
             />
             <Button 
               size="icon" 
               onClick={() => handleSend()} 
-              disabled={loading || !input.trim()}
+              disabled={loading || isGuest || !input.trim()}
               className="h-9 w-9 sm:h-10 sm:w-10 shrink-0 font-bold shadow-sm"
             >
               <Send size={15} />
