@@ -29,6 +29,7 @@ export default function AuditLogsPage() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [actorFilter, setActorFilter] = useState<string>('ALL');
   const isGuest = Boolean(user && isGuestUserId(user.uid));
+  const hasLocalHistory = logs.some((log) => log.storageScope === 'LOCAL' || log.storageScope === 'LOCAL_MIGRATED');
 
   const fetchData = async () => {
     if (!user) return;
@@ -115,13 +116,15 @@ export default function AuditLogsPage() {
           <div className="flex items-center gap-2">
             <h1 className="text-2xl md:text-3xl font-display font-bold">Mutation Audit Trail</h1>
             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-              <ShieldCheck size={13} /> {isGuest ? 'Local Audit' : 'Server Audit'}
+              <ShieldCheck size={13} /> {isGuest ? 'Local Audit' : hasLocalHistory ? 'Server + Local History' : 'Server Audit'}
             </span>
           </div>
           <p className="text-muted-foreground text-sm mt-1">
             {isGuest
               ? 'Device-local mutation history with contiguous rollback for Guest workouts.'
-              : 'Server-authoritative mutation history for manual edits, AI proposals, and autonomous adjustments with contiguous rollback support.'}
+              : hasLocalHistory
+                ? 'Server-authoritative audit plus preserved device-local Guest history. Migrated local entries are read-only after cloud sync.'
+                : 'Server-authoritative mutation history for manual edits, AI proposals, and autonomous adjustments with contiguous rollback support.'}
           </p>
         </div>
       </header>
@@ -188,6 +191,7 @@ export default function AuditLogsPage() {
           {filteredLogs.map((log) => {
             const targetWorkout = workouts.find(w => w.id === log.targetEntityId);
             const isContiguousLatest = targetWorkout ? targetWorkout.version === log.resultVersion : false;
+            const canRollback = isContiguousLatest && (isGuest || log.storageScope === 'SERVER');
 
             return (
               <Card 
@@ -197,6 +201,11 @@ export default function AuditLogsPage() {
                 <CardHeader className="p-4 bg-secondary/20 border-b border-border/40 pb-3 flex flex-row items-center justify-between gap-2">
                   <div className="flex items-center gap-2 flex-wrap">
                     {getActorBadge(log.actor)}
+                    {log.storageScope === 'LOCAL_MIGRATED' && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/25">
+                        Local history
+                      </span>
+                    )}
                     <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-background border border-border/60">
                       v{log.baseVersion} <ArrowRight size={10} className="inline mx-0.5 text-primary" /> v{log.resultVersion}
                     </span>
@@ -225,7 +234,7 @@ export default function AuditLogsPage() {
                     </div>
 
                     <div>
-                      {isContiguousLatest ? (
+                      {canRollback ? (
                         <Button 
                           size="sm" 
                           variant="outline"
@@ -238,7 +247,9 @@ export default function AuditLogsPage() {
                         </Button>
                       ) : (
                         <span className="text-muted-foreground text-[11px] italic">
-                          Locked (interim mutations applied)
+                          {log.storageScope === 'LOCAL_MIGRATED'
+                            ? 'Preserved local history (read-only after cloud sync)'
+                            : 'Locked (interim mutations applied)'}
                         </span>
                       )}
                     </div>
