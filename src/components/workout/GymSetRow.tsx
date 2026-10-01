@@ -65,20 +65,20 @@ export function GymSetRow({
   return (
     <div
       className={cn(
-        'rounded-2xl border p-3 space-y-2.5 transition-colors',
+        'rounded-2xl border p-3.5 space-y-3 transition-colors',
         done
           ? 'bg-primary/10 border-primary/40'
           : 'bg-card border-border/70'
       )}
     >
       <div className="flex items-center justify-between gap-2">
-        <span className="text-xs font-bold text-muted-foreground font-mono">
+        <span className="font-mono text-sm font-black text-foreground">
           Set {setNumber}
         </span>
 
         <div className="flex items-center gap-2">
           {previousLabel && previousLabel !== '—' && (
-            <span className="text-[11px] font-mono text-muted-foreground">
+            <span className="hidden text-[11px] font-mono text-muted-foreground sm:inline">
               Prev <span className="text-foreground/80 font-semibold">{previousLabel}</span>
             </span>
           )}
@@ -119,7 +119,7 @@ export function GymSetRow({
               disabled={done || disabled}
               onClick={() => bumpWeight(-1)}
               className={cn(
-                'h-11 w-10 sm:h-12 sm:w-12 rounded-xl border flex items-center justify-center shrink-0 touch-manipulation',
+                'h-12 w-11 sm:w-12 rounded-xl border flex items-center justify-center shrink-0 touch-manipulation',
                 'active:scale-95 transition-transform',
                 done
                   ? 'opacity-40 border-border bg-secondary/30'
@@ -138,7 +138,7 @@ export function GymSetRow({
               placeholder="0"
               onChange={(e) => onChange({ weight: parseFloat(e.target.value) || 0 })}
               className={cn(
-                'flex-1 h-11 sm:h-12 min-w-0 text-center font-mono font-bold text-base rounded-xl border bg-background focus:outline-none focus:ring-2 focus:ring-primary',
+                'flex-1 h-12 min-w-0 rounded-xl border bg-background text-center font-mono text-xl font-black tabular-nums focus:outline-none focus:ring-2 focus:ring-primary',
                 done && 'border-transparent bg-transparent text-emerald-700 dark:text-emerald-400'
               )}
             />
@@ -147,7 +147,7 @@ export function GymSetRow({
               disabled={done || disabled}
               onClick={() => bumpWeight(1)}
               className={cn(
-                'h-11 w-10 sm:h-12 sm:w-12 rounded-xl border flex items-center justify-center shrink-0 touch-manipulation',
+                'h-12 w-11 sm:w-12 rounded-xl border flex items-center justify-center shrink-0 touch-manipulation',
                 'active:scale-95 transition-transform',
                 done
                   ? 'opacity-40 border-border bg-secondary/30'
@@ -170,7 +170,7 @@ export function GymSetRow({
               disabled={done || disabled}
               onClick={() => bumpReps(-1)}
               className={cn(
-                'h-11 w-10 sm:h-12 sm:w-12 rounded-xl border flex items-center justify-center shrink-0 touch-manipulation',
+                'h-12 w-11 sm:w-12 rounded-xl border flex items-center justify-center shrink-0 touch-manipulation',
                 'active:scale-95 transition-transform',
                 done
                   ? 'opacity-40 border-border bg-secondary/30'
@@ -188,7 +188,7 @@ export function GymSetRow({
               placeholder="0"
               onChange={(e) => onChange({ reps: parseInt(e.target.value) || 0 })}
               className={cn(
-                'flex-1 h-11 sm:h-12 min-w-0 text-center font-mono font-bold text-base rounded-xl border bg-background focus:outline-none focus:ring-2 focus:ring-primary',
+                'flex-1 h-12 min-w-0 rounded-xl border bg-background text-center font-mono text-xl font-black tabular-nums focus:outline-none focus:ring-2 focus:ring-primary',
                 done && 'border-transparent bg-transparent text-emerald-700 dark:text-emerald-400'
               )}
             />
@@ -197,7 +197,7 @@ export function GymSetRow({
               disabled={done || disabled}
               onClick={() => bumpReps(1)}
               className={cn(
-                'h-11 w-10 sm:h-12 sm:w-12 rounded-xl border flex items-center justify-center shrink-0 touch-manipulation',
+                'h-12 w-11 sm:w-12 rounded-xl border flex items-center justify-center shrink-0 touch-manipulation',
                 'active:scale-95 transition-transform',
                 done
                   ? 'opacity-40 border-border bg-secondary/30'
@@ -217,9 +217,10 @@ export function GymSetRow({
         <button
           type="button"
           disabled={disabled}
+          aria-pressed={done}
           onClick={handleCompleteWithBurst}
           className={cn(
-            'w-full h-12 sm:h-13 rounded-xl font-bold text-sm flex items-center justify-center gap-2 touch-manipulation active:scale-[0.98] transition-all relative z-10',
+            'w-full min-h-12 rounded-xl font-black text-sm flex items-center justify-center gap-2 touch-manipulation active:scale-[0.98] transition-all relative z-10',
             done
               ? 'bg-primary text-black font-black shadow-[0_0_16px_rgba(255,122,50,0.45)]'
               : 'bg-secondary hover:bg-secondary/80 text-foreground border border-border/80'
