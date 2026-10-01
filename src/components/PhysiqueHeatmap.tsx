@@ -6,7 +6,6 @@ import {
   calculatePhysiqueHypertrophyVolume, 
   getStoredHypertrophyThresholds, 
   saveStoredHypertrophyThresholds,
-  generateDemoHypertrophyWorkouts,
   HypertrophyThresholds,
   MuscleVolumeWeekly
 } from '../lib/hypertrophy';
@@ -142,7 +141,6 @@ export const PhysiqueHeatmap: React.FC<PhysiqueHeatmapProps> = ({
   const [dismissedNotice, setDismissedNotice] = useState(false);
   const [focusDeficitsOnly, setFocusDeficitsOnly] = useState(false);
   const [showSymmetryPanel, setShowSymmetryPanel] = useState(false);
-  const [useDemoData, setUseDemoData] = useState(false);
   const [simulatedDelta, setSimulatedDelta] = useState<SimulatedVolumeDelta | null>(null);
   const [showScannerFx, setShowScannerFx] = useState(true);
   const [showRadarChart, setShowRadarChart] = useState(false);
@@ -174,9 +172,9 @@ export const PhysiqueHeatmap: React.FC<PhysiqueHeatmapProps> = ({
   // User-defined thresholds
   const [thresholds, setThresholds] = useState<HypertrophyThresholds>(() => getStoredHypertrophyThresholds());
 
-  // Effective workout dataset (real workouts or demo preview + simulated delta)
+  // Effective workout dataset: real workouts plus an explicitly labeled simulation only.
   const activeWorkouts = useMemo(() => {
-    let base = useDemoData ? generateDemoHypertrophyWorkouts() : workouts;
+    const base = workouts;
     if (simulatedDelta && Object.keys(simulatedDelta).length > 0) {
       const simSets = Object.entries(simulatedDelta).flatMap(([muscle, count]) => {
         const numCount = typeof count === 'number' ? count : 0;
@@ -203,7 +201,7 @@ export const PhysiqueHeatmap: React.FC<PhysiqueHeatmapProps> = ({
       return [simulatedWorkout, ...base];
     }
     return base;
-  }, [useDemoData, workouts, simulatedDelta]);
+  }, [workouts, simulatedDelta]);
 
   // Compute weekly volume breakdown & 2-consecutive-week deficits
   const auditResult = useMemo(() => {
@@ -583,11 +581,6 @@ export const PhysiqueHeatmap: React.FC<PhysiqueHeatmapProps> = ({
                     <AlertTriangle size={11} /> {totalDeficientMusclesCount} Lagging
                   </span>
                 )}
-                {useDemoData && (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-500 border border-amber-500/30">
-                    <Sparkles size={10} /> Demo Data
-                  </span>
-                )}
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">
                 High-resolution Canvas2D anatomical stimulus auditor powered by MuscleMapJS. Tracks weekly set volume, recovery, and hypertrophy deficits.
@@ -699,24 +692,6 @@ export const PhysiqueHeatmap: React.FC<PhysiqueHeatmapProps> = ({
               >
                 <Sliders size={12} />
                 <span className="hidden md:inline">Targets</span>
-              </Button>
-
-              {/* Demo Mode Toggle */}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  soundFx.playClick();
-                  setUseDemoData(!useDemoData);
-                }}
-                className={cn(
-                  "h-7 px-2 text-xs gap-1 font-medium",
-                  useDemoData ? "text-amber-500 bg-amber-500/10" : "text-muted-foreground hover:text-foreground"
-                )}
-                title="Toggle preview sample hypertrophy data"
-              >
-                <Sparkles size={12} />
-                <span className="hidden lg:inline">{useDemoData ? 'Exit Demo' : 'Demo Mode'}</span>
               </Button>
 
               {/* Audio Toggle */}
