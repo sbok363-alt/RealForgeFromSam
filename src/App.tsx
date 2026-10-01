@@ -57,7 +57,7 @@ function OnboardingGuard({ children }: { children: React.ReactNode }) {
   if (loading || checking) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background text-muted-foreground text-sm font-medium">
-        Loading FORGE Brain...
+        Loading Hardstate...
       </div>
     );
   }
@@ -115,7 +115,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   if (loading || (user && !onboardingChecked)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background text-muted-foreground text-sm font-medium">
-        Loading FORGE Brain...
+        Loading Hardstate...
       </div>
     );
   }
