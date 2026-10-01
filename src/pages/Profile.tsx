@@ -65,6 +65,12 @@ export default function Profile() {
         );
       }
 
+      const migratedWorkouts = await getWorkouts(result.user.uid);
+      const migratedIds = new Set(migratedWorkouts.map((workout) => workout.id));
+      if (guestWorkouts.some((workout) => !migratedIds.has(workout.id))) {
+        throw new Error('Guest workout migration could not be verified');
+      }
+
       setGuestSessionActive(false);
       localStorage.removeItem('forge_demo_session');
       setUser(result.user);
