@@ -14,7 +14,7 @@ import { WorkoutConflictModal } from '../components/workout/WorkoutConflictModal
 
 export default function Plans() {
   const { user } = useAuthStore();
-  const { activeWorkout, startWorkout, finishWorkout } = useWorkoutStore();
+  const { activeWorkout, startWorkout, discardWorkout } = useWorkoutStore();
   const navigate = useNavigate();
   
   const [plans, setPlans] = useState<TrainingPlan[]>([]);
@@ -151,7 +151,7 @@ export default function Plans() {
 
   const handleConfirmConflict = () => {
     if (!conflictTargetWorkout) return;
-    finishWorkout();
+    discardWorkout();
     startWorkout(conflictTargetWorkout);
     setConflictTargetWorkout(null);
     navigate('/workout');
