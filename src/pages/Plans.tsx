@@ -5,7 +5,7 @@ import { Input } from '../components/ui/Input';
 import { Plus, Trash2, Edit2 } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
 import { useWorkoutStore } from '../store/useWorkoutStore';
-import { getPlans, savePlan, deletePlan } from '../lib/api';
+import { getPlans, savePlan, deletePlan, saveWorkout } from '../lib/api';
 import { TrainingPlan, Workout } from '../types';
 import { useNavigate } from 'react-router-dom';
 import ExerciseSelector from '../components/workout/ExerciseSelector';
@@ -128,7 +128,7 @@ export default function Plans() {
     loadPlans();
   };
 
-  const handleStartPlan = (plan: TrainingPlan) => {
+  const handleStartPlan = async (plan: TrainingPlan) => {
     const todayStr = new Date().toISOString().split('T')[0];
     const exercises = plan.days[0]?.exercises.map((planExercise) => {
       const definition = getExerciseById(planExercise.exerciseId);
@@ -175,14 +175,25 @@ export default function Plans() {
       return;
     }
 
-    startWorkout(workout);
+    const saved = await saveWorkout(
+      workout,
+      'USER',
+      `Started workout from plan: ${plan.name}`
+    );
+    startWorkout(saved);
     navigate('/workout');
   };
 
-  const handleConfirmConflict = () => {
+  const handleConfirmConflict = async () => {
     if (!conflictTargetWorkout) return;
+    const target = conflictTargetWorkout;
+    const saved = await saveWorkout(
+      target,
+      'USER',
+      `Started workout from plan: ${target.title}`
+    );
     discardWorkout();
-    startWorkout(conflictTargetWorkout);
+    startWorkout(saved);
     setConflictTargetWorkout(null);
     navigate('/workout');
   };
