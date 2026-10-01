@@ -738,11 +738,7 @@ export async function saveUserProfile(profile: UserProfile): Promise<void> {
     return;
   }
 
-  try {
-    await setDoc(doc(db, 'users', profile.userId), profile);
-  } catch (e) {
-    console.warn("Could not save user profile:", e);
-  }
+  await setDoc(doc(db, 'users', profile.userId), profile);
 }
 
 export async function getPersonalRecords(userId: string): Promise<PersonalRecord[]> {
