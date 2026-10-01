@@ -72,9 +72,7 @@ export function WorkoutDetailModal({
   const { status: geminiStatus, apiKey: geminiApiKey, openModal: openBYOKModal } = useGeminiStore();
   const { 
     activeWorkout, 
-    startWorkout: startActiveWorkout, 
     updateActiveWorkout, 
-    finishWorkout: finishActiveWorkout,
     discardWorkout: discardActiveWorkout,
     setRestTimer: setStoreRestTimer,
     clearRestTimer: clearStoreRestTimer
