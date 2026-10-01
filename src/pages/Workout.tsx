@@ -314,8 +314,24 @@ export default function WorkoutPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {filteredWorkouts.map((workout) => {
             // Group exercises for concise summary
-            const uniqueExercises: string[] = Array.from(new Set((workout.sets || []).map(s => s.exercise).filter((e): e is string => Boolean(e))));
-            const totalVolume = (workout.sets || []).reduce((sum, s) => sum + (s.weight * s.reps), 0);
+            const flatExerciseNames = (workout.sets || [])
+              .map((set) => set.exercise)
+              .filter((name): name is string => Boolean(name));
+            const nestedExerciseNames = (workout.exercises || [])
+              .map((exercise) => exercise.name || exercise.exerciseId)
+              .filter(Boolean);
+            const uniqueExercises: string[] = Array.from(
+              new Set(flatExerciseNames.length > 0 ? flatExerciseNames : nestedExerciseNames)
+            );
+            const displaySets = (workout.sets && workout.sets.length > 0)
+              ? workout.sets
+              : (workout.exercises || []).flatMap((exercise) =>
+                  exercise.sets.map((set) => ({
+                    ...set,
+                    exercise: exercise.name || exercise.exerciseId,
+                  }))
+                );
+            const totalVolume = displaySets.reduce((sum, set) => sum + (set.weight * set.reps), 0);
             const isActiveThis = activeWorkout?.id === workout.id;
 
             return (
@@ -339,7 +355,7 @@ export default function WorkoutPage() {
                         <Calendar size={12} className="text-primary" />
                         <span>{workout.scheduledDate}</span>
                         <span>•</span>
-                        <span>{workout.sets?.length || 0} sets</span>
+                        <span>{displaySets.length} sets</span>
                         <span>•</span>
                         <span>{Math.round(totalVolume)} kg</span>
                         {workoutPRCounts[workout.id] && workoutPRCounts[workout.id] > 0 && (
@@ -388,7 +404,7 @@ export default function WorkoutPage() {
                     ) : (
                       <div className="space-y-1.5">
                         {uniqueExercises.slice(0, 3).map((ex, i) => {
-                          const count = workout.sets.filter(s => s.exercise === ex).length;
+                          const count = displaySets.filter((set) => set.exercise === ex).length;
                           return (
                             <div key={i} className="flex items-center justify-between gap-2.5 py-1">
                               <div className="flex items-center gap-2.5 min-w-0 flex-1">
