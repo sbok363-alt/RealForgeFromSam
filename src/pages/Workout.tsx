@@ -4,8 +4,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { 
   getWorkouts, 
   saveWorkout, 
-  deleteWorkout,
-  seedForgeData 
+  deleteWorkout
 } from '../lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -88,11 +87,7 @@ export default function WorkoutPage() {
     if (!user) return;
     setLoading(true);
     try {
-      let data = await getWorkouts(user.uid);
-      if (data.length === 0) {
-        await seedForgeData(user.uid);
-        data = await getWorkouts(user.uid);
-      }
+      const data = await getWorkouts(user.uid);
       setWorkouts(data);
     } catch (e) {
       console.error("Error fetching workouts:", e);
@@ -221,18 +216,6 @@ export default function WorkoutPage() {
 
         <div className="flex items-center gap-2">
           <Button 
-            variant="outline" 
-            size="sm"
-            onClick={async () => {
-              if (!user) return;
-              await seedForgeData(user.uid);
-              await fetchWorkoutsList();
-            }}
-            className="text-xs"
-          >
-            Reset Demo Data
-          </Button>
-          <Button 
             size="sm"
             onClick={handleCreateEmptyWorkout}
             className="text-xs font-semibold gap-1.5"
@@ -325,7 +308,7 @@ export default function WorkoutPage() {
           <Dumbbell size={40} className="mx-auto opacity-30 text-primary" />
           <h3 className="font-semibold text-base text-foreground">No workouts found</h3>
           <p className="text-xs max-w-sm mx-auto">
-            Create a custom workout or ask FORGE Brain to construct a progressive overload routine for you.
+            Create a custom workout or ask Hardstate Brain to construct a progressive overload routine for you.
           </p>
           <Button size="sm" onClick={handleCreateEmptyWorkout}>
             Create First Workout
