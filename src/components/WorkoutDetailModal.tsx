@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'motion/react';
 import { Workout, WorkoutSetItem, ProgressionReport } from '../types';
 import { ExerciseDef, getExerciseByName } from '../lib/exercises';
-import { saveWorkout, getWorkouts, mutateWorkout, deleteWorkout } from '../lib/api';
+import { getWorkouts, mutateWorkout, deleteWorkout } from '../lib/api';
 import { analyzeExerciseProgression } from '../lib/progression';
 import { rebuildExercisesPreservingIdentity } from '../lib/workout-session';
 import { useAuthStore } from '../store/useAuthStore';
@@ -40,7 +40,6 @@ import {
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
-import { WorkoutCelebration } from './WorkoutCelebration';
 import { ExerciseHistorySheet } from './ExerciseHistorySheet';
 import { ExerciseThumbnail } from './workout/ExerciseThumbnail';
 import { ExercisePickerModal } from './workout/ExercisePickerModal';
@@ -102,9 +101,7 @@ export function WorkoutDetailModal({
   const [saving, setSaving] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [simulatingConflict, setSimulatingConflict] = useState(false);
   const [allUserWorkouts, setAllUserWorkouts] = useState<Workout[]>([]);
-  const [showCelebration, setShowCelebration] = useState(false);
   const [showExercisePicker, setShowExercisePicker] = useState(false);
 
   // Rest Timer State
@@ -587,24 +584,6 @@ export function WorkoutDetailModal({
     }
   };
 
-  const handleSimulateExternalEdit = async () => {
-    setSimulatingConflict(true);
-    try {
-      const result = await mutateWorkout(
-        workout.id,
-        workout.version,
-        {
-          title: `${title} (v${workout.version + 1} Ext)`,
-          sets: sets.map((s, idx) => idx === 0 ? { ...s, weight: s.weight + 2.5 } : s)
-        }
-      , { mutationId: crypto.randomUUID() });
-      onSave(result);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setSimulatingConflict(false);
-    }
-  };
 
   const handleDeleteWorkout = async () => {
     const targetUserId = workout.userId || user?.uid;
@@ -1278,20 +1257,6 @@ export function WorkoutDetailModal({
             exercise={activeExerciseHistory}
             report={progressionReports[activeExerciseHistory]}
             onClose={() => setActiveExerciseHistory(null)}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* Workout Celebration Modal */}
-      <AnimatePresence>
-        {showCelebration && (
-          <WorkoutCelebration 
-            workout={{...workout, sets}} 
-            allWorkouts={allUserWorkouts}
-            onClose={() => {
-              setShowCelebration(false);
-              onClose();
-            }} 
           />
         )}
       </AnimatePresence>
