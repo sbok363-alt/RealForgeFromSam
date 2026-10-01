@@ -13,6 +13,7 @@ import {
   writeBatch 
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
+import { executeRollbackValidation } from './validation';
 import {
   getOrCreateGuestIdentity,
   guestProfileKey,
@@ -168,6 +169,39 @@ export class WorkoutConflictError extends Error {
   }
 }
 
+function workoutInverseDelta(workout: Workout): Record<string, any> {
+  const delta: Record<string, any> = {
+    title: workout.title,
+    scheduledDate: workout.scheduledDate,
+    status: workout.status,
+    sets: workout.sets || [],
+    exercises: workout.exercises || [],
+  };
+
+  if (workout.notes !== undefined) delta.notes = workout.notes;
+  if (workout.exerciseNotes !== undefined) delta.exerciseNotes = workout.exerciseNotes;
+  if (workout.completedAt !== undefined) delta.completedAt = workout.completedAt;
+  if (workout.startedAt !== undefined) delta.startedAt = workout.startedAt;
+  if (workout.totalVolume !== undefined) delta.totalVolume = workout.totalVolume;
+  if (workout.volume !== undefined) delta.volume = workout.volume;
+  if (workout.duration !== undefined) delta.duration = workout.duration;
+
+  return delta;
+}
+
+async function appendLocalAuditLog(log: MutationAuditLog): Promise<void> {
+  if (!log.userId) return;
+  const key = `forge_audit_logs_${log.userId}`;
+  let existing: MutationAuditLog[] = [];
+  try {
+    existing = JSON.parse(localStorage.getItem(key) || '[]');
+  } catch {}
+  localStorage.setItem(
+    key,
+    JSON.stringify([log, ...existing.filter((item) => item.id !== log.id)])
+  );
+}
+
 export async function upsertAuthoritativeWorkoutCache(workout: Workout): Promise<void> {
   if (!workout.userId) return;
   const all = await getWorkouts(workout.userId);
@@ -193,6 +227,21 @@ export async function saveWorkout(
       updatedAt: new Date().toISOString(),
     };
     await upsertAuthoritativeWorkoutCache(localWorkout);
+    await appendLocalAuditLog({
+      id: `audit_${crypto.randomUUID()}`,
+      mutationId: options.mutationId || crypto.randomUUID(),
+      userId: localWorkout.userId,
+      actor,
+      action: 'CREATE',
+      mutationType: 'CREATE_WORKOUT',
+      targetEntityType: 'WORKOUT',
+      targetEntityId: localWorkout.id,
+      baseVersion: 0,
+      resultVersion: localWorkout.version,
+      summary,
+      inverseDelta: { deleted: true },
+      createdAt: new Date().toISOString(),
+    });
     return localWorkout;
   }
 
@@ -370,9 +419,11 @@ export async function discardProposal(proposalId: string, userId: string): Promi
     reviewedAt: new Date().toISOString()
   };
 
-  try {
-    await setDoc(doc(db, 'proposals', proposal.id), { ...discarded, userId });
-  } catch (e) {}
+  if (!isGuestUserId(userId)) {
+    try {
+      await setDoc(doc(db, 'proposals', proposal.id), { ...discarded, userId });
+    } catch (e) {}
+  }
 
   const nextList = proposals.map(p => p.id === proposal.id ? discarded : p);
   localStorage.setItem(`forge_proposals_${userId}`, JSON.stringify(nextList));
@@ -385,7 +436,8 @@ export async function discardProposal(proposalId: string, userId: string): Promi
 // ==========================================
 
 export async function getMutationAuditLogs(userId: string, targetEntityId?: string): Promise<MutationAuditLog[]> {
-  try {
+  if (!isGuestUserId(userId)) {
+    try {
     let q = query(
       collection(db, 'mutation_audit_logs'),
       where('userId', '==', userId),
@@ -403,8 +455,9 @@ export async function getMutationAuditLogs(userId: string, targetEntityId?: stri
     if (!snap.empty) {
       return snap.docs.map(d => ({ id: d.id, ...d.data() } as MutationAuditLog));
     }
-  } catch (e) {
-    console.warn("Could not fetch audit logs from Firestore:", e);
+    } catch (e) {
+      console.warn("Could not fetch audit logs from Firestore:", e);
+    }
   }
 
   const local = localStorage.getItem(`forge_audit_logs_${userId}`);
@@ -421,23 +474,75 @@ export async function getMutationAuditLogs(userId: string, targetEntityId?: stri
 }
 
 export async function recordMutationAuditLog(log: MutationAuditLog): Promise<void> {
-  // P0-1: mutation_audit_logs is strictly server-authoritative. Direct client Firestore writes are denied.
-  if (log.userId) {
-    const list = await getMutationAuditLogs(log.userId);
-    const updated = [log, ...list.filter(l => l.id !== log.id)];
-    localStorage.setItem(`forge_audit_logs_${log.userId}`, JSON.stringify(updated));
-  }
+  // Cloud audit remains server-authoritative; this cache is only a local mirror / Guest truth.
+  await appendLocalAuditLog(log);
 }
 
 export async function undoMutation(
-  auditLogId: string, 
+  auditLogId: string,
   userId: string
-): Promise<{ success: boolean; workout?: Workout; error?: string }> {
+): Promise<{ success: boolean; workout?: Workout; deleted?: boolean; id?: string; error?: string }> {
   const logs = await getMutationAuditLogs(userId);
-  const log = logs.find(l => l.id === auditLogId);
-  if (!log) return { success: false, error: "Audit log entry not found" };
+  const log = logs.find((item) => item.id === auditLogId);
+  if (!log) return { success: false, error: 'Audit log entry not found' };
 
-  const token = (await auth.currentUser?.getIdToken()) || 'demo-token';
+  if (isGuestUserId(userId)) {
+    try {
+      const workouts = await getWorkouts(userId);
+      const current = workouts.find((item) => item.id === log.targetEntityId);
+      if (!current) return { success: false, error: 'Workout not found' };
+
+      const decision = executeRollbackValidation(userId, current.id, current, log);
+      const mutationId = crypto.randomUUID();
+
+      if ('action' in decision && decision.action === 'DELETE') {
+        localStorage.setItem(
+          `forge_workouts_${userId}`,
+          JSON.stringify(workouts.filter((item) => item.id !== current.id))
+        );
+        await appendLocalAuditLog({
+          id: `audit_${crypto.randomUUID()}`,
+          mutationId,
+          userId,
+          actor: 'USER',
+          action: 'ROLLBACK_CREATION',
+          mutationType: 'ROLLBACK_CREATION',
+          targetEntityType: 'WORKOUT',
+          targetEntityId: current.id,
+          baseVersion: current.version,
+          resultVersion: 0,
+          summary: `Rollback of workout creation: deleted workout "${current.title}"`,
+          inverseDelta: workoutInverseDelta(current),
+          createdAt: new Date().toISOString(),
+        });
+        return { success: true, deleted: true, id: current.id };
+      }
+
+      const restored = decision as Workout;
+      await upsertAuthoritativeWorkoutCache(restored);
+      await appendLocalAuditLog({
+        id: `audit_${crypto.randomUUID()}`,
+        mutationId,
+        userId,
+        actor: 'USER',
+        action: 'ROLLBACK_UPDATE',
+        mutationType: 'ROLLBACK_UPDATE',
+        targetEntityType: 'WORKOUT',
+        targetEntityId: current.id,
+        baseVersion: current.version,
+        resultVersion: restored.version,
+        summary: `Rollback of mutation: restored state from v${log.baseVersion}`,
+        inverseDelta: workoutInverseDelta(current),
+        createdAt: new Date().toISOString(),
+      });
+      return { success: true, workout: restored };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Failed to rollback' };
+    }
+  }
+
+  const token = await auth.currentUser?.getIdToken();
+  if (!token) return { success: false, error: 'Not authenticated' };
   const mutationId = crypto.randomUUID();
 
   try {
@@ -455,16 +560,18 @@ export async function undoMutation(
       return { success: false, error: data.error || 'Failed to undo mutation' };
     }
 
-    if (data.workout && data.workout.userId) {
-      const allWorkouts = await getWorkouts(data.workout.userId);
-      localStorage.setItem(`forge_workouts_${data.workout.userId}`, JSON.stringify(
-        allWorkouts.map(w => w.id === data.workout.id ? data.workout : w)
-      ));
+    if (data.workout?.userId) {
+      await upsertAuthoritativeWorkoutCache(data.workout);
     }
 
-    return { success: true, workout: data.workout };
+    return {
+      success: true,
+      workout: data.workout,
+      deleted: data.deleted,
+      id: data.id
+    };
   } catch (err: any) {
-    console.warn("Server undoMutation error:", err);
+    console.warn('Server undoMutation error:', err);
     return { success: false, error: err.message || 'Failed to rollback' };
   }
 }
@@ -558,11 +665,13 @@ export async function deleteThread(threadId: string, userId: string): Promise<vo
 }
 
 export async function deleteAllThreads(userId: string): Promise<void> {
-  const threads = await getThreads(userId);
-  for (const t of threads) {
-    try {
-      await deleteDoc(doc(db, 'threads', t.id));
-    } catch (e) {}
+  if (!isGuestUserId(userId)) {
+    const threads = await getThreads(userId);
+    for (const thread of threads) {
+      try {
+        await deleteDoc(doc(db, 'threads', thread.id));
+      } catch {}
+    }
   }
   localStorage.removeItem(`forge_threads_${userId}`);
 }
@@ -1096,6 +1205,23 @@ export async function mutateWorkout(
       updatedAt: new Date().toISOString(),
     };
     await upsertAuthoritativeWorkoutCache(authoritative);
+    await appendLocalAuditLog({
+      id: `audit_${crypto.randomUUID()}`,
+      mutationId: options.mutationId,
+      userId: identity.uid,
+      actor: 'USER',
+      action: 'UPDATE',
+      mutationType: 'UPDATE_WORKOUT',
+      targetEntityType: 'WORKOUT',
+      targetEntityId: current.id,
+      baseVersion: current.version,
+      resultVersion: authoritative.version,
+      summary: updates.status === 'COMPLETED' || updates.status === 'completed'
+        ? `Completed workout "${authoritative.title}"`
+        : `Updated workout "${authoritative.title}"`,
+      inverseDelta: workoutInverseDelta(current),
+      createdAt: new Date().toISOString(),
+    });
     return authoritative;
   }
 
