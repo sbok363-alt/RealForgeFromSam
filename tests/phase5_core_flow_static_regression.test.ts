@@ -11,6 +11,7 @@ const conflict = readFileSync(new URL('../src/components/workout/WorkoutConflict
 const progress = readFileSync(new URL('../src/pages/Progress.tsx', import.meta.url), 'utf8');
 const charts = readFileSync(new URL('../src/components/D3PerformanceCharts.tsx', import.meta.url), 'utf8');
 const heatmap = readFileSync(new URL('../src/components/PhysiqueHeatmap.tsx', import.meta.url), 'utf8');
+const workoutStore = readFileSync(new URL('../src/store/useWorkoutStore.ts', import.meta.url), 'utf8');
 
 assert(
   !detail.includes("workout.status === 'IN_PROGRESS' || !isEditMode"),
@@ -51,6 +52,7 @@ assert(
 );
 
 assert(
-  detail.includes('rebuildExercisesPreservingIdentity(updatedSets, activeWorkout.exercises || [])'),
-  'live set add/remove flows must preserve existing exercise identity instead of regenerating exercise ids'
+  workoutStore.includes('preserveExistingExerciseIdentity') &&
+  workoutStore.includes('exercises: preserveExistingExerciseIdentity('),
+  'active workout updates must preserve existing exercise identity when callers rebuild exercise groups'
 );
