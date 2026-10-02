@@ -541,7 +541,11 @@ export async function executeBrainAction(
       targetEntityType: 'TARGET_PROGRESSION',
       targetEntityId,
       storageAdapter,
-      execute: async (validatedPayload) => {
+      // TARGET_PROGRESSION is the audit-facing type; persisted targets live in targets_1rm.
+      // Resolve ownership/beforeState through the same transaction-scoped storage used by the write.
+      getExistingEntity: async (targetEntityId: string, txStorage: MutationStorageAdapter) =>
+        txStorage.findExistingEntity('targets_1rm', targetEntityId),
+      execute: async (validatedPayload, ctx) => {
         const targetData = {
           id: targetEntityId,
           userId: authenticatedUserId,
@@ -549,7 +553,7 @@ export async function executeBrainAction(
           source: 'AI_BRAIN',
           updatedAt: new Date().toISOString(),
         };
-        await storageAdapter.commitMutation('targets_1rm', targetEntityId, targetData);
+        await ctx.storage.commitMutation('targets_1rm', targetEntityId, targetData);
         return targetData;
       },
     });
@@ -621,9 +625,9 @@ export async function executeBrainAction(
       // B1: the audit entity type is TRAINING_PLAN, but plans are stored in the
       // 'plans' collection. Resolve ownership against the record that is actually
       // written, otherwise the guard silently resolves null and is skipped.
-      getExistingEntity: async (targetEntityId: string, txStorage: any) =>
+      getExistingEntity: async (targetEntityId: string, txStorage: MutationStorageAdapter) =>
         txStorage.findExistingEntity('plans', targetEntityId),
-      execute: async (validatedPayload) => {
+      execute: async (validatedPayload, ctx) => {
         const planData = {
           id: validatedPayload.planId,
           userId: authenticatedUserId,
@@ -631,7 +635,7 @@ export async function executeBrainAction(
           source: 'AI_BRAIN',
           updatedAt: new Date().toISOString(),
         };
-        await storageAdapter.commitMutation('plans', validatedPayload.planId, planData);
+        await ctx.storage.commitMutation('plans', validatedPayload.planId, planData);
         return planData;
       },
     });
