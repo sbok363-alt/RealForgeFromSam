@@ -313,8 +313,23 @@ export class InMemoryMutationStorageAdapter implements MutationStorageAdapter {
   }
 
   async runTransaction<R>(fn: (txAdapter: MutationStorageAdapter) => Promise<R>): Promise<R> {
-    // In-memory transactions run atomically in single-threaded Node.js
-    return await fn(this);
+    const txAdapter = new InMemoryMutationStorageAdapter();
+    txAdapter.entities = new Map(
+      Array.from(this.entities.entries(), ([key, value]) => [key, JSON.parse(JSON.stringify(value))])
+    );
+    txAdapter.idempotencyStore = new Map(
+      Array.from(this.idempotencyStore.entries(), ([key, value]) => [key, JSON.parse(JSON.stringify(value))])
+    );
+    txAdapter.auditLogStore = new Map(
+      Array.from(this.auditLogStore.entries(), ([key, value]) => [key, JSON.parse(JSON.stringify(value))])
+    );
+
+    const result = await fn(txAdapter);
+
+    this.entities = txAdapter.entities;
+    this.idempotencyStore = txAdapter.idempotencyStore;
+    this.auditLogStore = txAdapter.auditLogStore;
+    return result;
   }
 
   getAuditLogs(): SecureAuditLogEntry[] {
