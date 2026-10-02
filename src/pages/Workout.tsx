@@ -53,6 +53,7 @@ export default function WorkoutPage() {
   const [creating, setCreating] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [filter, setFilter] = useState<'ALL' | 'PLANNED' | 'COMPLETED'>('ALL');
+  const deleteCancelRef = React.useRef<HTMLButtonElement>(null);
 
   // Calculate historical PR counts for completed workouts using Epley's formula
   const workoutPRCounts = useMemo(() => {
@@ -102,6 +103,20 @@ export default function WorkoutPage() {
   useEffect(() => {
     fetchWorkoutsList();
   }, [user]);
+
+  useEffect(() => {
+    if (!workoutToDelete) return;
+    const previousFocus = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    const frame = requestAnimationFrame(() => deleteCancelRef.current?.focus());
+
+    return () => {
+      cancelAnimationFrame(frame);
+      previousFocus?.focus();
+    };
+  }, [workoutToDelete]);
+
 
   const handleStartWorkout = (workout: Workout) => {
     if (activeWorkout && activeWorkout.id !== workout.id) {
@@ -244,7 +259,7 @@ export default function WorkoutPage() {
       )}
 
       {/* Filter Tabs */}
-      <div className="flex items-center gap-2 border-b border-border pb-2">
+      <div className="flex items-center gap-2 border-b border-border pb-2" aria-busy={loading}>
         <button
           onClick={() => setFilter('ALL')}
           className={cn(
@@ -252,7 +267,7 @@ export default function WorkoutPage() {
             filter === 'ALL' ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"
           )}
         >
-          All Workouts ({workouts.length})
+          All Workouts ({loading ? '…' : workouts.length})
         </button>
         <button
           onClick={() => setFilter('PLANNED')}
@@ -261,7 +276,7 @@ export default function WorkoutPage() {
             filter === 'PLANNED' ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"
           )}
         >
-          Planned ({workouts.filter(w => String(w.status).toUpperCase() === 'PLANNED').length})
+          Planned ({loading ? '…' : workouts.filter(w => String(w.status).toUpperCase() === 'PLANNED').length})
         </button>
         <button
           onClick={() => setFilter('COMPLETED')}
@@ -270,7 +285,7 @@ export default function WorkoutPage() {
             filter === 'COMPLETED' ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"
           )}
         >
-          Completed ({workouts.filter(w => String(w.status).toUpperCase() === 'COMPLETED').length})
+          Completed ({loading ? '…' : workouts.filter(w => String(w.status).toUpperCase() === 'COMPLETED').length})
         </button>
       </div>
 
@@ -537,14 +552,26 @@ export default function WorkoutPage() {
       {/* Workout Delete Confirmation Modal */}
       {workoutToDelete && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
-          <div className="bg-card border border-destructive/30 rounded-2xl p-5 max-w-md w-full shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="workout-delete-title"
+            aria-describedby="workout-delete-description"
+            onKeyDown={(event) => {
+              if (event.key === 'Escape' && !deleting) {
+                event.stopPropagation();
+                setWorkoutToDelete(null);
+              }
+            }}
+            className="bg-card border border-destructive/30 rounded-2xl p-5 max-w-md w-full shadow-2xl space-y-4 animate-in fade-in zoom-in-95"
+          >
             <div className="flex items-center gap-3 text-destructive">
               <div className="p-2 rounded-xl bg-destructive/10">
                 <AlertTriangle size={22} />
               </div>
               <div>
-                <h3 className="font-bold text-base text-foreground">Delete Workout?</h3>
-                <p className="text-xs text-muted-foreground">This action will remove the session from your history.</p>
+                <h3 id="workout-delete-title" className="font-bold text-base text-foreground">Delete Workout?</h3>
+                <p id="workout-delete-description" className="text-xs text-muted-foreground">This action will remove the session from your history.</p>
               </div>
             </div>
 
@@ -559,6 +586,7 @@ export default function WorkoutPage() {
 
             <div className="flex gap-2 justify-end pt-1">
               <Button
+                ref={deleteCancelRef}
                 variant="outline"
                 size="sm"
                 onClick={() => setWorkoutToDelete(null)}
