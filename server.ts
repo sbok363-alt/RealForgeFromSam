@@ -296,9 +296,7 @@ export async function handleMutationsExecute(req: any, res: any) {
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
           };
-          if (!isDemo && adminDb) {
-            await adminDb.collection("workouts").doc(sessionId).set(newWorkout);
-          }
+          await ctx.storage.commitMutation('workouts', sessionId, newWorkout);
           return newWorkout;
         }
 
@@ -316,9 +314,7 @@ export async function handleMutationsExecute(req: any, res: any) {
             rationale: validatedPayload.rationale,
             updatedAt: new Date().toISOString()
           };
-          if (!isDemo && adminDb) {
-            await adminDb.collection("targets_1rm").doc(targetId).set(targetData, { merge: true });
-          }
+          await ctx.storage.commitMutation('targets_1rm', targetId, targetData);
           return targetData;
         }
 

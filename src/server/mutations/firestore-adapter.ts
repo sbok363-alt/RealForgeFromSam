@@ -1,6 +1,7 @@
 import { getFirestore } from 'firebase-admin/firestore';
 import { IdempotencyRecord } from '../../lib/idempotency-guard';
 import { MutationStorageAdapter, SecureAuditLogEntry } from '../../domain/mutations';
+import { toFirestoreSafe } from '../../lib/firestore-sanitize';
 
 export class FirestoreMutationStorageAdapter implements MutationStorageAdapter {
   private db: any;
@@ -27,28 +28,31 @@ export class FirestoreMutationStorageAdapter implements MutationStorageAdapter {
 
   async recordIdempotency(record: IdempotencyRecord & { auditLogId?: string }): Promise<void> {
     const docRef = this.db.collection('mutation_ids').doc(record.mutationId);
+    const safeRecord = toFirestoreSafe(record);
     if (this.transaction) {
-      this.transaction.set(docRef, record);
+      this.transaction.set(docRef, safeRecord);
     } else {
-      await docRef.set(record);
+      await docRef.set(safeRecord);
     }
   }
 
   async recordAuditLog(entry: SecureAuditLogEntry): Promise<void> {
     const docRef = this.db.collection('mutation_audit_logs').doc(entry.id);
+    const safeEntry = toFirestoreSafe(entry);
     if (this.transaction) {
-      this.transaction.set(docRef, entry);
+      this.transaction.set(docRef, safeEntry);
     } else {
-      await docRef.set(entry);
+      await docRef.set(safeEntry);
     }
   }
 
   async commitMutation(entityType: string, entityId: string, data: Record<string, any>): Promise<void> {
     const docRef = this.db.collection(entityType).doc(entityId);
+    const safeData = toFirestoreSafe(data);
     if (this.transaction) {
-      this.transaction.set(docRef, data, { merge: true });
+      this.transaction.set(docRef, safeData, { merge: true });
     } else {
-      await docRef.set(data, { merge: true });
+      await docRef.set(safeData, { merge: true });
     }
   }
 
