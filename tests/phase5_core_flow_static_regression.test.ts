@@ -49,3 +49,8 @@ assert(
   !heatmap.includes('generateDemoHypertrophyWorkouts'),
   'real Progress UI must not switch to fabricated demo training data'
 );
+
+assert(
+  detail.includes('rebuildExercisesPreservingIdentity(updatedSets, activeWorkout.exercises || [])'),
+  'live set add/remove flows must preserve existing exercise identity instead of regenerating exercise ids'
+);
