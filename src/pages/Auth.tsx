@@ -58,7 +58,7 @@ export default function Auth() {
   useEffect(() => {
     let isMounted = true;
     getRedirectResult(auth)
-      .then((result) => {
+      .then(async (result) => {
         if (!isMounted) return;
         if (result?.user) {
           if (hasLocalGuestData()) {
