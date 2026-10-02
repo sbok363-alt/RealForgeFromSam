@@ -72,26 +72,30 @@ export default function Profile() {
     setGoogleSyncError(null);
 
     const guestUid = user.uid;
-    const [
-      guestWorkouts,
-      guestProfile,
-      guestPlans,
-      guestBodyweight,
-      guestPersonalRecords,
-      guestTargets,
-      guestPermissions,
-    ] = await Promise.all([
-      getWorkouts(guestUid),
-      getUserProfile(guestUid),
-      getPlans(guestUid),
-      getBodyweight(guestUid),
-      getPersonalRecords(guestUid),
-      getTarget1RMs(guestUid),
-      getUserPermissions(guestUid),
-    ]);
+    let migrationStarted = false;
 
-    beginGuestCloudMigration();
     try {
+      const [
+        guestWorkouts,
+        guestProfile,
+        guestPlans,
+        guestBodyweight,
+        guestPersonalRecords,
+        guestTargets,
+        guestPermissions,
+      ] = await Promise.all([
+        getWorkouts(guestUid),
+        getUserProfile(guestUid),
+        getPlans(guestUid),
+        getBodyweight(guestUid),
+        getPersonalRecords(guestUid),
+        getTarget1RMs(guestUid),
+        getUserPermissions(guestUid),
+      ]);
+
+      beginGuestCloudMigration();
+      migrationStarted = true;
+
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
       const result = await signInWithPopup(auth, provider);
@@ -106,25 +110,17 @@ export default function Profile() {
       }
 
       for (const workout of guestWorkouts) {
-        await upsertWorkoutForCloudMigration(
-          workout,
-          result.user.uid,
-          guestUid
-        );
+        await upsertWorkoutForCloudMigration(workout, result.user.uid, guestUid);
       }
-
       for (const plan of guestPlans) {
         await savePlan({ ...plan, userId: result.user.uid });
       }
-
       for (const entry of guestBodyweight) {
         await saveBodyweight({ ...entry, userId: result.user.uid });
       }
-
       for (const record of guestPersonalRecords) {
         await savePersonalRecord({ ...record, userId: result.user.uid });
       }
-
       for (const target of guestTargets) {
         await saveTarget1RM({ ...target, userId: result.user.uid });
       }
@@ -141,29 +137,32 @@ export default function Profile() {
         autonomyLevel: guestPermissions.autonomyLevel,
       });
 
-      // Server audit logs are server-authoritative and cannot be forged by the client.
-      // Preserve Guest audit history locally under the cloud UID instead of pretending to upload it.
       migrateLocalAuditHistory(guestUid, result.user.uid);
       retireGuestTrainingDataAfterUpgrade(guestUid);
 
       endGuestCloudMigration();
+      migrationStarted = false;
       setGuestSessionActive(false);
       localStorage.removeItem('forge_demo_session');
       setUser(result.user);
     } catch (err: any) {
       console.error("Connect Google migration error:", err);
-      endGuestCloudMigration();
+      if (migrationStarted) {
+        endGuestCloudMigration();
+        migrationStarted = false;
+      }
       setGuestSessionActive(true);
       try {
         await auth.signOut();
       } catch {}
       setUser(createGuestUser());
+
       const cause = err?.message ? ` Reason: ${err.message}` : '';
       setGoogleSyncError(
         `Google sync was not completed. Your local Guest data is still on this device.${cause}`
       );
     } finally {
-      endGuestCloudMigration();
+      if (migrationStarted) endGuestCloudMigration();
       setConnectingGoogle(false);
     }
   };
