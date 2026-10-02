@@ -192,10 +192,19 @@ export async function handleMutationsExecute(req: any, res: any) {
         targetEntityType = envelope.payload?.workoutId ? 'workouts' : 'WORKOUT_SET';
         defaultTargetId = envelope.payload?.workoutId || envelope.payload?.exerciseId;
         break;
-      case 'CREATE_WORKOUT_SESSION':
+      case 'CREATE_WORKOUT_SESSION': {
         payloadSchema = CreateWorkoutSessionSchema;
         targetEntityType = 'WORKOUT';
+        const rawIdempotencyKey = envelope.idempotencyKey;
+        defaultTargetId =
+          typeof rawIdempotencyKey === 'string' && rawIdempotencyKey.trim()
+            ? `w_${rawIdempotencyKey.trim()}`
+            : undefined;
+        // Creation identity must be stable before execution so ownership, audit,
+        // idempotency, and the physical workout write all reference one document.
+        ownershipEntityCollection = 'workouts';
         break;
+      }
       case 'UPDATE_TARGET_PROGRESSION': {
         payloadSchema = UpdateTargetProgressionSchema;
         targetEntityType = 'TARGET_PROGRESSION';
@@ -279,7 +288,10 @@ export async function handleMutationsExecute(req: any, res: any) {
         }
 
         if (mutationType === 'CREATE_WORKOUT_SESSION') {
-          const sessionId = `w_${crypto.randomUUID()}`;
+          if (!defaultTargetId) {
+            throw new Error("INVALID_CREATE_TARGET");
+          }
+          const sessionId = defaultTargetId;
           const newWorkout = {
             id: sessionId,
             userId: uid,
