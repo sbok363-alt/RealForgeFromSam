@@ -46,6 +46,36 @@ export interface WorkoutState {
   removeExercise: (exerciseId: string) => void;
 }
 
+function normalizeExerciseIdentity(value?: string): string {
+  return (value || '').trim().toLowerCase().replace(/[-_\s]+/g, '');
+}
+
+function preserveExistingExerciseIdentity(
+  existingExercises: WorkoutExercise[],
+  nextExercises: WorkoutExercise[]
+): WorkoutExercise[] {
+  return nextExercises.map((nextExercise) => {
+    const nextExerciseId = normalizeExerciseIdentity(nextExercise.exerciseId);
+    const nextName = normalizeExerciseIdentity(nextExercise.name);
+    const existing = existingExercises.find((candidate) => {
+      if (candidate.id === nextExercise.id) return true;
+
+      const candidateExerciseId = normalizeExerciseIdentity(candidate.exerciseId);
+      if (nextExerciseId && candidateExerciseId === nextExerciseId) return true;
+
+      const candidateName = normalizeExerciseIdentity(candidate.name);
+      return Boolean(nextName && candidateName === nextName);
+    });
+
+    if (!existing) return nextExercise;
+    return {
+      ...nextExercise,
+      id: existing.id,
+      exerciseId: existing.exerciseId,
+    };
+  });
+}
+
 let persistenceWarningSink = (_message: string | null) => {};
 
 const workoutStorage = createSafeStateStorage(
@@ -104,7 +134,16 @@ export const useWorkoutStore = create<WorkoutState>()(
           const updated = typeof workoutOrUpdater === 'function'
             ? workoutOrUpdater(state.activeWorkout)
             : { ...state.activeWorkout, ...workoutOrUpdater };
-          return { activeWorkout: updated, sessionRevision: state.sessionRevision + 1 };
+          const identitySafeUpdated = updated.exercises
+            ? {
+                ...updated,
+                exercises: preserveExistingExerciseIdentity(
+                  state.activeWorkout.exercises || [],
+                  updated.exercises
+                ),
+              }
+            : updated;
+          return { activeWorkout: identitySafeUpdated, sessionRevision: state.sessionRevision + 1 };
         });
       },
 
@@ -179,7 +218,7 @@ export const useWorkoutStore = create<WorkoutState>()(
       queuePendingMutation: (operation) => set({ pendingMutation: operation, syncError: null }),
       clearPendingMutation: () => set({ pendingMutation: null }),
       setSyncConflict: (conflict) => set({ syncConflict: conflict }),
-      setSyncError: (message) => set({ syncError: message }),
+      setSyncError: (message: string | null) => set({ syncError: message }),
       applyAuthoritativeWorkout: (workout) => set({ activeWorkout: workout, lastSyncedAt: Date.now(), syncError: null }),
       resolveConflictWithServer: () => set((state) => state.syncConflict ? ({
         activeWorkout: state.syncConflict.serverWorkout,
