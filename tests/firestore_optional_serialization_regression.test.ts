@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { InMemoryMutationStorageAdapter } from '../src/domain/mutations';
 import { toFirestoreSafe } from '../src/lib/firestore-sanitize';
 
 function assert(condition: boolean, message: string) {
@@ -60,4 +61,42 @@ assert(
   'target progression must not bypass the storage adapter'
 );
 
-console.log('B2 Firestore optional-field serialization regression passed');
+const inMemoryStorage = new InMemoryMutationStorageAdapter();
+inMemoryStorage.seedEntity('plans', 'plan_merge_parity', {
+  id: 'plan_merge_parity',
+  userId: 'user_owner',
+  name: 'Before',
+  weeklyFrequency: 4,
+  isActive: false,
+  days: [
+    {
+      id: 'day_1',
+      name: 'Upper',
+      exercises: [
+        {
+          id: 'pe_1',
+          exerciseId: 'bench_press',
+          targetSets: 3,
+          targetRepsMin: 6,
+          targetRepsMax: 8,
+        },
+      ],
+    },
+  ],
+});
+
+await inMemoryStorage.commitMutation('plans', 'plan_merge_parity', {
+  name: 'After',
+  updatedAt: '2026-10-03T00:00:00.000Z',
+  omittedUndefined: undefined,
+});
+
+const merged = await inMemoryStorage.findExistingEntity('plans', 'plan_merge_parity');
+assert(merged?.name === 'After', 'in-memory partial commit must update supplied fields');
+assert(merged?.userId === 'user_owner', 'in-memory partial commit must preserve untouched ownership');
+assert(merged?.weeklyFrequency === 4, 'in-memory partial commit must preserve untouched numeric fields');
+assert(merged?.isActive === false, 'in-memory partial commit must preserve untouched false values');
+assert(merged?.days?.[0]?.name === 'Upper', 'in-memory partial commit must preserve untouched nested fields');
+assert(!('omittedUndefined' in (merged || {})), 'in-memory commit must omit undefined fields like Firestore');
+
+console.log('B2 Firestore optional-field serialization and adapter merge parity regression passed');
