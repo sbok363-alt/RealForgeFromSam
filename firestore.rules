@@ -59,8 +59,17 @@ service cloud.firestore {
       allow delete: if isSignedIn() && existing().userId == request.auth.uid;
     }
 
-    // Audit logs: server-authoritative only. Client writes are completely denied.
+    // Workout rollback audit logs: server-authoritative only.
+    // These use the MutationAuditLog schema consumed by the Audit Trail/rollback UI.
     match /mutation_audit_logs/{logId} {
+      allow read, list: if isSignedIn() && existing().userId == request.auth.uid;
+      allow write: if false;
+    }
+
+    // Generic secure-pipeline audit records use a different schema and must never
+    // be mixed into the workout rollback stream. They remain server-authored,
+    // owner-readable records for review/debugging.
+    match /secure_mutation_audit_logs/{logId} {
       allow read, list: if isSignedIn() && existing().userId == request.auth.uid;
       allow write: if false;
     }

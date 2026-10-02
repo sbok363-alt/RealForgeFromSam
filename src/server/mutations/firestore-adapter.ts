@@ -37,7 +37,11 @@ export class FirestoreMutationStorageAdapter implements MutationStorageAdapter {
   }
 
   async recordAuditLog(entry: SecureAuditLogEntry): Promise<void> {
-    const docRef = this.db.collection('mutation_audit_logs').doc(entry.id);
+    // SecureMutationAuditEntry is intentionally NOT the rollback-oriented
+    // MutationAuditLog schema consumed by the workout Audit Trail UI.
+    // Keep the streams physically separate so generic/AI mutation records cannot
+    // masquerade as contiguous workout rollback records.
+    const docRef = this.db.collection('secure_mutation_audit_logs').doc(entry.id);
     const safeEntry = toFirestoreSafe(entry);
     if (this.transaction) {
       this.transaction.set(docRef, safeEntry);
