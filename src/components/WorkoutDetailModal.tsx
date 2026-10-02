@@ -104,6 +104,7 @@ export function WorkoutDetailModal({
   const [saving, setSaving] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const deleteCancelRef = React.useRef<HTMLButtonElement>(null);
   const [allUserWorkouts, setAllUserWorkouts] = useState<Workout[]>([]);
   const [showExercisePicker, setShowExercisePicker] = useState(false);
 
@@ -140,6 +141,19 @@ export function WorkoutDetailModal({
       if (activeWorkout.exerciseNotes) setExerciseNotes(activeWorkout.exerciseNotes);
     }
   }, [isOpen, workout.id, activeWorkout?.id]);
+
+  useEffect(() => {
+    if (!showDeleteConfirm) return;
+    const previousFocus = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    const frame = requestAnimationFrame(() => deleteCancelRef.current?.focus());
+
+    return () => {
+      cancelAnimationFrame(frame);
+      previousFocus?.focus();
+    };
+  }, [showDeleteConfirm]);
 
   // Duration only ticks for the actually active session. History/detail views stay static.
   useEffect(() => {
@@ -1280,6 +1294,16 @@ export function WorkoutDetailModal({
         {showDeleteConfirm && (
           <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
             <motion.div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="detail-delete-title"
+              aria-describedby="detail-delete-description"
+              onKeyDown={(event) => {
+                if (event.key === 'Escape' && !deleting) {
+                  event.stopPropagation();
+                  setShowDeleteConfirm(false);
+                }
+              }}
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
@@ -1290,8 +1314,8 @@ export function WorkoutDetailModal({
                   <AlertTriangle size={22} />
                 </div>
                 <div>
-                  <h3 className="font-bold text-base text-foreground">Delete Workout?</h3>
-                  <p className="text-xs text-muted-foreground">This will remove this session from your logs.</p>
+                  <h3 id="detail-delete-title" className="font-bold text-base text-foreground">Delete Workout?</h3>
+                  <p id="detail-delete-description" className="text-xs text-muted-foreground">This will remove this session from your logs.</p>
                 </div>
               </div>
 
@@ -1302,6 +1326,7 @@ export function WorkoutDetailModal({
 
               <div className="flex gap-2 justify-end pt-1">
                 <Button
+                  ref={deleteCancelRef}
                   variant="outline"
                   size="sm"
                   onClick={() => setShowDeleteConfirm(false)}
