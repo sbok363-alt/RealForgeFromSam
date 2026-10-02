@@ -618,6 +618,11 @@ export async function executeBrainAction(
       targetEntityType: 'TRAINING_PLAN',
       targetEntityId: planId,
       storageAdapter,
+      // B1: the audit entity type is TRAINING_PLAN, but plans are stored in the
+      // 'plans' collection. Resolve ownership against the record that is actually
+      // written, otherwise the guard silently resolves null and is skipped.
+      getExistingEntity: async (targetEntityId: string, txStorage: any) =>
+        txStorage.findExistingEntity('plans', targetEntityId),
       execute: async (validatedPayload) => {
         const planData = {
           id: validatedPayload.planId,

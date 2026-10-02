@@ -181,6 +181,10 @@ export async function handleMutationsExecute(req: any, res: any) {
     let payloadSchema: any;
     let targetEntityType: string;
     let defaultTargetId: string | undefined;
+    // B1: audit-facing entity type and the physical storage collection can differ.
+    // When they do, the ownership probe must be pointed at the collection that is
+    // actually written, otherwise the guard silently resolves null and is skipped.
+    let ownershipEntityCollection: string | undefined;
 
     switch (mutationType) {
       case 'LOG_SET':
@@ -201,6 +205,8 @@ export async function handleMutationsExecute(req: any, res: any) {
         payloadSchema = ModifyTrainingPlanSchema;
         targetEntityType = 'TRAINING_PLAN';
         defaultTargetId = envelope.payload?.planId;
+        // Plans live in the 'plans' collection; the audit entity type stays TRAINING_PLAN.
+        ownershipEntityCollection = 'plans';
         break;
       default:
         return res.status(400).json({
@@ -224,6 +230,11 @@ export async function handleMutationsExecute(req: any, res: any) {
       targetEntityType,
       targetEntityId: defaultTargetId,
       storageAdapter,
+      // B1: resolve ownership against the collection that is actually written.
+      getExistingEntity: ownershipEntityCollection
+        ? async (targetEntityId: string, txStorage: any) =>
+            txStorage.findExistingEntity(ownershipEntityCollection, targetEntityId)
+        : undefined,
       execute: async (validatedPayload: any, ctx: MutationExecutionContext) => {
         if (mutationType === 'LOG_SET') {
           const workoutId = validatedPayload.workoutId;
@@ -312,8 +323,9 @@ export async function handleMutationsExecute(req: any, res: any) {
         }
 
         if (mutationType === 'MODIFY_TRAINING_PLAN') {
+          const planId = validatedPayload.planId;
           const planData = {
-            id: validatedPayload.planId,
+            id: planId,
             userId: uid,
             name: validatedPayload.name,
             weeklyFrequency: validatedPayload.weeklyFrequency,
@@ -321,9 +333,9 @@ export async function handleMutationsExecute(req: any, res: any) {
             days: validatedPayload.days,
             updatedAt: new Date().toISOString()
           };
-          if (!isDemo && adminDb) {
-            await adminDb.collection("plans").doc(validatedPayload.planId).set(planData, { merge: true });
-          }
+          // B1: write through the transactional storage adapter so the ownership check
+          // and the mutation commit inside the same authoritative transaction.
+          await ctx.storage.commitMutation('plans', planId, planData);
           return planData;
         }
 
