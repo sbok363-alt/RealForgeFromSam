@@ -99,4 +99,50 @@ assert(merged?.isActive === false, 'in-memory partial commit must preserve untou
 assert(merged?.days?.[0]?.name === 'Upper', 'in-memory partial commit must preserve untouched nested fields');
 assert(!('omittedUndefined' in (merged || {})), 'in-memory commit must omit undefined fields like Firestore');
 
-console.log('B2 Firestore optional-field serialization and adapter merge parity regression passed');
+const rollbackStorage = new InMemoryMutationStorageAdapter();
+rollbackStorage.seedEntity('plans', 'plan_tx_rollback', {
+  id: 'plan_tx_rollback',
+  userId: 'user_owner',
+  name: 'Before Transaction',
+  isActive: false,
+});
+
+let transactionThrew = false;
+try {
+  await rollbackStorage.runTransaction(async (tx) => {
+    await tx.commitMutation('plans', 'plan_tx_rollback', {
+      name: 'Should Roll Back',
+      isActive: true,
+    });
+    await tx.recordAuditLog({
+      id: 'audit_tx_rollback',
+      mutationId: 'mutation_tx_rollback',
+      userId: 'user_owner',
+      source: 'USER_INPUT',
+      targetEntityType: 'TRAINING_PLAN',
+      targetEntityId: 'plan_tx_rollback',
+      timestamp: '2026-10-03T00:00:00.000Z',
+      status: 'COMMITTED',
+    });
+    await tx.recordIdempotency({
+      mutationId: 'mutation_tx_rollback',
+      userId: 'user_owner',
+      targetId: 'plan_tx_rollback',
+      payloadHash: 'hash_tx_rollback',
+      result: { name: 'Should Roll Back' },
+      createdAt: '2026-10-03T00:00:00.000Z',
+    });
+    throw new Error('FORCED_TRANSACTION_FAILURE');
+  });
+} catch (error: any) {
+  transactionThrew = error?.message === 'FORCED_TRANSACTION_FAILURE';
+}
+
+assert(transactionThrew, 'in-memory transaction must propagate callback failures');
+const rolledBack = await rollbackStorage.findExistingEntity('plans', 'plan_tx_rollback');
+assert(rolledBack?.name === 'Before Transaction', 'failed in-memory transaction must rollback entity writes');
+assert(rolledBack?.isActive === false, 'failed in-memory transaction must restore prior entity values');
+assert(rollbackStorage.getAuditLogs().length === 0, 'failed in-memory transaction must rollback audit writes');
+assert(rollbackStorage.getIdempotencyRecords().length === 0, 'failed in-memory transaction must rollback idempotency writes');
+
+console.log('B2 Firestore serialization, merge parity, and transaction rollback regression passed');
