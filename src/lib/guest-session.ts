@@ -28,7 +28,7 @@ export function setGuestSessionActive(active: boolean): void {
 
 export function getOrCreateGuestIdentity(): GuestIdentity {
   if (!canUseStorage()) {
-    return { uid: `${GUEST_UID_PREFIX}runtime`, displayName: 'Gast' };
+    return { uid: `${GUEST_UID_PREFIX}runtime`, displayName: 'Guest' };
   }
 
   const existing = window.localStorage.getItem(GUEST_IDENTITY_KEY);
@@ -36,7 +36,13 @@ export function getOrCreateGuestIdentity(): GuestIdentity {
     try {
       const parsed = JSON.parse(existing) as GuestIdentity;
       if (isGuestUserId(parsed.uid) && parsed.displayName?.trim()) {
-        return parsed;
+        const normalized = parsed.displayName.trim() === 'Gast'
+          ? { ...parsed, displayName: 'Guest' }
+          : parsed;
+        if (normalized !== parsed) {
+          window.localStorage.setItem(GUEST_IDENTITY_KEY, JSON.stringify(normalized));
+        }
+        return normalized;
       }
     } catch {
       // Replace corrupt identity below without touching workout data.
@@ -45,7 +51,7 @@ export function getOrCreateGuestIdentity(): GuestIdentity {
 
   const identity: GuestIdentity = {
     uid: `${GUEST_UID_PREFIX}${crypto.randomUUID()}`,
-    displayName: 'Gast',
+    displayName: 'Guest',
   };
   window.localStorage.setItem(GUEST_IDENTITY_KEY, JSON.stringify(identity));
   return identity;
@@ -55,7 +61,7 @@ export function updateGuestDisplayName(name: string): GuestIdentity {
   const identity = getOrCreateGuestIdentity();
   const next = {
     ...identity,
-    displayName: name.trim() || 'Gast',
+    displayName: name.trim() || 'Guest',
   };
   if (canUseStorage()) {
     window.localStorage.setItem(GUEST_IDENTITY_KEY, JSON.stringify(next));
@@ -76,7 +82,7 @@ export function getStoredGuestIdentity(): GuestIdentity | null {
     if (!isGuestUserId(parsed.uid)) return null;
     return {
       uid: parsed.uid,
-      displayName: parsed.displayName?.trim() || 'Gast',
+      displayName: parsed.displayName?.trim() || 'Guest',
     };
   } catch {
     return null;
