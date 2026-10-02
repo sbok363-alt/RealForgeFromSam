@@ -23,8 +23,15 @@ assert(
   'workout cards must label the detail action truthfully'
 );
 assert(
-  !workout.includes('openWorkoutModal') && !workout.includes('const [creating,'),
-  'dead workout UI state must stay removed'
+  !workout.includes('openWorkoutModal'),
+  'obsolete workout modal store state must stay removed'
+);
+assert(
+  workout.includes('const [creating, setCreating] = useState(false)') &&
+  createBlock.includes('if (!user || creating) return') &&
+  createBlock.includes('setCreating(true)') &&
+  createBlock.includes('setCreating(false)'),
+  'workout creation must use explicit in-flight state to prevent duplicate creates'
 );
 
 assert(
