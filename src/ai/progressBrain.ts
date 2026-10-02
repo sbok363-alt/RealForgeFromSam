@@ -515,7 +515,9 @@ export async function executeBrainAction(
     }
 
     const idempotencyKey = context.idempotencyKey || crypto.randomUUID();
-    const targetEntityId = `target_${authenticatedUserId}_${rawArgs.exerciseId || 'unknown'}`;
+    const normalizedExerciseId =
+      typeof rawArgs.exerciseId === 'string' ? rawArgs.exerciseId.trim() : rawArgs.exerciseId;
+    const targetEntityId = `target_${authenticatedUserId}_${normalizedExerciseId || 'unknown'}`;
 
     const rawEnvelope = {
       idempotencyKey,
@@ -524,7 +526,7 @@ export async function executeBrainAction(
       reason,
       timestamp: new Date().toISOString(),
       payload: {
-        exerciseId: rawArgs.exerciseId,
+        exerciseId: normalizedExerciseId,
         targetWeightKg: rawArgs.targetWeightKg,
         targetRepsMin: rawArgs.targetRepsMin,
         targetRepsMax: rawArgs.targetRepsMax,
@@ -598,7 +600,8 @@ export async function executeBrainAction(
     }
 
     const idempotencyKey = context.idempotencyKey || crypto.randomUUID();
-    const planId = rawArgs.planId;
+    const planId =
+      typeof rawArgs.planId === 'string' ? rawArgs.planId.trim() : rawArgs.planId;
 
     const rawEnvelope = {
       idempotencyKey,

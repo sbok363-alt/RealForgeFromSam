@@ -187,11 +187,21 @@ export async function handleMutationsExecute(req: any, res: any) {
     let ownershipEntityCollection: string | undefined;
 
     switch (mutationType) {
-      case 'LOG_SET':
+      case 'LOG_SET': {
         payloadSchema = LogSetInputSchema;
-        targetEntityType = envelope.payload?.workoutId ? 'workouts' : 'WORKOUT_SET';
-        defaultTargetId = envelope.payload?.workoutId || envelope.payload?.exerciseId;
+        const rawWorkoutId = envelope.payload?.workoutId;
+        const rawExerciseId = envelope.payload?.exerciseId;
+        const normalizedWorkoutId =
+          typeof rawWorkoutId === 'string' ? rawWorkoutId.trim() : '';
+        const normalizedExerciseId =
+          typeof rawExerciseId === 'string' ? rawExerciseId.trim() : '';
+        targetEntityType = normalizedWorkoutId ? 'WORKOUT' : 'WORKOUT_SET';
+        defaultTargetId = normalizedWorkoutId || normalizedExerciseId || undefined;
+        if (normalizedWorkoutId) {
+          ownershipEntityCollection = 'workouts';
+        }
         break;
+      }
       case 'CREATE_WORKOUT_SESSION': {
         payloadSchema = CreateWorkoutSessionSchema;
         targetEntityType = 'WORKOUT';
@@ -218,13 +228,18 @@ export async function handleMutationsExecute(req: any, res: any) {
         ownershipEntityCollection = 'targets_1rm';
         break;
       }
-      case 'MODIFY_TRAINING_PLAN':
+      case 'MODIFY_TRAINING_PLAN': {
         payloadSchema = ModifyTrainingPlanSchema;
         targetEntityType = 'TRAINING_PLAN';
-        defaultTargetId = envelope.payload?.planId;
+        const rawPlanId = envelope.payload?.planId;
+        const normalizedPlanId =
+          typeof rawPlanId === 'string' ? rawPlanId.trim() : '';
+        defaultTargetId = normalizedPlanId || undefined;
         // Plans live in the 'plans' collection; the audit entity type stays TRAINING_PLAN.
+        // Normalize before the ownership probe so the checked document is exactly the one written.
         ownershipEntityCollection = 'plans';
         break;
+      }
       default:
         return res.status(400).json({
           success: false,
