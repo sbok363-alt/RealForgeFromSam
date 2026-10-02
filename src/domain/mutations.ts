@@ -313,23 +313,24 @@ export class InMemoryMutationStorageAdapter implements MutationStorageAdapter {
   }
 
   async runTransaction<R>(fn: (txAdapter: MutationStorageAdapter) => Promise<R>): Promise<R> {
-    const txAdapter = new InMemoryMutationStorageAdapter();
-    txAdapter.entities = new Map(
+    const entitiesSnapshot = new Map(
       Array.from(this.entities.entries(), ([key, value]) => [key, JSON.parse(JSON.stringify(value))])
     );
-    txAdapter.idempotencyStore = new Map(
+    const idempotencySnapshot = new Map(
       Array.from(this.idempotencyStore.entries(), ([key, value]) => [key, JSON.parse(JSON.stringify(value))])
     );
-    txAdapter.auditLogStore = new Map(
+    const auditSnapshot = new Map(
       Array.from(this.auditLogStore.entries(), ([key, value]) => [key, JSON.parse(JSON.stringify(value))])
     );
 
-    const result = await fn(txAdapter);
-
-    this.entities = txAdapter.entities;
-    this.idempotencyStore = txAdapter.idempotencyStore;
-    this.auditLogStore = txAdapter.auditLogStore;
-    return result;
+    try {
+      return await fn(this);
+    } catch (error) {
+      this.entities = entitiesSnapshot;
+      this.idempotencyStore = idempotencySnapshot;
+      this.auditLogStore = auditSnapshot;
+      throw error;
+    }
   }
 
   getAuditLogs(): SecureAuditLogEntry[] {
