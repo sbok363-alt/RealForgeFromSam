@@ -306,7 +306,10 @@ export class InMemoryMutationStorageAdapter implements MutationStorageAdapter {
   }
 
   async commitMutation(entityType: string, entityId: string, data: Record<string, any>): Promise<void> {
-    this.entities.set(this.getEntityKey(entityType, entityId), JSON.parse(JSON.stringify(data)));
+    const key = this.getEntityKey(entityType, entityId);
+    const existing = this.entities.get(key) || {};
+    const sanitizedIncoming = JSON.parse(JSON.stringify(data));
+    this.entities.set(key, JSON.parse(JSON.stringify({ ...existing, ...sanitizedIncoming })));
   }
 
   async runTransaction<R>(fn: (txAdapter: MutationStorageAdapter) => Promise<R>): Promise<R> {
