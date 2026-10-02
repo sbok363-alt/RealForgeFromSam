@@ -116,15 +116,17 @@ export default function AuditLogsPage() {
           <div className="flex items-center gap-2">
             <h1 className="text-2xl md:text-3xl font-display font-bold">Mutation Audit Trail</h1>
             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-              <ShieldCheck size={13} /> {isGuest ? 'Local Audit' : hasLocalHistory ? 'Server + Local History' : 'Server Audit'}
+              <ShieldCheck size={13} /> {loading ? 'Loading audit' : isGuest ? 'Local Audit' : hasLocalHistory ? 'Server + Local History' : 'Server Audit'}
             </span>
           </div>
           <p className="text-muted-foreground text-sm mt-1">
-            {isGuest
-              ? 'Device-local mutation history with contiguous rollback for Guest workouts.'
-              : hasLocalHistory
-                ? 'Server-authoritative audit plus preserved device-local Guest history. Migrated local entries are read-only after cloud sync.'
-                : 'Server-authoritative mutation history for manual edits, AI proposals, and autonomous adjustments with contiguous rollback support.'}
+            {loading
+              ? 'Reading audit state…'
+              : isGuest
+                ? 'Device-local mutation history with contiguous rollback for Guest workouts.'
+                : hasLocalHistory
+                  ? 'Server-authoritative audit plus preserved device-local Guest history. Migrated local entries are read-only after cloud sync.'
+                  : 'Server-authoritative mutation history for manual edits, AI proposals, and autonomous adjustments with contiguous rollback support.'}
           </p>
         </div>
       </header>
@@ -141,7 +143,7 @@ export default function AuditLogsPage() {
       )}
 
       {/* Filter Tabs */}
-      <div className="flex items-center gap-2 border-b border-border pb-2 text-xs">
+      <div className="flex items-center gap-2 border-b border-border pb-2 text-xs" aria-busy={loading}>
         <button
           onClick={() => setActorFilter('ALL')}
           className={cn(
@@ -149,7 +151,7 @@ export default function AuditLogsPage() {
             actorFilter === 'ALL' ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"
           )}
         >
-          All Actors ({logs.length})
+          All Actors ({loading ? '…' : logs.length})
         </button>
         <button
           onClick={() => setActorFilter('AI_BRAIN')}
@@ -158,7 +160,7 @@ export default function AuditLogsPage() {
             actorFilter === 'AI_BRAIN' ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"
           )}
         >
-          AI Brain ({logs.filter(l => l.actor === 'AI_BRAIN').length})
+          AI Brain ({loading ? '…' : logs.filter(l => l.actor === 'AI_BRAIN').length})
         </button>
         <button
           onClick={() => setActorFilter('USER')}
@@ -167,7 +169,7 @@ export default function AuditLogsPage() {
             actorFilter === 'USER' ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"
           )}
         >
-          User Edits ({logs.filter(l => l.actor === 'USER').length})
+          User Edits ({loading ? '…' : logs.filter(l => l.actor === 'USER').length})
         </button>
       </div>
 
