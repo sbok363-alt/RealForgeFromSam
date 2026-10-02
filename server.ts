@@ -360,7 +360,10 @@ export async function handleMutationsExecute(req: any, res: any) {
             userId: uid,
             name: validatedPayload.name,
             weeklyFrequency: validatedPayload.weeklyFrequency,
-            isActive: validatedPayload.isActive !== undefined ? validatedPayload.isActive : true,
+            isActive:
+              validatedPayload.isActive !== undefined
+                ? validatedPayload.isActive
+                : (ctx.existingEntity?.isActive ?? true),
             days: validatedPayload.days,
             updatedAt: new Date().toISOString()
           };
