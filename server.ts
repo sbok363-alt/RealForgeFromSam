@@ -196,11 +196,19 @@ export async function handleMutationsExecute(req: any, res: any) {
         payloadSchema = CreateWorkoutSessionSchema;
         targetEntityType = 'WORKOUT';
         break;
-      case 'UPDATE_TARGET_PROGRESSION':
+      case 'UPDATE_TARGET_PROGRESSION': {
         payloadSchema = UpdateTargetProgressionSchema;
         targetEntityType = 'TARGET_PROGRESSION';
-        defaultTargetId = envelope.payload?.exerciseId;
+        const rawExerciseId = envelope.payload?.exerciseId;
+        const normalizedExerciseId =
+          typeof rawExerciseId === 'string' ? rawExerciseId.trim() : '';
+        defaultTargetId = normalizedExerciseId
+          ? `target_${uid}_${normalizedExerciseId}`
+          : undefined;
+        // TARGET_PROGRESSION is audit-facing; persisted target documents live in targets_1rm.
+        ownershipEntityCollection = 'targets_1rm';
         break;
+      }
       case 'MODIFY_TRAINING_PLAN':
         payloadSchema = ModifyTrainingPlanSchema;
         targetEntityType = 'TRAINING_PLAN';
