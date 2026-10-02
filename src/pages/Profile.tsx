@@ -34,14 +34,26 @@ import { LogOut, Moon, Sun, Sparkles, ShieldCheck, RefreshCw, AlertCircle, Volum
 import { Card, CardContent } from '../components/ui/Card';
 import { soundFx } from '../lib/soundFx';
 
+const GOOGLE_SYNC_ERROR_KEY = 'hardstate_google_sync_error';
+
 export default function Profile() {
   const { user, setUser } = useAuthStore();
   const { theme, toggleTheme } = useThemeStore();
   const [connectingGoogle, setConnectingGoogle] = useState(false);
-  const [googleError, setGoogleError] = useState<string | null>(null);
+  const [googleError, setGoogleError] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    return window.sessionStorage.getItem(GOOGLE_SYNC_ERROR_KEY);
+  });
   const [soundEnabled, setSoundEnabled] = useState(soundFx.isEnabled());
   const [editingName, setEditingName] = useState(false);
-  const [guestName, setGuestName] = useState(user?.displayName || 'Gast');
+  const [guestName, setGuestName] = useState(user?.displayName || 'Guest');
+
+  const setGoogleSyncError = (message: string | null) => {
+    setGoogleError(message);
+    if (typeof window === 'undefined') return;
+    if (message) window.sessionStorage.setItem(GOOGLE_SYNC_ERROR_KEY, message);
+    else window.sessionStorage.removeItem(GOOGLE_SYNC_ERROR_KEY);
+  };
 
   const handleSignOut = async () => {
     localStorage.removeItem('forge_demo_session');
@@ -57,7 +69,7 @@ export default function Profile() {
   const handleConnectGoogle = async () => {
     if (!user || !isGuestUserId(user.uid)) return;
     setConnectingGoogle(true);
-    setGoogleError(null);
+    setGoogleSyncError(null);
 
     const guestUid = user.uid;
     const [
@@ -146,8 +158,9 @@ export default function Profile() {
         await auth.signOut();
       } catch {}
       setUser(createGuestUser());
-      setGoogleError(
-        'Google sync was not completed. Your local guest data is still on this device.'
+      const cause = err?.message ? ` Reason: ${err.message}` : '';
+      setGoogleSyncError(
+        `Google sync was not completed. Your local Guest data is still on this device.${cause}`
       );
     } finally {
       endGuestCloudMigration();
@@ -277,10 +290,14 @@ export default function Profile() {
                   <span>Save & sync with Google</span>
                 </Button>
                 {googleError && (
-                  <p className="text-[11px] text-destructive mt-1 flex items-center gap-1">
-                    <AlertCircle size={12} />
-                    {googleError}
-                  </p>
+                  <div
+                    role="alert"
+                    aria-live="assertive"
+                    className="mt-2 flex max-w-sm items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+                  >
+                    <AlertCircle size={14} className="mt-0.5 shrink-0" />
+                    <span>{googleError}</span>
+                  </div>
                 )}
               </div>
             )}
