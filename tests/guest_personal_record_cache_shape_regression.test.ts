@@ -38,7 +38,19 @@ const guestUid = 'guest-local-personal-record-cache-shape';
 const localStorage = new MemoryStorage();
 (globalThis as any).window = { localStorage };
 (globalThis as any).localStorage = localStorage;
-localStorage.setItem(`forge_prs_${guestUid}`, JSON.stringify({ id: 'pr-1', exerciseId: 'bench-press', value: 100 }));
+localStorage.setItem(`forge_prs_${guestUid}`, JSON.stringify([
+  { id: 'invalid-pr', userId: guestUid },
+  {
+    id: 'valid-pr',
+    userId: guestUid,
+    exerciseId: 'bench-press',
+    weight: 80,
+    reps: 5,
+    estimated1RM: 93,
+    workoutId: 'workout-1',
+    date: Date.now(),
+  },
+]));
 
 let records: any[] | undefined;
 let failure: unknown;
@@ -53,6 +65,7 @@ try {
 
 assert(!failure, 'wrong-shape Guest personal-record cache must not crash migration recovery');
 assert(Array.isArray(records), 'wrong-shape Guest personal-record cache must recover to an array');
-assert(records?.length === 0, 'wrong-shape Guest personal-record cache must recover to an empty record list');
+assert(records?.length === 1, `invalid Guest personal-record items must be dropped; got ${JSON.stringify(records)}`);
+assert(records?.[0]?.id === 'valid-pr', 'valid Guest personal records must survive item validation');
 
 console.log('Guest personal-record cache shape regression passed');
