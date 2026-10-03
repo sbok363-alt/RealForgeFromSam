@@ -86,6 +86,7 @@ export function WorkoutDetailModal({
   const [isEditMode, setIsEditMode] = useState(
     () => (workout.exercises?.length || 0) === 0 && (workout.sets?.length || 0) === 0
   );
+  const canModifySet = isEditMode || isLiveSession;
   
   // Consume workout.exercises if available, otherwise fallback to flat sets
   const initialSets = useMemo(() => {
@@ -871,14 +872,20 @@ export function WorkoutDetailModal({
                         </p>
                       </div>
 
-                      <Button
-                        size="default"
-                        onClick={() => setShowExercisePicker(true)}
-                        className="font-bold text-xs gap-2 px-6 shadow-sm"
-                      >
-                        <Plus size={16} />
-                        Add Exercise
-                      </Button>
+                      {canModifySet ? (
+                        <Button
+                          size="default"
+                          onClick={() => setShowExercisePicker(true)}
+                          className="font-bold text-xs gap-2 px-6 shadow-sm"
+                        >
+                          <Plus size={16} />
+                          Add Exercise
+                        </Button>
+                      ) : (
+                        <p className="text-xs font-medium text-muted-foreground">
+                          Edit this workout to add exercises.
+                        </p>
+                      )}
                     </div>
                   ) : (
                     /* Exercise Cards List */
@@ -1018,6 +1025,11 @@ export function WorkoutDetailModal({
                                           1000
                                       ) / 10
                                     : null;
+                                const setTypeLabel =
+                                  set.setType === 'W' ? 'Warmup' :
+                                  set.setType === 'D' ? 'Drop Set' :
+                                  set.setType === 'F' ? 'Failure' :
+                                  'Normal';
 
                                 return (
                                   <div 
@@ -1037,19 +1049,22 @@ export function WorkoutDetailModal({
                                     {/* Set Type Pill Badge */}
                                     <button 
                                       onClick={() => {
+                                        if (!canModifySet) return;
                                         const types: ('N' | 'W' | 'D' | 'F')[] = ['N', 'W', 'D', 'F'];
                                         const current = set.setType || 'N';
                                         const next = types[(types.indexOf(current) + 1) % types.length];
                                         handleUpdateSet(index, 'setType', next);
                                       }}
+                                      disabled={!canModifySet}
                                       className={cn(
-                                        "text-center text-xs font-mono font-bold w-7 h-7 rounded-lg mx-auto flex items-center justify-center transition-all cursor-pointer border shadow-2xs",
+                                        "text-center text-xs font-mono font-bold w-7 h-7 rounded-lg mx-auto flex items-center justify-center transition-all border shadow-2xs",
+                                        canModifySet ? "cursor-pointer" : "cursor-default opacity-60",
                                         set.setType === 'W' ? "bg-amber-500/25 text-amber-600 dark:text-amber-400 border-amber-500/40" :
                                         set.setType === 'D' ? "bg-purple-500/25 text-purple-600 dark:text-purple-400 border-purple-500/40" :
                                         set.setType === 'F' ? "bg-rose-500/25 text-rose-600 dark:text-rose-400 border-rose-500/40" :
                                         "bg-secondary text-foreground border-border/80 hover:bg-secondary/80"
                                       )}
-                                      title={`Type: ${set.setType === 'W' ? 'Warmup' : set.setType === 'D' ? 'Drop Set' : set.setType === 'F' ? 'Failure' : 'Normal'} (Tap to change)`}
+                                      title={canModifySet ? `Type: ${setTypeLabel} (Tap to change)` : `Type: ${setTypeLabel}`}
                                     >
                                       {set.setType && set.setType !== 'N' ? set.setType : setNumber}
                                     </button>
