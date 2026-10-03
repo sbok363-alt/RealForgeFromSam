@@ -903,7 +903,12 @@ export async function getPlans(userId: string): Promise<any[]> {
     } catch (e) {}
   }
   const local = localStorage.getItem(`forge_plans_${userId}`);
-  return local ? JSON.parse(local) : [];
+  if (!local) return [];
+  try {
+    return JSON.parse(local);
+  } catch {
+    return [];
+  }
 }
 
 export async function savePlan(
