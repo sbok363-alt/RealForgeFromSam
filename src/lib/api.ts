@@ -506,10 +506,15 @@ export async function getMutationAuditLogs(
   const local = localStorage.getItem(`forge_audit_logs_${userId}`);
   if (local) {
     try {
-      localLogs = (JSON.parse(local) as MutationAuditLog[]).map((log) => ({
-        ...log,
-        storageScope: log.storageScope || 'LOCAL',
-      }));
+      const parsed = JSON.parse(local);
+      localLogs = Array.isArray(parsed)
+        ? parsed
+            .filter((item) => isLocalEntityForUser(item, userId))
+            .map((log) => ({
+              ...log,
+              storageScope: log.storageScope || 'LOCAL',
+            }))
+        : [];
     } catch {}
   }
 
