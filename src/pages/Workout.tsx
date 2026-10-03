@@ -202,7 +202,8 @@ export default function WorkoutPage() {
   });
 
   const getStatusBadge = (status: Workout['status']) => {
-    switch (status) {
+    const normalizedStatus = String(status).replace(/-/g, '_').toUpperCase();
+    switch (normalizedStatus) {
       case 'IN_PROGRESS':
         return (
           <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/20">
