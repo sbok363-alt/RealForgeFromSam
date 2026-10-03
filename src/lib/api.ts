@@ -158,7 +158,19 @@ export async function getWorkouts(userId: string): Promise<Workout[]> {
     try {
       const parsed = JSON.parse(local);
       return Array.isArray(parsed)
-      ? parsed.filter((item) => isLocalEntityForUser(item, userId))
+      ? parsed.filter((item) => (
+          isLocalEntityForUser(item, userId) &&
+          typeof item.title === 'string' &&
+          item.title.trim().length > 0 &&
+          typeof item.scheduledDate === 'string' &&
+          item.scheduledDate.trim().length > 0 &&
+          typeof item.status === 'string' &&
+          ['PLANNED', 'IN_PROGRESS', 'COMPLETED', 'SKIPPED', 'planned', 'in-progress', 'completed', 'skipped'].includes(item.status) &&
+          Number.isInteger(item.version) &&
+          item.version >= 1 &&
+          Array.isArray(item.sets) &&
+          (item.exercises === undefined || Array.isArray(item.exercises))
+        ))
       : [];
     } catch (e) {}
   }
