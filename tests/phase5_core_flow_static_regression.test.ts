@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import './workout_list_volume_truth_regression.test';
 import './workout_status_badge_casing_regression.test';
+import './workout_detail_readonly_controls_regression.test';
 
 function assert(condition: boolean, message: string) {
   if (!condition) throw new Error(message);
