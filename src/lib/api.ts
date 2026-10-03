@@ -802,7 +802,12 @@ export async function getBodyweight(userId: string): Promise<BodyweightEntry[]> 
     } catch (e) {}
   }
   const local = localStorage.getItem(`forge_bw_${userId}`);
-  return local ? JSON.parse(local) : [];
+  if (!local) return [];
+  try {
+    return JSON.parse(local);
+  } catch {
+    return [];
+  }
 }
 
 export async function saveBodyweight(
