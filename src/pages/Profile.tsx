@@ -113,19 +113,35 @@ export default function Profile() {
         await upsertWorkoutForCloudMigration(workout, result.user.uid, guestUid);
       }
       for (const plan of guestPlans) {
-        await savePlan({ ...plan, userId: result.user.uid });
+        await savePlan(
+          { ...plan, userId: result.user.uid },
+          { requireCloud: true }
+        );
       }
       for (const entry of guestBodyweight) {
-        await saveBodyweight({ ...entry, userId: result.user.uid });
+        await saveBodyweight(
+          { ...entry, userId: result.user.uid },
+          { requireCloud: true }
+        );
       }
       for (const record of guestPersonalRecords) {
-        await savePersonalRecord({ ...record, userId: result.user.uid });
+        await savePersonalRecord(
+          { ...record, userId: result.user.uid },
+          { requireCloud: true }
+        );
       }
       for (const target of guestTargets) {
-        await saveTarget1RM({ ...target, userId: result.user.uid });
+        await saveTarget1RM(
+          { ...target, userId: result.user.uid },
+          { requireCloud: true }
+        );
       }
 
-      await updateUserPermissions(result.user.uid, guestPermissions.autonomyLevel);
+      await updateUserPermissions(
+        result.user.uid,
+        guestPermissions.autonomyLevel,
+        { requireCloud: true }
+      );
 
       await verifyCloudMigration(result.user.uid, {
         workoutIds: guestWorkouts.map((item) => item.id),

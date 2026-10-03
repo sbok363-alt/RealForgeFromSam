@@ -35,6 +35,10 @@ import {
   Target1RM
 } from '../types';
 
+export interface CloudPersistenceOptions {
+  requireCloud?: boolean;
+}
+
 // ==========================================
 // USER PERMISSIONS
 // ==========================================
@@ -78,7 +82,8 @@ export async function getUserPermissions(userId: string): Promise<UserPermission
 
 export async function updateUserPermissions(
   userId: string,
-  autonomyLevel: AutonomyLevel
+  autonomyLevel: AutonomyLevel,
+  options: CloudPersistenceOptions = {}
 ): Promise<UserPermissions> {
   const current = await getUserPermissions(userId);
   const updated: UserPermissions = {
@@ -91,6 +96,7 @@ export async function updateUserPermissions(
     try {
       await setDoc(doc(db, 'user_permissions', userId), updated);
     } catch (e) {
+      if (options.requireCloud) throw e;
       console.warn("Could not update Firestore user_permissions:", e);
     }
   }
@@ -799,11 +805,16 @@ export async function getBodyweight(userId: string): Promise<BodyweightEntry[]> 
   return local ? JSON.parse(local) : [];
 }
 
-export async function saveBodyweight(entry: BodyweightEntry): Promise<void> {
+export async function saveBodyweight(
+  entry: BodyweightEntry,
+  options: CloudPersistenceOptions = {}
+): Promise<void> {
   if (!isGuestUserId(entry.userId)) {
     try {
       await setDoc(doc(db, 'bodyweight', entry.id), entry);
-    } catch (e) {}
+    } catch (e) {
+      if (options.requireCloud) throw e;
+    }
   }
   const all = await getBodyweight(entry.userId);
   localStorage.setItem(
@@ -841,7 +852,10 @@ export async function getTarget1RMs(userId: string): Promise<Target1RM[]> {
   return [];
 }
 
-export async function saveTarget1RM(target: Target1RM): Promise<Target1RM> {
+export async function saveTarget1RM(
+  target: Target1RM,
+  options: CloudPersistenceOptions = {}
+): Promise<Target1RM> {
   const updated: Target1RM = {
     ...target,
     updatedAt: Date.now()
@@ -851,6 +865,7 @@ export async function saveTarget1RM(target: Target1RM): Promise<Target1RM> {
     try {
       await setDoc(doc(db, 'target_1rms', updated.id), updated);
     } catch (e) {
+      if (options.requireCloud) throw e;
       console.warn("Could not save target 1RM to Firestore, saving locally:", e);
     }
   }
@@ -891,11 +906,16 @@ export async function getPlans(userId: string): Promise<any[]> {
   return local ? JSON.parse(local) : [];
 }
 
-export async function savePlan(plan: any): Promise<void> {
+export async function savePlan(
+  plan: any,
+  options: CloudPersistenceOptions = {}
+): Promise<void> {
   if (!isGuestUserId(plan.userId)) {
     try {
       await setDoc(doc(db, 'plans', plan.id), plan);
-    } catch (e) {}
+    } catch (e) {
+      if (options.requireCloud) throw e;
+    }
   }
   const all = await getPlans(plan.userId);
   localStorage.setItem(`forge_plans_${plan.userId}`, JSON.stringify([plan, ...all.filter(p => p.id !== plan.id)]));
@@ -1001,11 +1021,15 @@ export async function getPreviousPerformance(userId: string, exerciseId: string)
   return null;
 }
 
-export async function savePersonalRecord(record: PersonalRecord): Promise<void> {
+export async function savePersonalRecord(
+  record: PersonalRecord,
+  options: CloudPersistenceOptions = {}
+): Promise<void> {
   if (!isGuestUserId(record.userId)) {
     try {
       await setDoc(doc(db, 'personal_records', record.id), record);
     } catch (e) {
+      if (options.requireCloud) throw e;
       console.warn("Could not save personal record:", e);
     }
   }
