@@ -39,6 +39,16 @@ export interface CloudPersistenceOptions {
   requireCloud?: boolean;
 }
 
+function isLocalEntityForUser(value: unknown, userId: string): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const entity = value as { id?: unknown; userId?: unknown };
+  return (
+    typeof entity.id === 'string' &&
+    entity.id.trim().length > 0 &&
+    (entity.userId === undefined || entity.userId === userId)
+  );
+}
+
 // ==========================================
 // USER PERMISSIONS
 // ==========================================
@@ -224,7 +234,9 @@ async function appendLocalAuditLog(log: MutationAuditLog): Promise<void> {
   let existing: MutationAuditLog[] = [];
   try {
     const parsed = JSON.parse(localStorage.getItem(key) || '[]');
-    existing = Array.isArray(parsed) ? parsed : [];
+    existing = Array.isArray(parsed)
+      ? parsed.filter((item) => isLocalEntityForUser(item, log.userId!)) as MutationAuditLog[]
+      : [];
   } catch {}
   localStorage.setItem(
     key,
