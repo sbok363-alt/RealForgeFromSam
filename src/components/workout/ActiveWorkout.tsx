@@ -126,13 +126,13 @@ export default function ActiveWorkout({
 
   const handleApplyNextTarget = (exId: string) => {
     if (isFinishing) return;
-    const report = progressionReports[exId];
-    if (!report || !report.nextTarget) return;
-    
-    const target = report.nextTarget;
     const currentEx = activeWorkout.exercises?.find(e => e.id === exId);
     if (!currentEx) return;
 
+    const report = progressionReports[currentEx.exerciseId];
+    if (!report || !report.nextTarget) return;
+    
+    const target = report.nextTarget;
     currentEx.sets.forEach(set => {
       if (!set.completed) {
         updateSet(exId, set.id, {
@@ -399,7 +399,7 @@ export default function ActiveWorkout({
                       addSet(ex.id, { 
                         id: crypto.randomUUID(), 
                         weight: lastSet ? lastSet.weight : (target?.targetWeight || 0), 
-                        reps: lastSet ? lastSet.reps : (target?.targetRepsMin || 8), 
+                        reps: lastSet ? lastSet.reps : (target?.targetRepsMin || 8),
                         rir: lastSet?.rir ?? (target?.suggestedRIR ?? 2),
                         completed: false 
                       });
