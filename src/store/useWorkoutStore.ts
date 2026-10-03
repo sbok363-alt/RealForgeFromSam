@@ -81,11 +81,31 @@ let persistenceWarningSink = (message: string | null) => {
   pendingPersistenceWarning = message;
 };
 
+function validatePersistedWorkoutState(value: string): void {
+  const persisted = JSON.parse(value) as { state?: { activeWorkout?: unknown } };
+  const activeWorkout = persisted?.state?.activeWorkout;
+  if (activeWorkout === null || activeWorkout === undefined) return;
+  if (!activeWorkout || typeof activeWorkout !== 'object' || Array.isArray(activeWorkout)) {
+    throw new Error('invalid active workout shape');
+  }
+
+  const workout = activeWorkout as Partial<Workout>;
+  const hasIdentity = typeof workout.id === 'string' && workout.id.trim().length > 0;
+  const hasTitle = typeof workout.title === 'string' || typeof workout.name === 'string';
+  const hasStatus = typeof workout.status === 'string' && workout.status.length > 0;
+  const hasVersion = typeof workout.version === 'number' && Number.isFinite(workout.version);
+  const hasSetShape = Array.isArray(workout.sets) || Array.isArray(workout.exercises);
+
+  if (!hasIdentity || !hasTitle || !hasStatus || !hasVersion || !hasSetShape) {
+    throw new Error('invalid active workout shape');
+  }
+}
+
 const workoutStorage = createSafeStateStorage(
   {
     getItem: (name) => {
       const value = window.localStorage.getItem(name);
-      if (value !== null) JSON.parse(value);
+      if (value !== null) validatePersistedWorkoutState(value);
       return value;
     },
     setItem: (name, value) => window.localStorage.setItem(name, value),
