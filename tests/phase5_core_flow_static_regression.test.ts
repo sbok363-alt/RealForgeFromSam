@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import './workout_list_volume_truth_regression.test';
 
 function assert(condition: boolean, message: string) {
   if (!condition) throw new Error(message);
