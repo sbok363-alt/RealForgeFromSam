@@ -154,6 +154,7 @@ export interface WorkoutMutationOptions {
   mutationId: string;
   duration?: number;
   volume?: number;
+  forceCloud?: boolean;
 }
 
 export class WorkoutConflictError extends Error {
@@ -1264,7 +1265,7 @@ export async function mutateWorkout(
   updates: Partial<Workout>,
   options: WorkoutMutationOptions
 ): Promise<Workout> {
-  if (isGuestSessionActive() && !auth.currentUser) {
+  if (isGuestSessionActive() && !options.forceCloud) {
     const identity = getOrCreateGuestIdentity();
     const workouts = await getWorkouts(identity.uid);
     const current = workouts.find((workout) => workout.id === workoutId);
@@ -1407,6 +1408,7 @@ export async function upsertWorkoutForCloudMigration(
     },
     {
       mutationId: `guest-migration:update:${sourceGuestUserId}:${targetUserId}:${workout.id}:cloudv${existing.version}:guestv${workout.version}`,
+      forceCloud: true,
       duration: desired.duration,
       volume: desired.volume ?? desired.totalVolume,
     }

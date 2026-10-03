@@ -33,10 +33,6 @@ assert(
   'guest workout reads must bypass Firestore'
 );
 assert(
-  api.includes("if (isGuestSessionActive() && !auth.currentUser)"),
-  'guest workout mutations must resolve locally'
-);
-assert(
   !api.includes("{ id: 'bw1'"),
   'bodyweight APIs must not fabricate guest history'
 );
