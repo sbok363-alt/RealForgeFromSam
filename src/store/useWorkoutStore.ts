@@ -95,8 +95,42 @@ function validatePersistedWorkoutState(value: string): void {
   const hasStatus = typeof workout.status === 'string' && workout.status.length > 0;
   const hasVersion = typeof workout.version === 'number' && Number.isFinite(workout.version);
   const hasSetShape = Array.isArray(workout.sets) || Array.isArray(workout.exercises);
+  const validFlatSets = !Array.isArray(workout.sets) || workout.sets.every((set) => (
+    Boolean(set) &&
+    typeof set === 'object' &&
+    typeof set.id === 'string' &&
+    typeof set.exercise === 'string' &&
+    typeof set.weight === 'number' &&
+    Number.isFinite(set.weight) &&
+    typeof set.reps === 'number' &&
+    Number.isFinite(set.reps)
+  ));
+  const validExercises = !Array.isArray(workout.exercises) || workout.exercises.every((exercise) => (
+    Boolean(exercise) &&
+    typeof exercise === 'object' &&
+    typeof exercise.id === 'string' &&
+    typeof exercise.exerciseId === 'string' &&
+    Array.isArray(exercise.sets) &&
+    exercise.sets.every((set) => (
+      Boolean(set) &&
+      typeof set === 'object' &&
+      typeof set.id === 'string' &&
+      typeof set.weight === 'number' &&
+      Number.isFinite(set.weight) &&
+      typeof set.reps === 'number' &&
+      Number.isFinite(set.reps)
+    ))
+  ));
 
-  if (!hasIdentity || !hasTitle || !hasStatus || !hasVersion || !hasSetShape) {
+  if (
+    !hasIdentity ||
+    !hasTitle ||
+    !hasStatus ||
+    !hasVersion ||
+    !hasSetShape ||
+    !validFlatSets ||
+    !validExercises
+  ) {
     throw new Error('invalid active workout shape');
   }
 }
