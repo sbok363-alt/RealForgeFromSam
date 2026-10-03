@@ -850,7 +850,13 @@ export async function getBodyweight(userId: string): Promise<BodyweightEntry[]> 
   try {
     const parsed = JSON.parse(local);
     return Array.isArray(parsed)
-      ? parsed.filter((item) => isLocalEntityForUser(item, userId))
+      ? parsed.filter((item) => (
+          isLocalEntityForUser(item, userId) &&
+          typeof item.weight === 'number' &&
+          Number.isFinite(item.weight) &&
+          typeof item.date === 'number' &&
+          Number.isFinite(item.date)
+        ))
       : [];
   } catch {
     return [];
