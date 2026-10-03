@@ -16,6 +16,7 @@ import { MutationAuditModal } from '../components/MutationAuditModal';
 import { WorkoutConflictModal } from '../components/workout/WorkoutConflictModal';
 import { useWorkoutStore } from '../store/useWorkoutStore';
 import { ExerciseThumbnail } from '../components/workout/ExerciseThumbnail';
+import { projectCompletedWorkingSets } from '../lib/workout-session';
 import { 
   Dumbbell, 
   Plus, 
@@ -370,7 +371,8 @@ export default function WorkoutPage() {
                     exercise: exercise.name || exercise.exerciseId,
                   }))
                 );
-            const totalVolume = displaySets.reduce((sum, set) => sum + (set.weight * set.reps), 0);
+            const totalVolume = projectCompletedWorkingSets(workout)
+              .reduce((sum, set) => sum + (set.weight * set.reps), 0);
             const isActiveThis = activeWorkout?.id === workout.id;
 
             return (
