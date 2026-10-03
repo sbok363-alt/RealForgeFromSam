@@ -73,6 +73,8 @@ localStorage.setItem(
 const originalCurrentUser = Object.getOwnPropertyDescriptor(auth, 'currentUser');
 const originalFetch = globalThis.fetch;
 let cloudRequests = 0;
+let autosyncCloudRequests = 0;
+let migrationCloudRequests = 0;
 let result: Workout | undefined;
 
 try {
@@ -93,7 +95,7 @@ try {
         workout: {
           ...guestWorkout,
           userId: 'cloud-user',
-          title: 'Wrong cloud route',
+          title: 'Cloud result',
           version: 99,
         },
       }),
@@ -117,6 +119,19 @@ try {
       volume: 480,
     }
   );
+  autosyncCloudRequests = cloudRequests;
+
+  cloudRequests = 0;
+  await mutateWorkout(
+    guestWorkout.id,
+    guestWorkout.version,
+    { title: 'Explicit cloud migration update' },
+    {
+      mutationId: 'migration-cloud-write-1',
+      forceCloud: true,
+    } as any
+  );
+  migrationCloudRequests = cloudRequests;
 } finally {
   if (originalCurrentUser) {
     Object.defineProperty(auth, 'currentUser', originalCurrentUser);
@@ -127,9 +142,13 @@ try {
 }
 
 assert(
-  cloudRequests === 0,
+  autosyncCloudRequests === 0,
   'an active Guest session must keep workout autosync local while Firebase authentication exists during migration'
 );
 assert(result?.userId === guestUid, 'local Guest ownership must survive migration-time autosync');
 assert(result?.version === 2, 'local Guest mutation must advance the local OCC version exactly once');
 assert(result?.sets[0].completed === true, 'local Guest mutation must persist the updated set');
+assert(
+  migrationCloudRequests === 1,
+  'an explicit cloud-migration update must bypass Guest-local routing'
+);
