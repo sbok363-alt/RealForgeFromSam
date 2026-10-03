@@ -27,8 +27,8 @@ assert(
   'set type tooltip must not advertise a mutation when the control is read-only'
 );
 
-const emptyStateStart = source.indexOf('{/* Clean Empty State with Add Exercise CTA */}');
-const emptyStateEnd = source.indexOf(') : (', emptyStateStart);
+const emptyStateStart = source.indexOf('/* Clean Empty State with Add Exercise CTA */');
+const emptyStateEnd = source.indexOf('/* Exercise Cards List */', emptyStateStart);
 assert(emptyStateStart >= 0 && emptyStateEnd > emptyStateStart, 'empty workout detail state must exist');
 const emptyStateSection = source.slice(emptyStateStart, emptyStateEnd);
 assert(
