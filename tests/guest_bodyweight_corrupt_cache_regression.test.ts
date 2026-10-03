@@ -35,24 +35,40 @@ class MemoryStorage {
 }
 
 const guestUid = 'guest-local-corrupt-bodyweight-cache';
+const cacheKey = `forge_bw_${guestUid}`;
 const localStorage = new MemoryStorage();
 (globalThis as any).window = { localStorage };
 (globalThis as any).localStorage = localStorage;
-localStorage.setItem(`forge_bw_${guestUid}`, '{corrupt-json');
 
-let entries: any[] | undefined;
-let failure: unknown;
+let malformedEntries: any[] | undefined;
+let malformedFailure: unknown;
+let wrongShapeEntries: any[] | undefined;
+let wrongShapeFailure: unknown;
 
 try {
-  entries = await getBodyweight(guestUid);
-} catch (error) {
-  failure = error;
+  localStorage.setItem(cacheKey, '{corrupt-json');
+  try {
+    malformedEntries = await getBodyweight(guestUid);
+  } catch (error) {
+    malformedFailure = error;
+  }
+
+  localStorage.setItem(cacheKey, JSON.stringify({ weight: 53, date: Date.now() }));
+  try {
+    wrongShapeEntries = await getBodyweight(guestUid);
+  } catch (error) {
+    wrongShapeFailure = error;
+  }
 } finally {
   await terminate(db);
 }
 
-assert(!failure, 'corrupt Guest bodyweight cache must not crash progress recovery');
-assert(Array.isArray(entries), 'corrupt Guest bodyweight cache must recover to an array');
-assert(entries?.length === 0, 'corrupt Guest bodyweight cache must recover to an empty entry list');
+assert(!malformedFailure, 'corrupt Guest bodyweight cache must not crash progress recovery');
+assert(Array.isArray(malformedEntries), 'corrupt Guest bodyweight cache must recover to an array');
+assert(malformedEntries?.length === 0, 'corrupt Guest bodyweight cache must recover to an empty entry list');
 
-console.log('Guest corrupt bodyweight cache regression passed');
+assert(!wrongShapeFailure, 'wrong-shape Guest bodyweight cache must not crash progress or migration recovery');
+assert(Array.isArray(wrongShapeEntries), 'wrong-shape Guest bodyweight cache must recover to an array');
+assert(wrongShapeEntries?.length === 0, 'wrong-shape Guest bodyweight cache must recover to an empty entry list');
+
+console.log('Guest bodyweight corrupt/shape regression passed');
