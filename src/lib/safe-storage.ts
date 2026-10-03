@@ -9,18 +9,18 @@ export function createSafeStateStorage(
   onError: (message: string) => void,
   onHealthy?: () => void
 ): StateStorageLike {
-  let lastReportedError: string | null = null;
+  let lastReportedError: { operation: string; message: string } | null = null;
 
   const report = (operation: string, error: unknown) => {
     const detail = error instanceof Error ? error.message : String(error);
     const message = `Workout persistence ${operation} failed: ${detail}`;
-    if (message === lastReportedError) return;
-    lastReportedError = message;
+    if (message === lastReportedError?.message) return;
+    lastReportedError = { operation, message };
     onError(message);
   };
 
-  const markHealthy = () => {
-    if (lastReportedError === null) return;
+  const markHealthy = (operation: string) => {
+    if (lastReportedError?.operation !== operation) return;
     lastReportedError = null;
     onHealthy?.();
   };
@@ -31,14 +31,14 @@ export function createSafeStateStorage(
         const result = storage.getItem(name);
         if (result instanceof Promise) {
           return result.then((value) => {
-            markHealthy();
+            markHealthy('read');
             return value;
           }).catch((error) => {
             report('read', error);
             return null;
           });
         }
-        markHealthy();
+        markHealthy('read');
         return result;
       } catch (error) {
         report('read', error);
@@ -50,12 +50,12 @@ export function createSafeStateStorage(
         const result = storage.setItem(name, value);
         if (result instanceof Promise) {
           return result.then(() => {
-            markHealthy();
+            markHealthy('write');
           }).catch((error) => {
             report('write', error);
           });
         }
-        markHealthy();
+        markHealthy('write');
         return result;
       } catch (error) {
         report('write', error);
@@ -66,12 +66,12 @@ export function createSafeStateStorage(
         const result = storage.removeItem(name);
         if (result instanceof Promise) {
           return result.then(() => {
-            markHealthy();
+            markHealthy('remove');
           }).catch((error) => {
             report('remove', error);
           });
         }
-        markHealthy();
+        markHealthy('remove');
         return result;
       } catch (error) {
         report('remove', error);
