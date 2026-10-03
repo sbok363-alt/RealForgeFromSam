@@ -572,11 +572,15 @@ export function migrateLocalAuditHistory(
 
   try {
     const parsed = JSON.parse(localStorage.getItem(`forge_audit_logs_${sourceUserId}`) || '[]');
-    source = Array.isArray(parsed) ? parsed : [];
+    source = Array.isArray(parsed)
+      ? parsed.filter((item) => isLocalEntityForUser(item, sourceUserId)) as MutationAuditLog[]
+      : [];
   } catch {}
   try {
     const parsed = JSON.parse(localStorage.getItem(`forge_audit_logs_${targetUserId}`) || '[]');
-    target = Array.isArray(parsed) ? parsed : [];
+    target = Array.isArray(parsed)
+      ? parsed.filter((item) => isLocalEntityForUser(item, targetUserId)) as MutationAuditLog[]
+      : [];
   } catch {}
 
   const merged = new Map<string, MutationAuditLog>();
