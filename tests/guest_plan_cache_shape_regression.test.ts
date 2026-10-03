@@ -38,7 +38,18 @@ const guestUid = 'guest-local-wrong-shape-plan-cache';
 const localStorage = new MemoryStorage();
 (globalThis as any).window = { localStorage };
 (globalThis as any).localStorage = localStorage;
-localStorage.setItem(`forge_plans_${guestUid}`, '{}');
+localStorage.setItem(`forge_plans_${guestUid}`, JSON.stringify([
+  { id: 'invalid-plan', userId: guestUid },
+  {
+    id: 'valid-plan',
+    userId: guestUid,
+    name: 'Push',
+    isActive: true,
+    weeklyFrequency: 1,
+    createdAt: Date.now(),
+    days: [],
+  },
+]));
 
 let plans: any;
 let failure: unknown;
@@ -53,6 +64,7 @@ try {
 
 assert(!failure, 'wrong-shape Guest plan cache must not crash recovery');
 assert(Array.isArray(plans), 'wrong-shape Guest plan cache must recover to an array');
-assert(plans.length === 0, 'wrong-shape Guest plan cache must recover to an empty plan list');
+assert(plans.length === 1, `invalid Guest plan items must be dropped; got ${JSON.stringify(plans)}`);
+assert(plans[0]?.id === 'valid-plan', 'valid Guest plans must survive item validation');
 
 console.log('Guest plan cache shape regression passed');
