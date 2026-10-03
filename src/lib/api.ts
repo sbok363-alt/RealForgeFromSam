@@ -985,7 +985,18 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
     const local = localStorage.getItem(guestProfileKey(userId));
     if (!local) return null;
     try {
-      return JSON.parse(local) as UserProfile;
+      const parsed = JSON.parse(local) as Partial<UserProfile>;
+      if (
+        parsed &&
+        typeof parsed === 'object' &&
+        !Array.isArray(parsed) &&
+        parsed.userId === userId &&
+        typeof parsed.createdAt === 'number' &&
+        Number.isFinite(parsed.createdAt)
+      ) {
+        return parsed as UserProfile;
+      }
+      return null;
     } catch {
       return null;
     }
