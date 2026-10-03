@@ -906,7 +906,19 @@ export async function getTarget1RMs(userId: string): Promise<Target1RM[]> {
     try {
       const parsed = JSON.parse(local);
       return Array.isArray(parsed)
-      ? parsed.filter((item) => isLocalEntityForUser(item, userId))
+      ? parsed.filter((item) => (
+          isLocalEntityForUser(item, userId) &&
+          typeof item.exerciseId === 'string' &&
+          item.exerciseId.trim().length > 0 &&
+          typeof item.exerciseName === 'string' &&
+          item.exerciseName.trim().length > 0 &&
+          typeof item.target1RM === 'number' &&
+          Number.isFinite(item.target1RM) &&
+          typeof item.createdAt === 'number' &&
+          Number.isFinite(item.createdAt) &&
+          typeof item.updatedAt === 'number' &&
+          Number.isFinite(item.updatedAt)
+        ))
       : [];
     } catch {}
   }
