@@ -853,7 +853,8 @@ export async function getTarget1RMs(userId: string): Promise<Target1RM[]> {
   const local = localStorage.getItem(`forge_target_1rms_${userId}`);
   if (local) {
     try {
-      return JSON.parse(local);
+      const parsed = JSON.parse(local);
+      return Array.isArray(parsed) ? parsed : [];
     } catch {}
   }
   return [];
