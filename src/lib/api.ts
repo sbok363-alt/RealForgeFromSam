@@ -206,7 +206,8 @@ async function appendLocalAuditLog(log: MutationAuditLog): Promise<void> {
   const key = `forge_audit_logs_${log.userId}`;
   let existing: MutationAuditLog[] = [];
   try {
-    existing = JSON.parse(localStorage.getItem(key) || '[]');
+    const parsed = JSON.parse(localStorage.getItem(key) || '[]');
+    existing = Array.isArray(parsed) ? parsed : [];
   } catch {}
   localStorage.setItem(
     key,
