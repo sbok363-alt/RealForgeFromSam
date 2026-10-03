@@ -129,7 +129,8 @@ export async function getWorkouts(userId: string): Promise<Workout[]> {
   const local = localStorage.getItem(`forge_workouts_${userId}`);
   if (local) {
     try {
-      return JSON.parse(local);
+      const parsed = JSON.parse(local);
+      return Array.isArray(parsed) ? parsed : [];
     } catch (e) {}
   }
   return [];
