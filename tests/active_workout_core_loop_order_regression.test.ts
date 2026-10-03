@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import './active_workout_apply_target_identity_regression.test';
 
 function assert(condition: boolean, message: string) {
   if (!condition) throw new Error(message);
