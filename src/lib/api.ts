@@ -48,7 +48,24 @@ export async function getUserPermissions(userId: string): Promise<UserPermission
   const local = localStorage.getItem(localKey);
   if (local) {
     try {
-      return JSON.parse(local) as UserPermissions;
+      const parsed = JSON.parse(local) as Partial<UserPermissions>;
+      const validAutonomyLevels: AutonomyLevel[] = [
+        'L0_READ_ONLY',
+        'L1_MICRO_ACTIONS',
+        'L2_GUIDED_AUTONOMY',
+        'L3_FULL_AUTONOMY',
+      ];
+      if (
+        parsed &&
+        typeof parsed === 'object' &&
+        !Array.isArray(parsed) &&
+        parsed.userId === userId &&
+        validAutonomyLevels.includes(parsed.autonomyLevel as AutonomyLevel) &&
+        Number.isInteger(parsed.permissionEpoch) &&
+        Number(parsed.permissionEpoch) >= 1
+      ) {
+        return parsed as UserPermissions;
+      }
     } catch {}
   }
 
