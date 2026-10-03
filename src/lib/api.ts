@@ -540,10 +540,12 @@ export function migrateLocalAuditHistory(
   let target: MutationAuditLog[] = [];
 
   try {
-    source = JSON.parse(localStorage.getItem(`forge_audit_logs_${sourceUserId}`) || '[]');
+    const parsed = JSON.parse(localStorage.getItem(`forge_audit_logs_${sourceUserId}`) || '[]');
+    source = Array.isArray(parsed) ? parsed : [];
   } catch {}
   try {
-    target = JSON.parse(localStorage.getItem(`forge_audit_logs_${targetUserId}`) || '[]');
+    const parsed = JSON.parse(localStorage.getItem(`forge_audit_logs_${targetUserId}`) || '[]');
+    target = Array.isArray(parsed) ? parsed : [];
   } catch {}
 
   const merged = new Map<string, MutationAuditLog>();
