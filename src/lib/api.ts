@@ -1071,7 +1071,21 @@ export async function getPersonalRecords(userId: string): Promise<PersonalRecord
   try {
     const parsed = JSON.parse(local);
     return Array.isArray(parsed)
-      ? parsed.filter((item) => isLocalEntityForUser(item, userId))
+      ? parsed.filter((item) => (
+          isLocalEntityForUser(item, userId) &&
+          typeof item.exerciseId === 'string' &&
+          item.exerciseId.trim().length > 0 &&
+          typeof item.weight === 'number' &&
+          Number.isFinite(item.weight) &&
+          typeof item.reps === 'number' &&
+          Number.isFinite(item.reps) &&
+          typeof item.estimated1RM === 'number' &&
+          Number.isFinite(item.estimated1RM) &&
+          typeof item.workoutId === 'string' &&
+          item.workoutId.trim().length > 0 &&
+          typeof item.date === 'number' &&
+          Number.isFinite(item.date)
+        ))
       : [];
   } catch {
     return [];
