@@ -76,11 +76,18 @@ function preserveExistingExerciseIdentity(
   });
 }
 
-let persistenceWarningSink = (_message: string | null) => {};
+let pendingPersistenceWarning: string | null = null;
+let persistenceWarningSink = (message: string | null) => {
+  pendingPersistenceWarning = message;
+};
 
 const workoutStorage = createSafeStateStorage(
   {
-    getItem: (name) => window.localStorage.getItem(name),
+    getItem: (name) => {
+      const value = window.localStorage.getItem(name);
+      if (value !== null) JSON.parse(value);
+      return value;
+    },
     setItem: (name, value) => window.localStorage.setItem(name, value),
     removeItem: (name) => window.localStorage.removeItem(name),
   },
@@ -322,3 +329,8 @@ export function calculateEpley1RM(weight: number, reps: number): number {
 persistenceWarningSink = (message: string | null) => {
   useWorkoutStore.setState({ persistenceWarning: message });
 };
+
+if (pendingPersistenceWarning !== null) {
+  useWorkoutStore.setState({ persistenceWarning: pendingPersistenceWarning });
+  pendingPersistenceWarning = null;
+}
