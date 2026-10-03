@@ -44,6 +44,8 @@ let malformedEntries: any[] | undefined;
 let malformedFailure: unknown;
 let wrongShapeEntries: any[] | undefined;
 let wrongShapeFailure: unknown;
+let invalidItemEntries: any[] | undefined;
+let invalidItemFailure: unknown;
 
 try {
   localStorage.setItem(cacheKey, '{corrupt-json');
@@ -59,6 +61,16 @@ try {
   } catch (error) {
     wrongShapeFailure = error;
   }
+
+  localStorage.setItem(cacheKey, JSON.stringify([
+    { id: 'missing-bodyweight-fields', userId: guestUid },
+    { id: 'valid-bodyweight', userId: guestUid, weight: 53, date: Date.now() },
+  ]));
+  try {
+    invalidItemEntries = await getBodyweight(guestUid);
+  } catch (error) {
+    invalidItemFailure = error;
+  }
 } finally {
   await terminate(db);
 }
@@ -70,5 +82,9 @@ assert(malformedEntries?.length === 0, 'corrupt Guest bodyweight cache must reco
 assert(!wrongShapeFailure, 'wrong-shape Guest bodyweight cache must not crash progress or migration recovery');
 assert(Array.isArray(wrongShapeEntries), 'wrong-shape Guest bodyweight cache must recover to an array');
 assert(wrongShapeEntries?.length === 0, 'wrong-shape Guest bodyweight cache must recover to an empty entry list');
+
+assert(!invalidItemFailure, 'invalid Guest bodyweight entries must not crash progress or migration recovery');
+assert(invalidItemEntries?.length === 1, `invalid Guest bodyweight entries must be dropped; got ${JSON.stringify(invalidItemEntries)}`);
+assert(invalidItemEntries?.[0]?.id === 'valid-bodyweight', 'valid Guest bodyweight entries must survive item validation');
 
 console.log('Guest bodyweight corrupt/shape regression passed');
