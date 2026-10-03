@@ -1003,7 +1003,8 @@ export async function getPersonalRecords(userId: string): Promise<PersonalRecord
   const local = localStorage.getItem(`forge_prs_${userId}`);
   if (!local) return [];
   try {
-    return JSON.parse(local) as PersonalRecord[];
+    const parsed = JSON.parse(local);
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
   }
