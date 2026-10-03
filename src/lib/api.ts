@@ -911,7 +911,8 @@ export async function getPlans(userId: string): Promise<any[]> {
   const local = localStorage.getItem(`forge_plans_${userId}`);
   if (!local) return [];
   try {
-    return JSON.parse(local);
+    const parsed = JSON.parse(local);
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
   }
