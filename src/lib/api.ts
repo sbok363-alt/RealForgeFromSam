@@ -1399,44 +1399,50 @@ export async function upsertWorkoutForCloudMigration(
   sourceGuestUserId: string
 ): Promise<Workout> {
   const desired = { ...workout, userId: targetUserId };
+  const createMissingWorkout = () => saveWorkout(
+    desired,
+    'USER',
+    'Migrated from local guest account',
+    {
+      mutationId: `guest-migration:create:${sourceGuestUserId}:${targetUserId}:${workout.id}:v${workout.version}`,
+    }
+  );
   const existing = await getWorkout(workout.id, targetUserId);
 
   if (!existing) {
-    return saveWorkout(
-      desired,
-      'USER',
-      'Migrated from local guest account',
-      {
-        mutationId: `guest-migration:create:${sourceGuestUserId}:${targetUserId}:${workout.id}:v${workout.version}`,
-      }
-    );
+    return createMissingWorkout();
   }
 
   if (JSON.stringify(migrationWorkoutShape(existing)) === JSON.stringify(migrationWorkoutShape(desired))) {
     return existing;
   }
 
-  return mutateWorkout(
-    existing.id,
-    existing.version,
-    {
-      title: desired.title,
-      scheduledDate: desired.scheduledDate,
-      status: desired.status,
-      sets: desired.sets,
-      exercises: desired.exercises,
-      exerciseNotes: desired.exerciseNotes,
-      totalVolume: desired.totalVolume,
-      completedAt: desired.completedAt,
-      startedAt: desired.startedAt,
-    },
-    {
-      mutationId: `guest-migration:update:${sourceGuestUserId}:${targetUserId}:${workout.id}:cloudv${existing.version}:guestv${workout.version}`,
-      forceCloud: true,
-      duration: desired.duration,
-      volume: desired.volume ?? desired.totalVolume,
-    }
-  );
+  try {
+    return await mutateWorkout(
+      existing.id,
+      existing.version,
+      {
+        title: desired.title,
+        scheduledDate: desired.scheduledDate,
+        status: desired.status,
+        sets: desired.sets,
+        exercises: desired.exercises,
+        exerciseNotes: desired.exerciseNotes,
+        totalVolume: desired.totalVolume,
+        completedAt: desired.completedAt,
+        startedAt: desired.startedAt,
+      },
+      {
+        mutationId: `guest-migration:update:${sourceGuestUserId}:${targetUserId}:${workout.id}:cloudv${existing.version}:guestv${workout.version}`,
+        forceCloud: true,
+        duration: desired.duration,
+        volume: desired.volume ?? desired.totalVolume,
+      }
+    );
+  } catch (error: any) {
+    if (error?.status !== 404) throw error;
+    return createMissingWorkout();
+  }
 }
 
 export interface CloudMigrationExpectation {
