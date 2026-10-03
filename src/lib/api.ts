@@ -1413,10 +1413,6 @@ export async function upsertWorkoutForCloudMigration(
     return createMissingWorkout();
   }
 
-  if (JSON.stringify(migrationWorkoutShape(existing)) === JSON.stringify(migrationWorkoutShape(desired))) {
-    return existing;
-  }
-
   try {
     return await mutateWorkout(
       existing.id,
