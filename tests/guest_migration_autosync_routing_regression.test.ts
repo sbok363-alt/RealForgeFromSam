@@ -70,6 +70,8 @@ localStorage.setItem(
   JSON.stringify([guestWorkout])
 );
 
+await auth.authStateReady();
+
 const originalCurrentUser = Object.getOwnPropertyDescriptor(auth, 'currentUser');
 const originalFetch = globalThis.fetch;
 let cloudRequests = 0;
