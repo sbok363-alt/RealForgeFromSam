@@ -980,7 +980,22 @@ export async function getPlans(userId: string): Promise<any[]> {
   try {
     const parsed = JSON.parse(local);
     return Array.isArray(parsed)
-      ? parsed.filter((item) => isLocalEntityForUser(item, userId))
+      ? parsed.filter((item) => (
+          isLocalEntityForUser(item, userId) &&
+          typeof item.name === 'string' &&
+          item.name.trim().length > 0 &&
+          typeof item.isActive === 'boolean' &&
+          typeof item.createdAt === 'number' &&
+          Number.isFinite(item.createdAt) &&
+          Array.isArray(item.days) &&
+          item.days.every((day: unknown) => (
+            Boolean(day) &&
+            typeof day === 'object' &&
+            !Array.isArray(day) &&
+            typeof (day as { id?: unknown }).id === 'string' &&
+            Array.isArray((day as { exercises?: unknown }).exercises)
+          ))
+        ))
       : [];
   } catch {
     return [];
