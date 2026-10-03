@@ -85,6 +85,8 @@ try {
     value: {
       uid: 'cloud-user',
       getIdToken: async () => 'cloud-token',
+      _startProactiveRefresh: () => undefined,
+      _stopProactiveRefresh: () => undefined,
     },
   });
 
