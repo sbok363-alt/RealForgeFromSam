@@ -157,7 +157,9 @@ export async function getWorkouts(userId: string): Promise<Workout[]> {
   if (local) {
     try {
       const parsed = JSON.parse(local);
-      return Array.isArray(parsed) ? parsed : [];
+      return Array.isArray(parsed)
+      ? parsed.filter((item) => isLocalEntityForUser(item, userId))
+      : [];
     } catch (e) {}
   }
   return [];
@@ -838,7 +840,9 @@ export async function getBodyweight(userId: string): Promise<BodyweightEntry[]> 
   if (!local) return [];
   try {
     const parsed = JSON.parse(local);
-    return Array.isArray(parsed) ? parsed : [];
+    return Array.isArray(parsed)
+      ? parsed.filter((item) => isLocalEntityForUser(item, userId))
+      : [];
   } catch {
     return [];
   }
@@ -886,7 +890,9 @@ export async function getTarget1RMs(userId: string): Promise<Target1RM[]> {
   if (local) {
     try {
       const parsed = JSON.parse(local);
-      return Array.isArray(parsed) ? parsed : [];
+      return Array.isArray(parsed)
+      ? parsed.filter((item) => isLocalEntityForUser(item, userId))
+      : [];
     } catch {}
   }
   return [];
@@ -946,7 +952,9 @@ export async function getPlans(userId: string): Promise<any[]> {
   if (!local) return [];
   try {
     const parsed = JSON.parse(local);
-    return Array.isArray(parsed) ? parsed : [];
+    return Array.isArray(parsed)
+      ? parsed.filter((item) => isLocalEntityForUser(item, userId))
+      : [];
   } catch {
     return [];
   }
@@ -1047,7 +1055,9 @@ export async function getPersonalRecords(userId: string): Promise<PersonalRecord
   if (!local) return [];
   try {
     const parsed = JSON.parse(local);
-    return Array.isArray(parsed) ? parsed : [];
+    return Array.isArray(parsed)
+      ? parsed.filter((item) => isLocalEntityForUser(item, userId))
+      : [];
   } catch {
     return [];
   }
