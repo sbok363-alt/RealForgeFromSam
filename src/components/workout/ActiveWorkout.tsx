@@ -61,6 +61,8 @@ export default function ActiveWorkout({
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [exercisePendingRemoval, setExercisePendingRemoval] = useState<{ id: string; name: string } | null>(null);
   const [allUserWorkouts, setAllUserWorkouts] = useState<Workout[]>([]);
+  const removeCancelRef = React.useRef<HTMLButtonElement>(null);
+  const discardCancelRef = React.useRef<HTMLButtonElement>(null);
 
   // Keep screen awake while a session is in progress (gym-friendly)
   useWakeLock(Boolean(activeWorkout));
@@ -72,6 +74,32 @@ export default function ActiveWorkout({
       setAllUserWorkouts(wList);
     });
   }, [user]);
+
+  useEffect(() => {
+    if (!exercisePendingRemoval) return;
+    const previousFocus = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    const frame = requestAnimationFrame(() => removeCancelRef.current?.focus());
+
+    return () => {
+      cancelAnimationFrame(frame);
+      previousFocus?.focus();
+    };
+  }, [exercisePendingRemoval]);
+
+  useEffect(() => {
+    if (!showDiscardConfirm) return;
+    const previousFocus = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    const frame = requestAnimationFrame(() => discardCancelRef.current?.focus());
+
+    return () => {
+      cancelAnimationFrame(frame);
+      previousFocus?.focus();
+    };
+  }, [showDiscardConfirm]);
 
   // Compute deterministic progression reports for all active exercises
   const progressionReports = useMemo(() => {
@@ -511,7 +539,14 @@ export default function ActiveWorkout({
           role="dialog"
           aria-modal="true"
           aria-labelledby="remove-exercise-title"
+          aria-describedby="remove-exercise-description"
           onClick={() => setExercisePendingRemoval(null)}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              event.stopPropagation();
+              setExercisePendingRemoval(null);
+            }
+          }}
         >
           <div
             className="w-full max-w-sm rounded-3xl border border-white/10 bg-[#101012] p-5 shadow-2xl"
@@ -520,14 +555,14 @@ export default function ActiveWorkout({
             <h3 id="remove-exercise-title" className="text-lg font-black text-white">
               Remove {exercisePendingRemoval.name}?
             </h3>
-            <p className="mt-2 text-sm leading-relaxed text-neutral-400">
+            <p id="remove-exercise-description" className="mt-2 text-sm leading-relaxed text-neutral-400">
               Its sets and any progress logged in this active workout will be removed.
             </p>
             <div className="mt-5 space-y-2">
               <Button
+                ref={removeCancelRef}
                 className="min-h-12 w-full font-bold"
                 onClick={() => setExercisePendingRemoval(null)}
-                autoFocus
               >
                 Keep exercise
               </Button>
@@ -554,7 +589,14 @@ export default function ActiveWorkout({
           role="dialog"
           aria-modal="true"
           aria-labelledby="discard-workout-title"
+          aria-describedby="discard-workout-description"
           onClick={() => setShowDiscardConfirm(false)}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              event.stopPropagation();
+              setShowDiscardConfirm(false);
+            }
+          }}
         >
           <div
             className="w-full max-w-sm rounded-3xl border border-white/10 bg-[#101012] p-5 shadow-2xl"
@@ -563,14 +605,14 @@ export default function ActiveWorkout({
             <h3 id="discard-workout-title" className="text-lg font-black text-white">
               Discard this workout?
             </h3>
-            <p className="mt-2 text-sm leading-relaxed text-neutral-400">
+            <p id="discard-workout-description" className="mt-2 text-sm leading-relaxed text-neutral-400">
               Your active session will be removed from this device. This cannot be undone.
             </p>
             <div className="mt-5 space-y-2">
               <Button
+                ref={discardCancelRef}
                 className="min-h-12 w-full font-bold"
                 onClick={() => setShowDiscardConfirm(false)}
-                autoFocus
               >
                 Keep workout
               </Button>
