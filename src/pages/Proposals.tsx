@@ -23,10 +23,12 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '../lib/utils';
+import { isGuestUserId } from '../lib/guest-session';
 
 export default function Proposals() {
   const { user } = useAuthStore();
   const navigate = useNavigate();
+  const isGuest = Boolean(user && isGuestUserId(user.uid));
 
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [workouts, setWorkouts] = useState<Workout[]>([]);
@@ -53,7 +55,7 @@ export default function Proposals() {
   }, [user]);
 
   const handleApprove = async (proposalId: string) => {
-    if (!user) return;
+    if (!user || isGuest) return;
     const res = await executeProposal(proposalId, user.uid, 'USER');
     if (res.success) {
       await fetchData();
@@ -94,15 +96,15 @@ export default function Proposals() {
             )}
           </div>
           <p className="text-muted-foreground text-sm mt-1">
-            FORGE never changes your plan alone. Review each recommendation, then accept or dismiss.
+            Hardstate never changes your plan alone. Review each recommendation, then accept or dismiss.
           </p>
         </div>
 
         <Button 
-          onClick={() => navigate('/brain')}
+          onClick={() => navigate(isGuest ? '/profile' : '/brain')}
           className="text-xs font-semibold gap-1.5 shrink-0"
         >
-          <Brain size={15} /> Ask for a new one
+          <Brain size={15} /> {isGuest ? 'Connect Google for Brain' : 'Ask for a new one'}
         </Button>
       </header>
 
@@ -192,10 +194,10 @@ export default function Proposals() {
           <Sparkles size={36} className="mx-auto opacity-30 text-primary" />
           <h3 className="font-semibold text-base text-foreground">No proposals found</h3>
           <p className="text-xs max-w-sm mx-auto">
-            When FORGE Brain recommends progressive overload or adjustments, its structured diff proposals will appear here for your approval.
+            When Hardstate Brain recommends progressive overload or adjustments, its structured diff proposals will appear here for your approval.
           </p>
-          <Button size="sm" onClick={() => navigate('/brain')}>
-            Chat with FORGE Brain
+          <Button size="sm" onClick={() => navigate(isGuest ? '/profile' : '/brain')}>
+            {isGuest ? 'Connect Google for Brain' : 'Chat with Hardstate Brain'}
           </Button>
         </div>
       ) : (
@@ -210,7 +212,12 @@ export default function Proposals() {
                 currentWorkout={targetWorkout}
                 onApprove={handleApprove}
                 onDiscard={handleDiscard}
-                onRebase={handleRebase}
+                onRebase={isGuest ? undefined : handleRebase}
+                approvalDisabledReason={
+                  isGuest
+                    ? 'Connect Google to apply or refresh AI recommendations. Your local workouts remain fully usable.'
+                    : undefined
+                }
               />
             );
           })}

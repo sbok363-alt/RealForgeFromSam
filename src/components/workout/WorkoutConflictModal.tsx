@@ -56,7 +56,7 @@ export function WorkoutConflictModal({
           </div>
 
           <p className="text-xs text-muted-foreground leading-relaxed">
-            Starting <strong>{newWorkout.title}</strong> will end and replace your currently running workout session. Do you wish to continue?
+            Starting <strong>{newWorkout.title}</strong> will permanently discard your current active session and its unsaved changes. This cannot be undone.
           </p>
 
           <div className="flex flex-col-reverse sm:flex-row gap-2 justify-end pt-2">
@@ -69,12 +69,12 @@ export function WorkoutConflictModal({
               Keep Current Workout
             </Button>
             <Button
-              variant="default"
+              variant="danger"
               size="sm"
               onClick={onConfirm}
-              className="bg-amber-600 hover:bg-amber-700 text-white font-bold gap-1.5"
+              className="font-bold gap-1.5"
             >
-              <Play size={14} fill="currentColor" /> End & Start New
+              <Play size={14} fill="currentColor" /> Discard Current & Start New
             </Button>
           </div>
         </motion.div>

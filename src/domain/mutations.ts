@@ -306,12 +306,31 @@ export class InMemoryMutationStorageAdapter implements MutationStorageAdapter {
   }
 
   async commitMutation(entityType: string, entityId: string, data: Record<string, any>): Promise<void> {
-    this.entities.set(this.getEntityKey(entityType, entityId), JSON.parse(JSON.stringify(data)));
+    const key = this.getEntityKey(entityType, entityId);
+    const existing = this.entities.get(key) || {};
+    const sanitizedIncoming = JSON.parse(JSON.stringify(data));
+    this.entities.set(key, JSON.parse(JSON.stringify({ ...existing, ...sanitizedIncoming })));
   }
 
   async runTransaction<R>(fn: (txAdapter: MutationStorageAdapter) => Promise<R>): Promise<R> {
-    // In-memory transactions run atomically in single-threaded Node.js
-    return await fn(this);
+    const entitiesSnapshot = new Map(
+      Array.from(this.entities.entries(), ([key, value]) => [key, JSON.parse(JSON.stringify(value))])
+    );
+    const idempotencySnapshot = new Map(
+      Array.from(this.idempotencyStore.entries(), ([key, value]) => [key, JSON.parse(JSON.stringify(value))])
+    );
+    const auditSnapshot = new Map(
+      Array.from(this.auditLogStore.entries(), ([key, value]) => [key, JSON.parse(JSON.stringify(value))])
+    );
+
+    try {
+      return await fn(this);
+    } catch (error) {
+      this.entities = entitiesSnapshot;
+      this.idempotencyStore = idempotencySnapshot;
+      this.auditLogStore = auditSnapshot;
+      throw error;
+    }
   }
 
   getAuditLogs(): SecureAuditLogEntry[] {

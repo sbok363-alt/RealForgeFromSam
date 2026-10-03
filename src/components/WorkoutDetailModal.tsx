@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'motion/react';
 import { Workout, WorkoutSetItem, ProgressionReport } from '../types';
 import { ExerciseDef, getExerciseByName } from '../lib/exercises';
-import { saveWorkout, getWorkouts, mutateWorkout, deleteWorkout } from '../lib/api';
+import { getWorkouts, mutateWorkout, deleteWorkout } from '../lib/api';
 import { analyzeExerciseProgression } from '../lib/progression';
 import { rebuildExercisesPreservingIdentity } from '../lib/workout-session';
 import { useAuthStore } from '../store/useAuthStore';
@@ -40,7 +40,6 @@ import {
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
-import { WorkoutCelebration } from './WorkoutCelebration';
 import { ExerciseHistorySheet } from './ExerciseHistorySheet';
 import { ExerciseThumbnail } from './workout/ExerciseThumbnail';
 import { ExercisePickerModal } from './workout/ExercisePickerModal';
@@ -67,23 +66,27 @@ export function WorkoutDetailModal({
   onOpenBrain,
   onOpenAudit
 }: WorkoutDetailModalProps) {
-  if (!isOpen) return null;
-
   const { status: geminiStatus, apiKey: geminiApiKey, openModal: openBYOKModal } = useGeminiStore();
   const { 
     activeWorkout, 
-    startWorkout: startActiveWorkout, 
     updateActiveWorkout, 
-    finishWorkout: finishActiveWorkout,
     discardWorkout: discardActiveWorkout,
     setRestTimer: setStoreRestTimer,
     clearRestTimer: clearStoreRestTimer
   } = useWorkoutStore();
   const { user } = useAuthStore();
+  const isLiveSession = Boolean(
+    activeWorkout?.id === workout.id &&
+    (activeWorkout.status === 'IN_PROGRESS' || activeWorkout.status === 'in-progress')
+  );
+  const canOptimize = String(workout.status).toUpperCase() === 'PLANNED';
 
   const [title, setTitle] = useState(workout.title || 'Workout Session');
   const [scheduledDate, setScheduledDate] = useState(workout.scheduledDate);
-  const [isEditMode, setIsEditMode] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(
+    () => (workout.exercises?.length || 0) === 0 && (workout.sets?.length || 0) === 0
+  );
+  const canModifySet = isEditMode || isLiveSession;
   
   // Consume workout.exercises if available, otherwise fallback to flat sets
   const initialSets = useMemo(() => {
@@ -102,9 +105,8 @@ export function WorkoutDetailModal({
   const [saving, setSaving] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [simulatingConflict, setSimulatingConflict] = useState(false);
+  const deleteCancelRef = React.useRef<HTMLButtonElement>(null);
   const [allUserWorkouts, setAllUserWorkouts] = useState<Workout[]>([]);
-  const [showCelebration, setShowCelebration] = useState(false);
   const [showExercisePicker, setShowExercisePicker] = useState(false);
 
   // Rest Timer State
@@ -122,44 +124,53 @@ export function WorkoutDetailModal({
   const [openNotes, setOpenNotes] = useState<Record<string, boolean>>({});
   const [activeExerciseHistory, setActiveExerciseHistory] = useState<string | null>(null);
 
-  // Sync with active workout if this is the active session
+  // Viewing or editing a workout must never implicitly start a session.
+  // Only mirror live store state when this modal belongs to the already-active workout.
   useEffect(() => {
     if (!isOpen) return;
     if (activeWorkout && activeWorkout.id === workout.id) {
       if (activeWorkout.exercises && activeWorkout.exercises.length > 0) {
-         setSets(activeWorkout.exercises.flatMap(ex => ex.sets.map(s => ({
-           ...s,
-           exercise: ex.name || ex.exerciseId,
-           setType: s.setType === 'normal' ? 'N' : s.setType
-         } as WorkoutSetItem))));
+        setSets(activeWorkout.exercises.flatMap(ex => ex.sets.map(s => ({
+          ...s,
+          exercise: ex.name || ex.exerciseId,
+          setType: s.setType === 'normal' ? 'N' : s.setType
+        } as WorkoutSetItem))));
       } else {
-         setSets(activeWorkout.sets || []);
+        setSets(activeWorkout.sets || []);
       }
       if (activeWorkout.title) setTitle(activeWorkout.title);
       if (activeWorkout.exerciseNotes) setExerciseNotes(activeWorkout.exerciseNotes);
-    } else if (workout.status === 'IN_PROGRESS' || !isEditMode) {
-      startActiveWorkout({
-        ...workout,
-        sets,
-        exercises: workout.exercises || [],
-        exerciseNotes,
-        title,
-        scheduledDate,
-        startedAt: workout.startedAt || Date.now()
-      });
     }
-  }, [isOpen, workout.id]);
+  }, [isOpen, workout.id, activeWorkout?.id]);
 
-  // Duration timer
+  useEffect(() => {
+    if (!showDeleteConfirm) return;
+    const previousFocus = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    const frame = requestAnimationFrame(() => deleteCancelRef.current?.focus());
+
+    return () => {
+      cancelAnimationFrame(frame);
+      previousFocus?.focus();
+    };
+  }, [showDeleteConfirm]);
+
+  // Duration only ticks for the actually active session. History/detail views stay static.
   useEffect(() => {
     if (!isOpen) return;
-    const startMs = workout.startedAt || activeWorkout?.startedAt || Date.now();
+    if (!isLiveSession) {
+      setDuration(workout.duration || 0);
+      return;
+    }
+
+    const startMs = activeWorkout?.startedAt || workout.startedAt || Date.now();
     setDuration(Math.floor((Date.now() - startMs) / 1000));
     const interval = setInterval(() => {
       setDuration(Math.floor((Date.now() - startMs) / 1000));
     }, 1000);
     return () => clearInterval(interval);
-  }, [isOpen, workout.startedAt, activeWorkout?.startedAt]);
+  }, [isOpen, isLiveSession, workout.duration, workout.startedAt, activeWorkout?.startedAt]);
 
   // Rest countdown ticker
   useEffect(() => {
@@ -336,6 +347,7 @@ export function WorkoutDetailModal({
   };
 
   const handleUpdateSet = (index: number, field: keyof WorkoutSetItem, value: any) => {
+    if (!isEditMode && !isLiveSession) return;
     const updated = [...sets];
     updated[index] = { ...updated[index], [field]: value };
     setSets(updated);
@@ -346,7 +358,7 @@ export function WorkoutDetailModal({
 
   /** Gym-friendly quick adjust: weight steps 2.5kg, reps ±1, never negative */
   const handleQuickAdjust = (index: number, field: 'weight' | 'reps', delta: number) => {
-    if (isEditMode) return;
+    if (isEditMode || !isLiveSession) return;
     const current = sets[index];
     if (!current) return;
     if (field === 'weight') {
@@ -362,7 +374,7 @@ export function WorkoutDetailModal({
 
   // Handle toggling set completion -> auto triggers rest timer on complete!
   const handleToggleSet = (index: number) => {
-    if (isEditMode) return;
+    if (isEditMode || !isLiveSession) return;
     
     const wasCompleted = sets[index].completed;
     const isCompleted = !wasCompleted;
@@ -441,6 +453,7 @@ export function WorkoutDetailModal({
 
   // Run Optimization Engine
   const handleRunOptimization = async (chosenStrategy: OptimizationStrategy = strategy) => {
+    if (!canOptimize) return;
     setStrategy(chosenStrategy);
     setOptimizing(true);
     setShowOptimizer(true);
@@ -519,10 +532,10 @@ export function WorkoutDetailModal({
         weight: idx === 0 && isCompound(s.exercise) ? Number((s.weight + 2.5).toFixed(1)) : s.weight,
         reps: idx > 0 ? s.reps + 1 : s.reps
       }));
-      summaryText = `AI Neuromuscular Optimization (Targeted Overload & Intensity Curve)`;
+      summaryText = `Balanced Load & Rep Tuning`;
       rationales = [
-        "Calibrated load distribution based on historical workout sets.",
-        "Optimized working sets for peak rate of force development."
+        "Balanced load and rep changes across the existing working sets.",
+        "Kept the adjustment local and reviewable before application."
       ];
     }
 
@@ -533,7 +546,7 @@ export function WorkoutDetailModal({
   };
 
   const handleApplyOptimization = async () => {
-    if (!proposedSets) return;
+    if (!canOptimize || !proposedSets) return;
     setSaving(true);
     try {
       const updatedExercises = rebuildExercisesPreservingIdentity(proposedSets, workout.exercises || []);
@@ -545,7 +558,7 @@ export function WorkoutDetailModal({
         {
           title,
           scheduledDate,
-          status: isEditMode ? workout.status : 'IN_PROGRESS',
+          status: workout.status,
           sets: proposedSets,
           exercises: updatedExercises,
           exerciseNotes
@@ -560,32 +573,24 @@ export function WorkoutDetailModal({
   };
 
   const handleSave = async () => {
+    if (!isEditMode) return;
     setSaving(true);
     try {
-      const isCompleting = !isEditMode;
-      const newStatus = isCompleting ? 'COMPLETED' : workout.status;
-      
       const updatedExercises = rebuildExercisesPreservingIdentity(sets, workout.exercises || []);
 
       const updates = {
         title,
         scheduledDate,
-        status: newStatus,
+        status: workout.status,
         sets,
         exercises: updatedExercises,
         exerciseNotes
       };
       
       const vol = calculateVolume(sets);
-      const result = await mutateWorkout(workout.id, workout.version, updates, { mutationId: crypto.randomUUID(), duration, volume: vol });
-      
-      if (isCompleting) {
-        setShowCelebration(true);
-        onSave(result);
-      } else {
-        onSave(result);
-        onClose();
-      }
+      const result = await mutateWorkout(workout.id, workout.version, updates, { mutationId: crypto.randomUUID(), duration: workout.duration, volume: vol });
+      onSave(result);
+      onClose();
     } catch (e: any) {
       console.error(e);
       if (e.status === 409) {
@@ -598,34 +603,16 @@ export function WorkoutDetailModal({
     }
   };
 
-  const handleSimulateExternalEdit = async () => {
-    setSimulatingConflict(true);
-    try {
-      const result = await mutateWorkout(
-        workout.id,
-        workout.version,
-        {
-          title: `${title} (v${workout.version + 1} Ext)`,
-          sets: sets.map((s, idx) => idx === 0 ? { ...s, weight: s.weight + 2.5 } : s)
-        }
-      , { mutationId: crypto.randomUUID() });
-      onSave(result);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setSimulatingConflict(false);
-    }
-  };
 
   const handleDeleteWorkout = async () => {
     const targetUserId = workout.userId || user?.uid;
     if (!targetUserId) return;
     setDeleting(true);
     try {
+      await deleteWorkout(workout.id, targetUserId);
       if (activeWorkout?.id === workout.id) {
         discardActiveWorkout();
       }
-      await deleteWorkout(workout.id, targetUserId);
       if (onDelete) {
         onDelete(workout.id);
       }
@@ -663,6 +650,8 @@ export function WorkoutDetailModal({
 
   const uniqueExerciseNames = groupedExercises.map(g => g.exercise);
 
+  if (!isOpen) return null;
+
   return (
     <>
       <AnimatePresence>
@@ -683,6 +672,8 @@ export function WorkoutDetailModal({
                   <Input 
                     value={title} 
                     onChange={(e) => setTitle(e.target.value)}
+                    readOnly={!isEditMode}
+                    aria-readonly={!isEditMode}
                     className="font-bold text-base sm:text-lg h-9 bg-background/80 border-border/80 flex-1 max-w-sm"
                     placeholder="Workout Title"
                   />
@@ -719,19 +710,21 @@ export function WorkoutDetailModal({
                 </div>
               </div>
 
-              {/* Persistent Rest Timer Bar (Hevy-style) */}
-              <div className="px-3.5 sm:px-4 py-2 border-b border-border/60 bg-background/80 shrink-0">
-                <RestTimer
-                  restRemaining={restRemaining}
-                  defaultDuration={defaultRestDuration}
-                  onStartRest={handleStartRestTimer}
-                  onAdjustTime={handleAdjustRestTime}
-                  onTogglePause={handleTogglePauseRest}
-                  onSkipRest={handleSkipRest}
-                  onDefaultDurationChange={(sec) => setDefaultRestDuration(sec)}
-                  isPaused={isRestPaused}
-                />
-              </div>
+              {/* Rest controls only exist for the actual live workout. */}
+              {isLiveSession && (
+                <div className="px-3.5 sm:px-4 py-2 border-b border-border/60 bg-background/80 shrink-0">
+                  <RestTimer
+                    restRemaining={restRemaining}
+                    defaultDuration={defaultRestDuration}
+                    onStartRest={handleStartRestTimer}
+                    onAdjustTime={handleAdjustRestTime}
+                    onTogglePause={handleTogglePauseRest}
+                    onSkipRest={handleSkipRest}
+                    onDefaultDurationChange={(sec) => setDefaultRestDuration(sec)}
+                    isPaused={isRestPaused}
+                  />
+                </div>
+              )}
 
               {/* Workout Metrics & Quick Action Bar */}
               <div className={cn(
@@ -759,30 +752,34 @@ export function WorkoutDetailModal({
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <Button 
-                    size="sm" 
-                    variant={showOptimizer ? "secondary" : "outline"}
-                    className="h-7 text-xs font-semibold gap-1 border-primary/30 text-primary hover:bg-primary/10"
-                    onClick={() => {
-                      if (!showOptimizer) {
-                        handleRunOptimization('OVERLOAD');
-                      } else {
-                        setShowOptimizer(false);
-                      }
-                    }}
-                  >
-                    <Sparkles size={12} /> 
-                    <span>{showOptimizer ? "Sets View" : "⚡ Optimize"}</span>
-                  </Button>
+                  {canOptimize && (
+                    <Button 
+                      size="sm" 
+                      variant={showOptimizer ? "secondary" : "outline"}
+                      className="h-7 text-xs font-semibold gap-1 border-primary/30 text-primary hover:bg-primary/10"
+                      onClick={() => {
+                        if (!showOptimizer) {
+                          handleRunOptimization('OVERLOAD');
+                        } else {
+                          setShowOptimizer(false);
+                        }
+                      }}
+                    >
+                      <Sparkles size={12} /> 
+                      <span>{showOptimizer ? "Sets View" : "Tune Plan"}</span>
+                    </Button>
+                  )}
 
-                  <Button
-                    size="sm"
-                    onClick={() => setShowExercisePicker(true)}
-                    className="h-7 text-xs font-bold gap-1 bg-primary text-primary-foreground shadow-2xs"
-                  >
-                    <Plus size={13} />
-                    <span>Add Exercise</span>
-                  </Button>
+                  {isEditMode && (
+                    <Button
+                      size="sm"
+                      onClick={() => setShowExercisePicker(true)}
+                      className="h-7 text-xs font-bold gap-1 bg-primary text-primary-foreground shadow-2xs"
+                    >
+                      <Plus size={13} />
+                      <span>Add Exercise</span>
+                    </Button>
+                  )}
                 </div>
               </div>
 
@@ -802,7 +799,7 @@ export function WorkoutDetailModal({
                       { id: 'OVERLOAD', label: 'Overload', desc: '+2.5-5kg Load', icon: TrendingUp },
                       { id: 'VOLUME', label: 'Hypertrophy', desc: '+2 Reps & Back-off', icon: Layers },
                       { id: 'DELOAD', label: 'Deload', desc: '-35% Load Reset', icon: RotateCcw },
-                      { id: 'CUSTOM_AI', label: 'Neural AI', desc: 'Custom Curve', icon: BrainIcon }
+                      { id: 'CUSTOM_AI', label: 'Balanced', desc: 'Mixed Load + Reps', icon: BrainIcon }
                     ].map(item => {
                       const Icon = item.icon;
                       const active = strategy === item.id;
@@ -875,14 +872,20 @@ export function WorkoutDetailModal({
                         </p>
                       </div>
 
-                      <Button
-                        size="default"
-                        onClick={() => setShowExercisePicker(true)}
-                        className="font-bold text-xs gap-2 px-6 shadow-sm"
-                      >
-                        <Plus size={16} />
-                        Add Exercise
-                      </Button>
+                      {canModifySet ? (
+                        <Button
+                          size="default"
+                          onClick={() => setShowExercisePicker(true)}
+                          className="font-bold text-xs gap-2 px-6 shadow-sm"
+                        >
+                          <Plus size={16} />
+                          Add Exercise
+                        </Button>
+                      ) : (
+                        <p className="text-xs font-medium text-muted-foreground">
+                          Edit this workout to add exercises.
+                        </p>
+                      )}
                     </div>
                   ) : (
                     /* Exercise Cards List */
@@ -942,7 +945,7 @@ export function WorkoutDetailModal({
                                   size="icon" 
                                   className="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-primary/10"
                                   onClick={() => setOpenNotes(prev => ({ ...prev, [group.exercise]: !prev[group.exercise] }))}
-                                  title="Exercise Notes"
+                                  title={isEditMode || isLiveSession ? "Exercise Notes" : "View Exercise Notes"}
                                 >
                                   <MessageSquare size={14} className={exerciseNotes[group.exercise] ? "text-primary fill-primary/20" : ""} />
                                 </Button>
@@ -984,6 +987,8 @@ export function WorkoutDetailModal({
                                     <textarea 
                                       value={exerciseNotes[group.exercise] || ''}
                                       onChange={(e) => setExerciseNotes(prev => ({ ...prev, [group.exercise]: e.target.value }))}
+                                      readOnly={!isEditMode && !isLiveSession}
+                                      aria-readonly={!isEditMode && !isLiveSession}
                                       placeholder="Add equipment settings, seat height, form cues..."
                                       className="w-full bg-background/50 rounded-lg p-2 border border-border/50 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary resize-none min-h-[44px] placeholder:text-muted-foreground/60"
                                     />
@@ -1020,6 +1025,11 @@ export function WorkoutDetailModal({
                                           1000
                                       ) / 10
                                     : null;
+                                const setTypeLabel =
+                                  set.setType === 'W' ? 'Warmup' :
+                                  set.setType === 'D' ? 'Drop Set' :
+                                  set.setType === 'F' ? 'Failure' :
+                                  'Normal';
 
                                 return (
                                   <div 
@@ -1039,19 +1049,22 @@ export function WorkoutDetailModal({
                                     {/* Set Type Pill Badge */}
                                     <button 
                                       onClick={() => {
+                                        if (!canModifySet) return;
                                         const types: ('N' | 'W' | 'D' | 'F')[] = ['N', 'W', 'D', 'F'];
                                         const current = set.setType || 'N';
                                         const next = types[(types.indexOf(current) + 1) % types.length];
                                         handleUpdateSet(index, 'setType', next);
                                       }}
+                                      disabled={!canModifySet}
                                       className={cn(
-                                        "text-center text-xs font-mono font-bold w-7 h-7 rounded-lg mx-auto flex items-center justify-center transition-all cursor-pointer border shadow-2xs",
+                                        "text-center text-xs font-mono font-bold w-7 h-7 rounded-lg mx-auto flex items-center justify-center transition-all border shadow-2xs",
+                                        canModifySet ? "cursor-pointer" : "cursor-default opacity-60",
                                         set.setType === 'W' ? "bg-amber-500/25 text-amber-600 dark:text-amber-400 border-amber-500/40" :
                                         set.setType === 'D' ? "bg-purple-500/25 text-purple-600 dark:text-purple-400 border-purple-500/40" :
                                         set.setType === 'F' ? "bg-rose-500/25 text-rose-600 dark:text-rose-400 border-rose-500/40" :
                                         "bg-secondary text-foreground border-border/80 hover:bg-secondary/80"
                                       )}
-                                      title={`Type: ${set.setType === 'W' ? 'Warmup' : set.setType === 'D' ? 'Drop Set' : set.setType === 'F' ? 'Failure' : 'Normal'} (Tap to change)`}
+                                      title={canModifySet ? `Type: ${setTypeLabel} (Tap to change)` : `Type: ${setTypeLabel}`}
                                     >
                                       {set.setType && set.setType !== 'N' ? set.setType : setNumber}
                                     </button>
@@ -1101,6 +1114,7 @@ export function WorkoutDetailModal({
                                         placeholder={rep?.nextTarget ? rep.nextTarget.targetWeight.toString() : "0"}
                                         title={rep?.nextTarget ? `Overload Target: ${rep.nextTarget.targetWeight}kg × ${rep.nextTarget.targetRepsMax} reps` : undefined}
                                         onChange={(e) => handleUpdateSet(index, 'weight', parseFloat(e.target.value) || 0)}
+                                        disabled={!isEditMode && !isLiveSession}
                                         className={cn(
                                           "w-full h-8 text-xs text-center font-mono font-bold rounded-lg border transition-all focus:outline-none focus:ring-1 focus:ring-primary px-1 placeholder:text-muted-foreground/40",
                                           isCompleted
@@ -1118,6 +1132,7 @@ export function WorkoutDetailModal({
                                         placeholder={rep?.nextTarget ? rep.nextTarget.targetRepsMax.toString() : "0"}
                                         title={rep?.nextTarget ? `Overload Target: ${rep.nextTarget.targetWeight}kg × ${rep.nextTarget.targetRepsMax} reps` : undefined}
                                         onChange={(e) => handleUpdateSet(index, 'reps', parseInt(e.target.value) || 0)}
+                                        disabled={!isEditMode && !isLiveSession}
                                         className={cn(
                                           "w-full h-8 text-xs text-center font-mono font-bold rounded-lg border transition-all focus:outline-none focus:ring-1 focus:ring-primary px-1 placeholder:text-muted-foreground/40",
                                           isCompleted
@@ -1136,6 +1151,7 @@ export function WorkoutDetailModal({
                                         value={set.rir !== undefined ? set.rir : ''}
                                         placeholder="—"
                                         onChange={(e) => handleUpdateSet(index, 'rir', e.target.value === '' ? undefined : parseInt(e.target.value))}
+                                        disabled={!isEditMode && !isLiveSession}
                                         className={cn(
                                           "w-full h-8 text-xs text-center font-mono rounded-lg border transition-all focus:outline-none focus:ring-1 focus:ring-primary px-1",
                                           isCompleted
@@ -1148,19 +1164,19 @@ export function WorkoutDetailModal({
                                     {/* Hevy-Style Checkmark Toggle Button */}
                                     <div className="flex justify-center">
                                       <motion.button
-                                        whileTap={!isEditMode ? { scale: 0.88 } : {}}
+                                        whileTap={isLiveSession && !isEditMode ? { scale: 0.88 } : {}}
                                         animate={isCompleted ? { scale: [1, 1.2, 1] } : {}}
                                         transition={{ duration: 0.25 }}
                                         onClick={() => handleToggleSet(index)}
                                         className={cn(
                                           "flex items-center justify-center h-7 w-7 rounded-lg border transition-all shadow-xs",
-                                          isEditMode ? "opacity-40 cursor-not-allowed" : "cursor-pointer",
+                                          !isLiveSession || isEditMode ? "opacity-40 cursor-not-allowed" : "cursor-pointer",
                                           isCompleted 
                                             ? "bg-emerald-500 text-white border-emerald-600 shadow-[0_0_10px_rgba(16,185,129,0.4)]" 
                                             : "bg-secondary/70 text-muted-foreground border-border/80 hover:bg-secondary hover:border-primary/50"
                                         )}
-                                        disabled={isEditMode}
-                                        title={isCompleted ? "Completed (Tap to undo)" : "Mark set complete"}
+                                        disabled={isEditMode || !isLiveSession}
+                                        title={!isLiveSession ? "Start this workout to log sets" : isCompleted ? "Completed (Tap to undo)" : "Mark set complete"}
                                       >
                                         {isCompleted && <Check size={14} strokeWidth={3} />}
                                       </motion.button>
@@ -1185,7 +1201,7 @@ export function WorkoutDetailModal({
                               })}
 
                               {/* Add Set Button for this exercise */}
-                              <div className="pt-1.5">
+                              {isEditMode && <div className="pt-1.5">
                                 <Button 
                                   size="sm" 
                                   variant="ghost" 
@@ -1194,14 +1210,14 @@ export function WorkoutDetailModal({
                                 >
                                   <Plus size={13} className="mr-1" /> Add Set
                                 </Button>
-                              </div>
+                              </div>}
                             </div>
                           </div>
                         );
                       })}
 
                       {/* Bottom Add Exercise CTA Button */}
-                      <div className="pt-2">
+                      {isEditMode && <div className="pt-2">
                         <Button
                           size="default"
                           variant="outline"
@@ -1211,7 +1227,7 @@ export function WorkoutDetailModal({
                           <Plus size={15} />
                           Add Another Exercise
                         </Button>
-                      </div>
+                      </div>}
                     </div>
                   )}
                 </div>
@@ -1249,18 +1265,17 @@ export function WorkoutDetailModal({
                       <Button variant="outline" size="sm" className="h-9 text-xs flex-1 sm:flex-none" onClick={onClose}>
                         Close
                       </Button>
-                      <Button 
-                        size="sm" 
-                        className={cn(
-                          "h-9 text-xs font-bold gap-1.5 text-white flex-1 sm:flex-none shadow-sm",
-                          isEditMode ? "bg-primary hover:bg-primary/90" : "bg-emerald-600 hover:bg-emerald-700"
-                        )} 
-                        onClick={handleSave} 
-                        disabled={saving}
-                      >
-                        {isEditMode ? <Save size={14} /> : <CheckCircle2 size={14} />}
-                        {saving ? 'Saving...' : (isEditMode ? 'Save Structure' : 'Finish Workout')}
-                      </Button>
+                      {isEditMode && (
+                        <Button 
+                          size="sm" 
+                          className="h-9 text-xs font-bold gap-1.5 bg-primary text-primary-foreground flex-1 sm:flex-none shadow-sm"
+                          onClick={handleSave} 
+                          disabled={saving}
+                        >
+                          <Save size={14} />
+                          {saving ? 'Saving...' : 'Save Structure'}
+                        </Button>
+                      )}
                     </>
                   )}
                 </div>
@@ -1289,25 +1304,21 @@ export function WorkoutDetailModal({
         )}
       </AnimatePresence>
 
-      {/* Workout Celebration Modal */}
-      <AnimatePresence>
-        {showCelebration && (
-          <WorkoutCelebration 
-            workout={{...workout, sets}} 
-            allWorkouts={allUserWorkouts}
-            onClose={() => {
-              setShowCelebration(false);
-              onClose();
-            }} 
-          />
-        )}
-      </AnimatePresence>
-
       {/* Delete Confirmation Modal */}
       <AnimatePresence>
         {showDeleteConfirm && (
           <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
             <motion.div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="detail-delete-title"
+              aria-describedby="detail-delete-description"
+              onKeyDown={(event) => {
+                if (event.key === 'Escape' && !deleting) {
+                  event.stopPropagation();
+                  setShowDeleteConfirm(false);
+                }
+              }}
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
@@ -1318,8 +1329,8 @@ export function WorkoutDetailModal({
                   <AlertTriangle size={22} />
                 </div>
                 <div>
-                  <h3 className="font-bold text-base text-foreground">Delete Workout?</h3>
-                  <p className="text-xs text-muted-foreground">This will remove this session from your logs.</p>
+                  <h3 id="detail-delete-title" className="font-bold text-base text-foreground">Delete Workout?</h3>
+                  <p id="detail-delete-description" className="text-xs text-muted-foreground">This will remove this session from your logs.</p>
                 </div>
               </div>
 
@@ -1330,6 +1341,7 @@ export function WorkoutDetailModal({
 
               <div className="flex gap-2 justify-end pt-1">
                 <Button
+                  ref={deleteCancelRef}
                   variant="outline"
                   size="sm"
                   onClick={() => setShowDeleteConfirm(false)}

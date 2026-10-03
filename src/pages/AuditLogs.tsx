@@ -18,6 +18,7 @@ import {
   Calendar
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { isGuestUserId } from '../lib/guest-session';
 
 export default function AuditLogsPage() {
   const { user } = useAuthStore();
@@ -27,6 +28,8 @@ export default function AuditLogsPage() {
   const [undoingId, setUndoingId] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [actorFilter, setActorFilter] = useState<string>('ALL');
+  const isGuest = Boolean(user && isGuestUserId(user.uid));
+  const hasLocalHistory = logs.some((log) => log.storageScope === 'LOCAL' || log.storageScope === 'LOCAL_MIGRATED');
 
   const fetchData = async () => {
     if (!user) return;
@@ -56,7 +59,9 @@ export default function AuditLogsPage() {
       if (res.success) {
         setMessage({
           type: 'success',
-          text: `Successfully rolled back mutation! ${res.workout?.title || 'Workout'} restored to OCC v${res.workout?.version}.`
+          text: res.deleted
+            ? 'Workout creation rolled back. The locally created workout was removed.'
+            : `${res.workout?.title || 'Workout'} restored as OCC v${res.workout?.version}.`
         });
         await fetchData();
       } else {
@@ -111,11 +116,17 @@ export default function AuditLogsPage() {
           <div className="flex items-center gap-2">
             <h1 className="text-2xl md:text-3xl font-display font-bold">Mutation Audit Trail</h1>
             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-              <ShieldCheck size={13} /> Append-Only
+              <ShieldCheck size={13} /> {loading ? 'Loading audit' : isGuest ? 'Local Audit' : hasLocalHistory ? 'Server + Local History' : 'Server Audit'}
             </span>
           </div>
           <p className="text-muted-foreground text-sm mt-1">
-            Complete cryptographic audit log of all manual edits, AI proposals, and autonomous adjustments with contiguous rollback support.
+            {loading
+              ? 'Reading audit state…'
+              : isGuest
+                ? 'Device-local mutation history with contiguous rollback for Guest workouts.'
+                : hasLocalHistory
+                  ? 'Server-authoritative audit plus preserved device-local Guest history. Migrated local entries are read-only after cloud sync.'
+                  : 'Server-authoritative mutation history for manual edits, AI proposals, and autonomous adjustments with contiguous rollback support.'}
           </p>
         </div>
       </header>
@@ -132,7 +143,7 @@ export default function AuditLogsPage() {
       )}
 
       {/* Filter Tabs */}
-      <div className="flex items-center gap-2 border-b border-border pb-2 text-xs">
+      <div className="flex items-center gap-2 border-b border-border pb-2 text-xs" aria-busy={loading}>
         <button
           onClick={() => setActorFilter('ALL')}
           className={cn(
@@ -140,7 +151,7 @@ export default function AuditLogsPage() {
             actorFilter === 'ALL' ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"
           )}
         >
-          All Actors ({logs.length})
+          All Actors ({loading ? '…' : logs.length})
         </button>
         <button
           onClick={() => setActorFilter('AI_BRAIN')}
@@ -149,7 +160,7 @@ export default function AuditLogsPage() {
             actorFilter === 'AI_BRAIN' ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"
           )}
         >
-          AI Brain ({logs.filter(l => l.actor === 'AI_BRAIN').length})
+          AI Brain ({loading ? '…' : logs.filter(l => l.actor === 'AI_BRAIN').length})
         </button>
         <button
           onClick={() => setActorFilter('USER')}
@@ -158,7 +169,7 @@ export default function AuditLogsPage() {
             actorFilter === 'USER' ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"
           )}
         >
-          User Edits ({logs.filter(l => l.actor === 'USER').length})
+          User Edits ({loading ? '…' : logs.filter(l => l.actor === 'USER').length})
         </button>
       </div>
 
@@ -172,7 +183,9 @@ export default function AuditLogsPage() {
           <History size={40} className="mx-auto opacity-30 text-primary" />
           <h3 className="font-semibold text-base text-foreground">No audit entries recorded</h3>
           <p className="text-xs max-w-sm mx-auto">
-            Every workout set modification or AI proposal approval records an immutable record here with full inverse delta snapshots.
+            {isGuest
+              ? 'Guest workout changes will appear here with local inverse-delta snapshots.'
+              : 'Server-authoritative workout and proposal mutations appear here with inverse-delta snapshots.'}
           </p>
         </div>
       ) : (
@@ -180,6 +193,7 @@ export default function AuditLogsPage() {
           {filteredLogs.map((log) => {
             const targetWorkout = workouts.find(w => w.id === log.targetEntityId);
             const isContiguousLatest = targetWorkout ? targetWorkout.version === log.resultVersion : false;
+            const canRollback = isContiguousLatest && (isGuest || log.storageScope === 'SERVER');
 
             return (
               <Card 
@@ -189,6 +203,11 @@ export default function AuditLogsPage() {
                 <CardHeader className="p-4 bg-secondary/20 border-b border-border/40 pb-3 flex flex-row items-center justify-between gap-2">
                   <div className="flex items-center gap-2 flex-wrap">
                     {getActorBadge(log.actor)}
+                    {log.storageScope === 'LOCAL_MIGRATED' && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/25">
+                        Local history
+                      </span>
+                    )}
                     <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-background border border-border/60">
                       v{log.baseVersion} <ArrowRight size={10} className="inline mx-0.5 text-primary" /> v{log.resultVersion}
                     </span>
@@ -217,7 +236,7 @@ export default function AuditLogsPage() {
                     </div>
 
                     <div>
-                      {isContiguousLatest ? (
+                      {canRollback ? (
                         <Button 
                           size="sm" 
                           variant="outline"
@@ -230,7 +249,9 @@ export default function AuditLogsPage() {
                         </Button>
                       ) : (
                         <span className="text-muted-foreground text-[11px] italic">
-                          Locked (interim mutations applied)
+                          {log.storageScope === 'LOCAL_MIGRATED'
+                            ? 'Preserved local history (read-only after cloud sync)'
+                            : 'Locked (interim mutations applied)'}
                         </span>
                       )}
                     </div>

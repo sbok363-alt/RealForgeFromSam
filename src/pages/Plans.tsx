@@ -5,7 +5,7 @@ import { Input } from '../components/ui/Input';
 import { Plus, Trash2, Edit2 } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
 import { useWorkoutStore } from '../store/useWorkoutStore';
-import { getPlans, savePlan, deletePlan } from '../lib/api';
+import { getPlans, savePlan, deletePlan, saveWorkout } from '../lib/api';
 import { TrainingPlan, Workout } from '../types';
 import { useNavigate } from 'react-router-dom';
 import ExerciseSelector from '../components/workout/ExerciseSelector';
@@ -14,7 +14,7 @@ import { WorkoutConflictModal } from '../components/workout/WorkoutConflictModal
 
 export default function Plans() {
   const { user } = useAuthStore();
-  const { activeWorkout, startWorkout, finishWorkout } = useWorkoutStore();
+  const { activeWorkout, startWorkout, discardWorkout } = useWorkoutStore();
   const navigate = useNavigate();
   
   const [plans, setPlans] = useState<TrainingPlan[]>([]);
@@ -77,18 +77,30 @@ export default function Plans() {
     const plan = plans.find(p => p.id === editingPlanId);
     if (!plan) return;
 
-    const updatedPlan = { ...plan };
-    if (updatedPlan.days.length === 0) {
-      updatedPlan.days.push({ id: crypto.randomUUID(), name: 'Day 1', exercises: [] });
-    }
-    
-    updatedPlan.days[0].exercises.push({
+    const firstDay = plan.days[0] || {
       id: crypto.randomUUID(),
-      exerciseId: def.id,
-      targetSets: 3,
-      targetRepsMin: 8,
-      targetRepsMax: 12
-    });
+      name: 'Day 1',
+      exercises: []
+    };
+    const updatedPlan: TrainingPlan = {
+      ...plan,
+      days: [
+        {
+          ...firstDay,
+          exercises: [
+            ...firstDay.exercises,
+            {
+              id: crypto.randomUUID(),
+              exerciseId: def.id,
+              targetSets: 3,
+              targetRepsMin: 8,
+              targetRepsMax: 12
+            }
+          ]
+        },
+        ...plan.days.slice(1)
+      ]
+    };
 
     await savePlan(updatedPlan);
     setShowExerciseSelector(false);
@@ -99,31 +111,49 @@ export default function Plans() {
     const plan = plans.find(p => p.id === planId);
     if (!plan) return;
     
-    const updatedPlan = { ...plan };
-    updatedPlan.days[0].exercises = updatedPlan.days[0].exercises.filter(ex => ex.id !== exerciseIdToRemove);
+    const firstDay = plan.days[0];
+    if (!firstDay) return;
+
+    const updatedPlan: TrainingPlan = {
+      ...plan,
+      days: [
+        {
+          ...firstDay,
+          exercises: firstDay.exercises.filter(ex => ex.id !== exerciseIdToRemove)
+        },
+        ...plan.days.slice(1)
+      ]
+    };
     await savePlan(updatedPlan);
     loadPlans();
   };
 
-  const handleStartPlan = (plan: TrainingPlan) => {
+  const handleStartPlan = async (plan: TrainingPlan) => {
     const todayStr = new Date().toISOString().split('T')[0];
-    const exercises = plan.days[0]?.exercises.map(ex => ({
-      id: crypto.randomUUID(),
-      exerciseId: ex.exerciseId,
-      sets: Array.from({ length: ex.targetSets }).map(() => ({
+    const exercises = plan.days[0]?.exercises.map((planExercise) => {
+      const definition = getExerciseById(planExercise.exerciseId);
+      const displayName = definition?.name || planExercise.exerciseId;
+      return {
         id: crypto.randomUUID(),
-        weight: 0,
-        reps: ex.targetRepsMin,
-        completed: false
-      }))
-    })) || [];
+        exerciseId: planExercise.exerciseId,
+        name: displayName,
+        sets: Array.from({ length: planExercise.targetSets }).map(() => ({
+          id: crypto.randomUUID(),
+          weight: 0,
+          reps: planExercise.targetRepsMin,
+          completed: false,
+          setType: 'N' as const
+        }))
+      };
+    }) || [];
 
-    const sets = exercises.flatMap(e => e.sets.map(s => ({
-      id: s.id,
-      exercise: e.exerciseId,
-      reps: s.reps,
-      weight: s.weight,
-      completed: false
+    const sets = exercises.flatMap((exercise) => exercise.sets.map((set) => ({
+      id: set.id,
+      exercise: exercise.name,
+      reps: set.reps,
+      weight: set.weight,
+      completed: false,
+      setType: 'N' as const
     })));
 
     const workout: Workout = {
@@ -132,9 +162,8 @@ export default function Plans() {
       title: plan.name,
       name: plan.name,
       scheduledDate: todayStr,
-      status: 'IN_PROGRESS',
+      status: 'PLANNED',
       version: 1,
-      startedAt: Date.now(),
       planId: plan.id,
       sets,
       exercises
@@ -145,14 +174,25 @@ export default function Plans() {
       return;
     }
 
-    startWorkout(workout);
+    const saved = await saveWorkout(
+      workout,
+      'USER',
+      `Created workout from plan: ${plan.name}`
+    );
+    startWorkout(saved);
     navigate('/workout');
   };
 
-  const handleConfirmConflict = () => {
+  const handleConfirmConflict = async () => {
     if (!conflictTargetWorkout) return;
-    finishWorkout();
-    startWorkout(conflictTargetWorkout);
+    const target = conflictTargetWorkout;
+    const saved = await saveWorkout(
+      target,
+      'USER',
+      `Created workout from plan: ${target.title}`
+    );
+    discardWorkout();
+    startWorkout(saved);
     setConflictTargetWorkout(null);
     navigate('/workout');
   };

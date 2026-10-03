@@ -9,7 +9,7 @@ export function ForgeLogo({ className = "h-4 w-auto" }: { className?: string }) 
         <path d="M3 10H23L18 15H3L3 10Z" fill="#FF7A32" />
         <path d="M0 17H16L11 22H0L0 17Z" fill="#FF7A32" />
       </svg>
-      <span className="font-display font-black tracking-wider text-base sm:text-lg text-white">FORGE</span>
+      <span className="font-display font-black tracking-wider text-base sm:text-lg text-foreground">HARDSTATE</span>
     </div>
   );
 }

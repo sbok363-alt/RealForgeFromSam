@@ -55,7 +55,7 @@ export const D3PerformanceCharts: React.FC<D3PerformanceChartsProps> = ({ workou
   // Filter completed workouts
   const completedWorkouts = useMemo(() => {
     return [...workouts]
-      .filter((w) => w.status === 'completed' || (w.sets && w.sets.some((s) => s.completed)))
+      .filter((w) => w.status === 'COMPLETED' || w.status === 'completed')
       .sort((a, b) => (a.startedAt || 0) - (b.startedAt || 0));
   }, [workouts]);
 

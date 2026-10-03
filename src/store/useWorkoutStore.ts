@@ -46,11 +46,102 @@ export interface WorkoutState {
   removeExercise: (exerciseId: string) => void;
 }
 
-let persistenceWarningSink = (_message: string | null) => {};
+function normalizeExerciseIdentity(value?: string): string {
+  return (value || '').trim().toLowerCase().replace(/[-_\s]+/g, '');
+}
+
+function preserveExistingExerciseIdentity(
+  existingExercises: WorkoutExercise[],
+  nextExercises: WorkoutExercise[]
+): WorkoutExercise[] {
+  return nextExercises.map((nextExercise) => {
+    const nextExerciseId = normalizeExerciseIdentity(nextExercise.exerciseId);
+    const nextName = normalizeExerciseIdentity(nextExercise.name);
+    const existing = existingExercises.find((candidate) => {
+      if (candidate.id === nextExercise.id) return true;
+
+      const candidateExerciseId = normalizeExerciseIdentity(candidate.exerciseId);
+      if (nextExerciseId && candidateExerciseId === nextExerciseId) return true;
+
+      const candidateName = normalizeExerciseIdentity(candidate.name);
+      return Boolean(nextName && candidateName === nextName);
+    });
+
+    if (!existing) return nextExercise;
+    return {
+      ...nextExercise,
+      id: existing.id,
+      exerciseId: existing.exerciseId,
+    };
+  });
+}
+
+let pendingPersistenceWarning: string | null = null;
+let persistenceWarningSink = (message: string | null) => {
+  pendingPersistenceWarning = message;
+};
+
+function validatePersistedWorkoutState(value: string): void {
+  const persisted = JSON.parse(value) as { state?: { activeWorkout?: unknown } };
+  const activeWorkout = persisted?.state?.activeWorkout;
+  if (activeWorkout === null || activeWorkout === undefined) return;
+  if (!activeWorkout || typeof activeWorkout !== 'object' || Array.isArray(activeWorkout)) {
+    throw new Error('invalid active workout shape');
+  }
+
+  const workout = activeWorkout as Partial<Workout>;
+  const hasIdentity = typeof workout.id === 'string' && workout.id.trim().length > 0;
+  const hasTitle = typeof workout.title === 'string' || typeof workout.name === 'string';
+  const hasStatus = typeof workout.status === 'string' && workout.status.length > 0;
+  const hasVersion = typeof workout.version === 'number' && Number.isFinite(workout.version);
+  const hasSetShape = Array.isArray(workout.sets) || Array.isArray(workout.exercises);
+  const validFlatSets = !Array.isArray(workout.sets) || workout.sets.every((set) => (
+    Boolean(set) &&
+    typeof set === 'object' &&
+    typeof set.id === 'string' &&
+    typeof set.exercise === 'string' &&
+    typeof set.weight === 'number' &&
+    Number.isFinite(set.weight) &&
+    typeof set.reps === 'number' &&
+    Number.isFinite(set.reps)
+  ));
+  const validExercises = !Array.isArray(workout.exercises) || workout.exercises.every((exercise) => (
+    Boolean(exercise) &&
+    typeof exercise === 'object' &&
+    typeof exercise.id === 'string' &&
+    typeof exercise.exerciseId === 'string' &&
+    Array.isArray(exercise.sets) &&
+    exercise.sets.every((set) => (
+      Boolean(set) &&
+      typeof set === 'object' &&
+      typeof set.id === 'string' &&
+      typeof set.weight === 'number' &&
+      Number.isFinite(set.weight) &&
+      typeof set.reps === 'number' &&
+      Number.isFinite(set.reps)
+    ))
+  ));
+
+  if (
+    !hasIdentity ||
+    !hasTitle ||
+    !hasStatus ||
+    !hasVersion ||
+    !hasSetShape ||
+    !validFlatSets ||
+    !validExercises
+  ) {
+    throw new Error('invalid active workout shape');
+  }
+}
 
 const workoutStorage = createSafeStateStorage(
   {
-    getItem: (name) => window.localStorage.getItem(name),
+    getItem: (name) => {
+      const value = window.localStorage.getItem(name);
+      if (value !== null) validatePersistedWorkoutState(value);
+      return value;
+    },
     setItem: (name, value) => window.localStorage.setItem(name, value),
     removeItem: (name) => window.localStorage.removeItem(name),
   },
@@ -104,7 +195,16 @@ export const useWorkoutStore = create<WorkoutState>()(
           const updated = typeof workoutOrUpdater === 'function'
             ? workoutOrUpdater(state.activeWorkout)
             : { ...state.activeWorkout, ...workoutOrUpdater };
-          return { activeWorkout: updated, sessionRevision: state.sessionRevision + 1 };
+          const identitySafeUpdated = updated.exercises
+            ? {
+                ...updated,
+                exercises: preserveExistingExerciseIdentity(
+                  state.activeWorkout.exercises || [],
+                  updated.exercises
+                ),
+              }
+            : updated;
+          return { activeWorkout: identitySafeUpdated, sessionRevision: state.sessionRevision + 1 };
         });
       },
 
@@ -179,7 +279,7 @@ export const useWorkoutStore = create<WorkoutState>()(
       queuePendingMutation: (operation) => set({ pendingMutation: operation, syncError: null }),
       clearPendingMutation: () => set({ pendingMutation: null }),
       setSyncConflict: (conflict) => set({ syncConflict: conflict }),
-      setSyncError: (message) => set({ syncError: message }),
+      setSyncError: (message: string | null) => set({ syncError: message }),
       applyAuthoritativeWorkout: (workout) => set({ activeWorkout: workout, lastSyncedAt: Date.now(), syncError: null }),
       resolveConflictWithServer: () => set((state) => state.syncConflict ? ({
         activeWorkout: state.syncConflict.serverWorkout,
@@ -283,3 +383,8 @@ export function calculateEpley1RM(weight: number, reps: number): number {
 persistenceWarningSink = (message: string | null) => {
   useWorkoutStore.setState({ persistenceWarning: message });
 };
+
+if (pendingPersistenceWarning !== null) {
+  useWorkoutStore.setState({ persistenceWarning: pendingPersistenceWarning });
+  pendingPersistenceWarning = null;
+}

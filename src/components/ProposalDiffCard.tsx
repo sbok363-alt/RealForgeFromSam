@@ -27,6 +27,7 @@ interface ProposalDiffCardProps {
   onDiscard?: (proposalId: string) => Promise<void>;
   onRebase?: (proposal: Proposal) => void;
   compact?: boolean;
+  approvalDisabledReason?: string;
 }
 
 interface SetChange {
@@ -143,6 +144,7 @@ export function ProposalDiffCard({
   onDiscard,
   onRebase,
   compact = false,
+  approvalDisabledReason,
 }: ProposalDiffCardProps) {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -275,7 +277,7 @@ export function ProposalDiffCard({
         {/* Coach rationale – primary emotional content */}
         <div className="rounded-xl bg-secondary/25 border border-border/40 p-3.5">
           <p className="text-foreground text-sm leading-relaxed font-medium">
-            {proposal.summary || 'FORGE suggests a targeted adjustment based on your recent training.'}
+            {proposal.summary || 'Hardstate suggests a targeted adjustment based on your recent training.'}
           </p>
           <p className="text-[11px] text-muted-foreground mt-2 flex items-center gap-1.5">
             <Dumbbell size={11} />
@@ -296,7 +298,7 @@ export function ProposalDiffCard({
               This recommendation is based on an older version
             </div>
             <p className="leading-relaxed opacity-90">
-              You (or another update) changed the workout after FORGE prepared this. Applying it now could overwrite those edits. Rebase to refresh the suggestion against the current plan.
+              You (or another update) changed the workout after Hardstate prepared this. Applying it now could overwrite those edits. Rebase to refresh the suggestion against the current plan.
             </p>
           </div>
         )}
@@ -406,10 +408,11 @@ export function ProposalDiffCard({
                   className="flex-1 font-bold h-11"
                   size="sm"
                   onClick={handleApprove}
-                  disabled={loading}
+                  disabled={loading || Boolean(approvalDisabledReason)}
+                  title={approvalDisabledReason}
                 >
                   <Check size={16} className="mr-1.5" strokeWidth={2.5} />
-                  {loading ? 'Applying…' : 'Accept recommendation'}
+                  {loading ? 'Applying…' : approvalDisabledReason ? 'Google required' : 'Accept recommendation'}
                 </Button>
                 <Button
                   variant="outline"
@@ -451,7 +454,9 @@ export function ProposalDiffCard({
 
         {isPending && !hasVersionConflict && (
           <p className="text-[10px] text-center text-muted-foreground">
-            Nothing is written until you accept. Every change stays reversible in Audit Logs.
+            {approvalDisabledReason
+              ? approvalDisabledReason
+              : 'Nothing is written until you accept. Every change stays reversible in Audit Logs.'}
           </p>
         )}
       </CardContent>

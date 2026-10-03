@@ -5,6 +5,7 @@ import { Button } from './ui/Button';
 import { Card, CardContent } from './ui/Card';
 import { History, RotateCcw, User, Brain, Cpu, ArrowRight, Check, AlertCircle, X } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { isGuestUserId } from '../lib/guest-session';
 
 interface MutationAuditModalProps {
   isOpen: boolean;
@@ -25,6 +26,7 @@ export function MutationAuditModal({
   const [loading, setLoading] = useState(true);
   const [undoingId, setUndoingId] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const isGuest = isGuestUserId(userId);
 
   const fetchLogs = async () => {
     setLoading(true);
@@ -52,8 +54,14 @@ export function MutationAuditModal({
     setErrorMsg(null);
     try {
       const res = await undoMutation(log.id, userId);
-      if (res.success && res.workout) {
-        if (onWorkoutRestored) onWorkoutRestored(res.workout);
+      if (res.success) {
+        if (res.workout && onWorkoutRestored) {
+          onWorkoutRestored(res.workout);
+        }
+        if (res.deleted) {
+          onClose();
+          return;
+        }
         await fetchLogs();
       } else {
         setErrorMsg(res.error || 'Failed to perform contiguous undo');
@@ -127,14 +135,17 @@ export function MutationAuditModal({
               <History size={36} className="mx-auto opacity-30" />
               <p className="text-sm font-medium">No mutations recorded yet.</p>
               <p className="text-xs max-w-xs mx-auto">
-                Every user edit, AI proposal execution, and autonomous adjustment is appended here with full undo capabilities.
+                {isGuest
+                  ? 'Guest workout edits are recorded locally with contiguous undo support.'
+                  : 'Server mutations are authoritative; preserved Guest history remains visible as read-only local history.'}
               </p>
             </div>
           ) : (
             <div className="relative border-l-2 border-border/80 ml-3 pl-4 space-y-4">
               {logs.map((log, index) => {
                 const isLatest = index === 0;
-                const canUndo = targetWorkout ? targetWorkout.version === log.resultVersion : isLatest;
+                const isContiguous = targetWorkout ? targetWorkout.version === log.resultVersion : isLatest;
+                const canUndo = isContiguous && (isGuest || log.storageScope === 'SERVER');
 
                 return (
                   <div key={log.id} className="relative group">
@@ -148,6 +159,11 @@ export function MutationAuditModal({
                       <div className="flex items-center justify-between gap-2 flex-wrap">
                         <div className="flex items-center gap-2">
                           {getActorBadge(log.actor)}
+                          {log.storageScope === 'LOCAL_MIGRATED' && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/25">
+                              Local history
+                            </span>
+                          )}
                           <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-background border border-border/60">
                             v{log.baseVersion} <ArrowRight size={10} className="inline mx-0.5" /> v{log.resultVersion}
                           </span>
@@ -191,7 +207,9 @@ export function MutationAuditModal({
                           </Button>
                         ) : (
                           <span className="text-[10px] text-muted-foreground italic">
-                            Non-contiguous (earlier step)
+                            {log.storageScope === 'LOCAL_MIGRATED'
+                              ? 'Read-only local history'
+                              : 'Non-contiguous (earlier step)'}
                           </span>
                         )}
                       </div>
@@ -205,7 +223,7 @@ export function MutationAuditModal({
 
         {/* Footer */}
         <div className="p-4 border-t border-border bg-secondary/10 flex justify-between items-center text-xs text-muted-foreground">
-          <span>Append-Only Concurrency Log</span>
+          <span>{isGuest ? 'Local Concurrency Log' : 'Server Audit + Preserved Local History'}</span>
           <Button variant="outline" size="sm" onClick={onClose}>Close</Button>
         </div>
       </div>

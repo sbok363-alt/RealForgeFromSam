@@ -4,8 +4,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { 
   getWorkouts, 
   saveWorkout, 
-  deleteWorkout,
-  seedForgeData 
+  deleteWorkout
 } from '../lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -17,6 +16,7 @@ import { MutationAuditModal } from '../components/MutationAuditModal';
 import { WorkoutConflictModal } from '../components/workout/WorkoutConflictModal';
 import { useWorkoutStore } from '../store/useWorkoutStore';
 import { ExerciseThumbnail } from '../components/workout/ExerciseThumbnail';
+import { projectCompletedWorkingSets } from '../lib/workout-session';
 import { 
   Dumbbell, 
   Plus, 
@@ -36,11 +36,13 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '../lib/utils';
+import { isGuestUserId } from '../lib/guest-session';
 
 export default function WorkoutPage() {
   const { user } = useAuthStore();
   const navigate = useNavigate();
-  const { activeWorkout, startWorkout, finishWorkout, discardWorkout, openWorkoutModal } = useWorkoutStore();
+  const { activeWorkout, startWorkout, discardWorkout } = useWorkoutStore();
+  const isGuest = Boolean(user && isGuestUserId(user.uid));
 
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [loading, setLoading] = useState(true);
@@ -49,8 +51,10 @@ export default function WorkoutPage() {
   const [conflictTargetWorkout, setConflictTargetWorkout] = useState<Workout | null>(null);
   const [workoutToDelete, setWorkoutToDelete] = useState<Workout | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [filter, setFilter] = useState<'ALL' | 'PLANNED' | 'COMPLETED'>('ALL');
   const [creating, setCreating] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<'ALL' | 'PLANNED' | 'COMPLETED'>('ALL');
+  const deleteCancelRef = React.useRef<HTMLButtonElement>(null);
 
   // Calculate historical PR counts for completed workouts using Epley's formula
   const workoutPRCounts = useMemo(() => {
@@ -88,11 +92,7 @@ export default function WorkoutPage() {
     if (!user) return;
     setLoading(true);
     try {
-      let data = await getWorkouts(user.uid);
-      if (data.length === 0) {
-        await seedForgeData(user.uid);
-        data = await getWorkouts(user.uid);
-      }
+      const data = await getWorkouts(user.uid);
       setWorkouts(data);
     } catch (e) {
       console.error("Error fetching workouts:", e);
@@ -105,6 +105,20 @@ export default function WorkoutPage() {
     fetchWorkoutsList();
   }, [user]);
 
+  useEffect(() => {
+    if (!workoutToDelete) return;
+    const previousFocus = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    const frame = requestAnimationFrame(() => deleteCancelRef.current?.focus());
+
+    return () => {
+      cancelAnimationFrame(frame);
+      previousFocus?.focus();
+    };
+  }, [workoutToDelete]);
+
+
   const handleStartWorkout = (workout: Workout) => {
     if (activeWorkout && activeWorkout.id !== workout.id) {
       setConflictTargetWorkout(workout);
@@ -116,33 +130,39 @@ export default function WorkoutPage() {
 
   const handleConfirmConflict = () => {
     if (!conflictTargetWorkout) return;
-    finishWorkout();
+    discardWorkout();
     startWorkout(conflictTargetWorkout);
     setSelectedWorkout(conflictTargetWorkout);
     setConflictTargetWorkout(null);
   };
 
   const handleCreateEmptyWorkout = async () => {
-    if (!user) return;
-    const todayStr = new Date().toISOString().split('T')[0];
-    const newW: Workout = {
-      id: crypto.randomUUID(),
-      userId: user.uid,
-      title: `Workout Session #${workouts.length + 1}`,
-      scheduledDate: todayStr,
-      status: 'PLANNED',
-      version: 1,
-      sets: [],        // NO HARDCODED SETS
-      exercises: [],   // STRICTLY EMPTY
-      updatedAt: new Date().toISOString()
-    };
+    if (!user || creating) return;
+    setCreating(true);
+    setActionError(null);
+    try {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const newW: Workout = {
+        id: crypto.randomUUID(),
+        userId: user.uid,
+        title: `Workout Session #${workouts.length + 1}`,
+        scheduledDate: todayStr,
+        status: 'PLANNED',
+        version: 1,
+        sets: [],
+        exercises: [],
+        updatedAt: new Date().toISOString()
+      };
 
-    const saved = await saveWorkout(newW, 'USER', `Created empty workout: ${newW.title}`);
-    setWorkouts(prev => [saved, ...prev]);
-    
-    // Automatically open as active workout
-    startWorkout(saved);
-    setSelectedWorkout(saved);
+      const saved = await saveWorkout(newW, 'USER', `Created empty workout: ${newW.title}`);
+      setWorkouts(prev => [saved, ...prev]);
+      setSelectedWorkout(saved);
+    } catch (error: any) {
+      console.error('Failed to create workout:', error);
+      setActionError(error?.message || 'Could not create the workout. Retry without losing your existing training.');
+    } finally {
+      setCreating(false);
+    }
   };
 
   const handleOpenBrainForWorkout = (workout: Workout) => {
@@ -157,6 +177,7 @@ export default function WorkoutPage() {
   const handleDeleteWorkout = async (workout: Workout) => {
     if (!user) return;
     setDeleting(true);
+    setActionError(null);
     try {
       await deleteWorkout(workout.id, user.uid);
       if (activeWorkout?.id === workout.id) {
@@ -167,8 +188,9 @@ export default function WorkoutPage() {
         setSelectedWorkout(null);
       }
       setWorkoutToDelete(null);
-    } catch (e) {
+    } catch (e: any) {
       console.error("Failed to delete workout:", e);
+      setActionError(e?.message || 'Could not delete the workout. Nothing was removed locally.');
     } finally {
       setDeleting(false);
     }
@@ -176,11 +198,12 @@ export default function WorkoutPage() {
 
   const filteredWorkouts = workouts.filter(w => {
     if (filter === 'ALL') return true;
-    return w.status === filter;
+    return String(w.status).toUpperCase() === filter;
   });
 
   const getStatusBadge = (status: Workout['status']) => {
-    switch (status) {
+    const normalizedStatus = String(status).replace(/-/g, '_').toUpperCase();
+    switch (normalizedStatus) {
       case 'IN_PROGRESS':
         return (
           <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/20">
@@ -221,29 +244,24 @@ export default function WorkoutPage() {
 
         <div className="flex items-center gap-2">
           <Button 
-            variant="outline" 
-            size="sm"
-            onClick={async () => {
-              if (!user) return;
-              await seedForgeData(user.uid);
-              await fetchWorkoutsList();
-            }}
-            className="text-xs"
-          >
-            Reset Demo Data
-          </Button>
-          <Button 
             size="sm"
             onClick={handleCreateEmptyWorkout}
+            disabled={creating}
             className="text-xs font-semibold gap-1.5"
           >
-            <Plus size={15} /> New Workout
+            <Plus size={15} /> {creating ? 'Creating…' : 'New Workout'}
           </Button>
         </div>
       </header>
 
+      {actionError && (
+        <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2.5 text-xs text-destructive">
+          {actionError}
+        </div>
+      )}
+
       {/* Filter Tabs */}
-      <div className="flex items-center gap-2 border-b border-border pb-2">
+      <div className="flex items-center gap-2 border-b border-border pb-2" aria-busy={loading}>
         <button
           onClick={() => setFilter('ALL')}
           className={cn(
@@ -251,7 +269,7 @@ export default function WorkoutPage() {
             filter === 'ALL' ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"
           )}
         >
-          All Workouts ({workouts.length})
+          All Workouts ({loading ? '…' : workouts.length})
         </button>
         <button
           onClick={() => setFilter('PLANNED')}
@@ -260,7 +278,7 @@ export default function WorkoutPage() {
             filter === 'PLANNED' ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"
           )}
         >
-          Planned ({workouts.filter(w => w.status === 'PLANNED').length})
+          Planned ({loading ? '…' : workouts.filter(w => String(w.status).toUpperCase() === 'PLANNED').length})
         </button>
         <button
           onClick={() => setFilter('COMPLETED')}
@@ -269,7 +287,7 @@ export default function WorkoutPage() {
             filter === 'COMPLETED' ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"
           )}
         >
-          Completed ({workouts.filter(w => w.status === 'COMPLETED').length})
+          Completed ({loading ? '…' : workouts.filter(w => String(w.status).toUpperCase() === 'COMPLETED').length})
         </button>
       </div>
 
@@ -325,18 +343,37 @@ export default function WorkoutPage() {
           <Dumbbell size={40} className="mx-auto opacity-30 text-primary" />
           <h3 className="font-semibold text-base text-foreground">No workouts found</h3>
           <p className="text-xs max-w-sm mx-auto">
-            Create a custom workout or ask FORGE Brain to construct a progressive overload routine for you.
+            {isGuest
+              ? 'Create a custom workout locally. Connect Google later if you want Hardstate Brain suggestions.'
+              : 'Create a custom workout or ask Hardstate Brain to construct a progressive overload routine for you.'}
           </p>
-          <Button size="sm" onClick={handleCreateEmptyWorkout}>
-            Create First Workout
+          <Button size="sm" onClick={handleCreateEmptyWorkout} disabled={creating}>
+            {creating ? 'Creating…' : 'Create First Workout'}
           </Button>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {filteredWorkouts.map((workout) => {
             // Group exercises for concise summary
-            const uniqueExercises: string[] = Array.from(new Set((workout.sets || []).map(s => s.exercise).filter((e): e is string => Boolean(e))));
-            const totalVolume = (workout.sets || []).reduce((sum, s) => sum + (s.weight * s.reps), 0);
+            const flatExerciseNames = (workout.sets || [])
+              .map((set) => set.exercise)
+              .filter((name): name is string => Boolean(name));
+            const nestedExerciseNames = (workout.exercises || [])
+              .map((exercise) => exercise.name || exercise.exerciseId)
+              .filter(Boolean);
+            const uniqueExercises: string[] = Array.from(
+              new Set(flatExerciseNames.length > 0 ? flatExerciseNames : nestedExerciseNames)
+            );
+            const displaySets = (workout.sets && workout.sets.length > 0)
+              ? workout.sets
+              : (workout.exercises || []).flatMap((exercise) =>
+                  exercise.sets.map((set) => ({
+                    ...set,
+                    exercise: exercise.name || exercise.exerciseId,
+                  }))
+                );
+            const totalVolume = projectCompletedWorkingSets(workout)
+              .reduce((sum, set) => sum + (set.weight * set.reps), 0);
             const isActiveThis = activeWorkout?.id === workout.id;
 
             return (
@@ -360,7 +397,7 @@ export default function WorkoutPage() {
                         <Calendar size={12} className="text-primary" />
                         <span>{workout.scheduledDate}</span>
                         <span>•</span>
-                        <span>{workout.sets?.length || 0} sets</span>
+                        <span>{displaySets.length} sets</span>
                         <span>•</span>
                         <span>{Math.round(totalVolume)} kg</span>
                         {workoutPRCounts[workout.id] && workoutPRCounts[workout.id] > 0 && (
@@ -409,7 +446,7 @@ export default function WorkoutPage() {
                     ) : (
                       <div className="space-y-1.5">
                         {uniqueExercises.slice(0, 3).map((ex, i) => {
-                          const count = workout.sets.filter(s => s.exercise === ex).length;
+                          const count = displaySets.filter((set) => set.exercise === ex).length;
                           return (
                             <div key={i} className="flex items-center justify-between gap-2.5 py-1">
                               <div className="flex items-center gap-2.5 min-w-0 flex-1">
@@ -432,7 +469,7 @@ export default function WorkoutPage() {
 
                 {/* Card Actions */}
                 <div className="p-3 bg-card border-t border-border/40">
-                  {workout.status === 'COMPLETED' ? (
+                  {String(workout.status).toUpperCase() === 'COMPLETED' ? (
                      <Button 
                        variant="secondary" 
                        className="w-full font-bold h-11 text-xs"
@@ -449,7 +486,7 @@ export default function WorkoutPage() {
                           setSelectedWorkout(isActiveThis ? activeWorkout || workout : workout);
                         }}
                       >
-                        <Sparkles size={14} /> Optimize
+                        <Layers size={14} /> Details / Edit
                       </Button>
                       <Button 
                         className={cn(
@@ -459,12 +496,22 @@ export default function WorkoutPage() {
                         onClick={() => {
                           if (isActiveThis) {
                             setSelectedWorkout(activeWorkout || workout);
+                          } else if (uniqueExercises.length === 0) {
+                            setSelectedWorkout(workout);
                           } else {
                             handleStartWorkout(workout);
                           }
                         }}
                       >
-                        <Play size={14} fill="currentColor" /> {isActiveThis ? "Resume" : "Start"}
+                        {uniqueExercises.length === 0 ? (
+                          <>
+                            <Plus size={14} /> Add exercises
+                          </>
+                        ) : (
+                          <>
+                            <Play size={14} fill="currentColor" /> {isActiveThis ? "Resume" : "Start"}
+                          </>
+                        )}
                       </Button>
                     </div>
                   )}
@@ -508,14 +555,26 @@ export default function WorkoutPage() {
       {/* Workout Delete Confirmation Modal */}
       {workoutToDelete && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
-          <div className="bg-card border border-destructive/30 rounded-2xl p-5 max-w-md w-full shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="workout-delete-title"
+            aria-describedby="workout-delete-description"
+            onKeyDown={(event) => {
+              if (event.key === 'Escape' && !deleting) {
+                event.stopPropagation();
+                setWorkoutToDelete(null);
+              }
+            }}
+            className="bg-card border border-destructive/30 rounded-2xl p-5 max-w-md w-full shadow-2xl space-y-4 animate-in fade-in zoom-in-95"
+          >
             <div className="flex items-center gap-3 text-destructive">
               <div className="p-2 rounded-xl bg-destructive/10">
                 <AlertTriangle size={22} />
               </div>
               <div>
-                <h3 className="font-bold text-base text-foreground">Delete Workout?</h3>
-                <p className="text-xs text-muted-foreground">This action will remove the session from your history.</p>
+                <h3 id="workout-delete-title" className="font-bold text-base text-foreground">Delete Workout?</h3>
+                <p id="workout-delete-description" className="text-xs text-muted-foreground">This action will remove the session from your history.</p>
               </div>
             </div>
 
@@ -530,6 +589,7 @@ export default function WorkoutPage() {
 
             <div className="flex gap-2 justify-end pt-1">
               <Button
+                ref={deleteCancelRef}
                 variant="outline"
                 size="sm"
                 onClick={() => setWorkoutToDelete(null)}

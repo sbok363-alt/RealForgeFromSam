@@ -23,6 +23,17 @@ function isPlanned(workout: Workout) {
   return workout.status === 'PLANNED' || workout.status === 'planned';
 }
 
+function workoutExerciseCount(workout: Workout): number {
+  if (Array.isArray(workout.exercises) && workout.exercises.length > 0) {
+    return workout.exercises.length;
+  }
+  return new Set(
+    (workout.sets || [])
+      .map((set) => set.exercise)
+      .filter((name): name is string => Boolean(name))
+  ).size;
+}
+
 function workoutSets(workout: Workout) {
   const nested = workout.exercises?.flatMap((exercise) => exercise.sets) || [];
   return nested.length > 0 ? nested : workout.sets || [];
@@ -189,7 +200,7 @@ export default function Home() {
   });
 
   const startPrimaryWorkout = () => {
-    if (!todayWorkout) {
+    if (!todayWorkout || workoutExerciseCount(todayWorkout) === 0) {
       navigate('/workout');
       return;
     }
@@ -199,20 +210,20 @@ export default function Home() {
   return (
     <div className="mx-auto max-w-lg space-y-4 pb-10 select-none">
       {showWelcome && (
-        <div className="rounded-2xl border border-white/10 bg-[#101012] p-3.5 flex items-start gap-3">
-          <div className="rounded-lg bg-[#FF7A32] p-1.5 text-black shrink-0">
+        <div className="rounded-2xl border border-border bg-card p-3.5 flex items-start gap-3">
+          <div className="rounded-lg bg-primary p-1.5 text-primary-foreground shrink-0">
             <Sparkles size={16} />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-xs font-bold text-white">Hardstate is ready for your first session.</p>
-            <p className="mt-1 text-[11px] text-neutral-400">
+            <p className="text-xs font-bold text-foreground">Hardstate is ready for your first session.</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">
               Your training data stays the source of truth. Start a planned workout or choose one manually.
             </p>
           </div>
           <button
             type="button"
             onClick={() => setShowWelcome(false)}
-            className="p-1 text-neutral-400 hover:text-white"
+            className="p-1 text-muted-foreground hover:text-foreground"
             aria-label="Dismiss"
           >
             <X size={14} />
@@ -222,57 +233,66 @@ export default function Home() {
 
       <header className="flex items-center justify-between pt-1">
         <div>
-          <h1 className="text-2xl font-display font-black tracking-tight text-white leading-none">
+          <h1 className="text-2xl font-display font-black tracking-tight text-foreground leading-none">
             Today
           </h1>
-          <p className="mt-1 text-xs font-medium text-neutral-400">{formattedDate}</p>
+          <p className="mt-1 text-xs font-medium text-muted-foreground">{formattedDate}</p>
         </div>
         <button
           type="button"
           onClick={() => navigate('/plans')}
-          className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-[#141416] px-3 py-1.5 text-xs font-semibold text-neutral-300 active:scale-[0.98]"
+          className="inline-flex items-center gap-1.5 rounded-full border border-border bg-secondary px-3 py-1.5 text-xs font-semibold text-foreground active:scale-[0.98]"
         >
           <CalendarDays size={13} />
           Plans
         </button>
       </header>
 
-      <section className="rounded-3xl border border-white/[0.08] bg-[#101012] p-5 sm:p-6">
+      <section className="rounded-3xl border border-border bg-card p-5 sm:p-6">
         {todayWorkout ? (
           <>
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
-                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#FF7A32]">
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary">
                   {formatScheduledDate(todayWorkout.scheduledDate)}
                 </p>
-                <h2 className="mt-1 truncate text-2xl sm:text-3xl font-display font-black text-white">
+                <h2 className="mt-1 truncate text-2xl sm:text-3xl font-display font-black text-foreground">
                   {todayWorkout.title || todayWorkout.name || 'Workout'}
                 </h2>
-                <p className="mt-1 text-xs text-neutral-400">
-                  {todayWorkout.exercises?.length || 0} exercises
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {workoutExerciseCount(todayWorkout)} exercises
                 </p>
               </div>
-              <Dumbbell size={22} className="mt-1 shrink-0 text-neutral-500" />
+              <Dumbbell size={22} className="mt-1 shrink-0 text-muted-foreground" />
             </div>
 
             <button
               type="button"
               onClick={startPrimaryWorkout}
-              className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-bold text-black transition-transform active:scale-[0.98]"
+              className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-full bg-foreground px-5 py-2.5 text-sm font-bold text-background transition-transform active:scale-[0.98]"
             >
-              <Play size={14} className="fill-black" />
-              Start workout
+              {workoutExerciseCount(todayWorkout) > 0 ? (
+                <>
+                  <Play size={14} className="fill-current" />
+                  Start workout
+                </>
+              ) : (
+                <>
+                  <ArrowRight size={14} />
+                  Add exercises
+                </>
+              )}
             </button>
           </>
         ) : (
           <>
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-neutral-500">
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
               {loading ? 'Loading training' : 'No planned workout'}
             </p>
-            <h2 className="mt-1 text-2xl font-display font-black text-white">
+            <h2 className="mt-1 text-2xl font-display font-black text-foreground">
               {loading ? 'Checking your local training state…' : 'Choose what you want to train.'}
             </h2>
-            <p className="mt-2 max-w-sm text-xs leading-relaxed text-neutral-400">
+            <p className="mt-2 max-w-sm text-xs leading-relaxed text-muted-foreground">
               {loading
                 ? 'You can keep using the app while Hardstate checks saved workouts.'
                 : 'Hardstate will not invent a workout or demo stats when your plan is empty.'}
@@ -281,7 +301,7 @@ export default function Home() {
               <button
                 type="button"
                 onClick={() => navigate('/workout')}
-                className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-bold text-black transition-transform active:scale-[0.98]"
+                className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-full bg-foreground px-5 py-2.5 text-sm font-bold text-background transition-transform active:scale-[0.98]"
               >
                 Choose workout
                 <ArrowRight size={14} />
@@ -292,53 +312,53 @@ export default function Home() {
       </section>
 
       <section className="grid grid-cols-3 gap-2 sm:gap-2.5" aria-label="Training this month">
-        <div className="min-h-[82px] rounded-2xl border border-white/[0.08] bg-[#101012] p-3">
+        <div className="min-h-[82px] rounded-2xl border border-border bg-card p-3">
           <div className="flex items-center justify-between">
-            <span className="font-mono text-xl font-bold text-white">{monthlyStats.workouts}</span>
-            <BarChart2 size={13} className="text-neutral-500" />
+            <span className="font-mono text-xl font-bold text-foreground">{monthlyStats.workouts}</span>
+            <BarChart2 size={13} className="text-muted-foreground" />
           </div>
-          <p className="mt-2 text-[11px] font-medium text-neutral-300">Workouts</p>
-          <p className="text-[10px] text-neutral-500">this month</p>
+          <p className="mt-2 text-[11px] font-medium text-foreground">Workouts</p>
+          <p className="text-[10px] text-muted-foreground">this month</p>
         </div>
 
-        <div className="min-h-[82px] rounded-2xl border border-white/[0.08] bg-[#101012] p-3">
+        <div className="min-h-[82px] rounded-2xl border border-border bg-card p-3">
           <div className="flex items-center justify-between">
-            <span className="font-mono text-xl font-bold text-white">
+            <span className="font-mono text-xl font-bold text-foreground">
               {monthlyStats.volume.toLocaleString()}
             </span>
-            <Dumbbell size={13} className="text-neutral-500" />
+            <Dumbbell size={13} className="text-muted-foreground" />
           </div>
-          <p className="mt-2 text-[11px] font-medium text-neutral-300">Volume</p>
-          <p className="text-[10px] text-neutral-500">kg logged</p>
+          <p className="mt-2 text-[11px] font-medium text-foreground">Volume</p>
+          <p className="text-[10px] text-muted-foreground">kg logged</p>
         </div>
 
-        <div className="min-h-[82px] rounded-2xl border border-white/[0.08] bg-[#101012] p-3">
+        <div className="min-h-[82px] rounded-2xl border border-border bg-card p-3">
           <div className="flex items-center justify-between">
-            <span className="font-mono text-xl font-bold text-white">{monthlyStats.sets}</span>
-            <CheckCircle2 size={13} className="text-neutral-500" />
+            <span className="font-mono text-xl font-bold text-foreground">{monthlyStats.sets}</span>
+            <CheckCircle2 size={13} className="text-muted-foreground" />
           </div>
-          <p className="mt-2 text-[11px] font-medium text-neutral-300">Sets</p>
-          <p className="text-[10px] text-neutral-500">completed</p>
+          <p className="mt-2 text-[11px] font-medium text-foreground">Sets</p>
+          <p className="text-[10px] text-muted-foreground">completed</p>
         </div>
       </section>
 
       {nextWorkout && (
         <section className="space-y-2 pt-1">
-          <h3 className="text-sm font-bold tracking-tight text-white">Up next</h3>
+          <h3 className="text-sm font-bold tracking-tight text-foreground">Up next</h3>
           <button
             type="button"
             onClick={() => startWorkout(nextWorkout)}
-            className="flex w-full items-center justify-between gap-3 rounded-2xl border border-white/[0.08] bg-[#101012] p-3 text-left transition-transform active:scale-[0.99]"
+            className="flex w-full items-center justify-between gap-3 rounded-2xl border border-border bg-card p-3 text-left transition-transform active:scale-[0.99]"
           >
             <div className="min-w-0">
-              <p className="truncate text-sm font-bold text-white">
+              <p className="truncate text-sm font-bold text-foreground">
                 {nextWorkout.title || nextWorkout.name || 'Workout'}
               </p>
-              <p className="mt-0.5 text-xs text-neutral-400">
+              <p className="mt-0.5 text-xs text-muted-foreground">
                 {formatScheduledDate(nextWorkout.scheduledDate)}
               </p>
             </div>
-            <ArrowRight size={15} className="shrink-0 text-neutral-500" />
+            <ArrowRight size={15} className="shrink-0 text-muted-foreground" />
           </button>
         </section>
       )}

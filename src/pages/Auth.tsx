@@ -9,7 +9,8 @@ import {
   GoogleAuthProvider 
 } from 'firebase/auth';
 import { auth } from '../lib/firebase';
-import { useAuthStore, DEMO_USER } from '../store/useAuthStore';
+import { useAuthStore, createGuestUser } from '../store/useAuthStore';
+import { hasLocalGuestData, setGuestSessionActive } from '../lib/guest-session';
 import { 
   Dumbbell, 
   AlertCircle, 
@@ -39,6 +40,8 @@ export default function Auth() {
   const [redirecting, setRedirecting] = useState(false);
   const [errorState, setErrorState] = useState<AuthErrorState | null>(null);
   const [copiedDomain, setCopiedDomain] = useState(false);
+  const [routeGuestUpgrade, setRouteGuestUpgrade] = useState(false);
+  const hasGuestData = hasLocalGuestData();
 
   const isInIframe = typeof window !== 'undefined' && window.self !== window.top;
   const currentHostname = typeof window !== 'undefined' ? window.location.hostname : '';
@@ -47,18 +50,26 @@ export default function Auth() {
   // 1. If user is already authenticated or becomes authenticated, immediately redirect to app root
   useEffect(() => {
     if (user) {
-      navigate('/', { replace: true });
+      navigate(routeGuestUpgrade ? '/profile' : '/', { replace: true });
     }
-  }, [user, navigate]);
+  }, [user, navigate, routeGuestUpgrade]);
 
   // 2. Check for redirect result in case signInWithRedirect was used
   useEffect(() => {
     let isMounted = true;
     getRedirectResult(auth)
-      .then((result) => {
+      .then(async (result) => {
         if (!isMounted) return;
         if (result?.user) {
+          if (hasLocalGuestData()) {
+            await auth.signOut();
+            setRouteGuestUpgrade(true);
+            setGuestSessionActive(true);
+            setUser(createGuestUser());
+            return;
+          }
           localStorage.removeItem('forge_demo_session');
+          setGuestSessionActive(false);
           setUser(result.user);
           navigate('/', { replace: true });
         }
@@ -82,7 +93,7 @@ export default function Auth() {
       setErrorState({
         type: 'popup_blocked',
         title: 'Sign-In Popup Blocked',
-        message: 'Your browser or the preview frame blocked the Google sign-in popup. You can open FORGE in a new browser tab or use redirect sign-in.',
+        message: 'Your browser or the preview frame blocked the Google sign-in popup. You can open Hardstate in a new browser tab or use redirect sign-in.',
         code,
       });
     } else if (code === 'auth/unauthorized-domain') {
@@ -123,7 +134,17 @@ export default function Auth() {
     }
   };
 
+  const routeThroughGuestUpgrade = () => {
+    setRouteGuestUpgrade(true);
+    setGuestSessionActive(true);
+    setUser(createGuestUser());
+  };
+
   const handleGooglePopupLogin = async () => {
+    if (hasGuestData) {
+      routeThroughGuestUpgrade();
+      return;
+    }
     setLoading(true);
     setErrorState(null);
     try {
@@ -132,6 +153,7 @@ export default function Auth() {
       const result = await signInWithPopup(auth, provider);
       if (result.user) {
         localStorage.removeItem('forge_demo_session');
+          setGuestSessionActive(false);
         setUser(result.user);
         navigate('/', { replace: true });
       }
@@ -144,6 +166,10 @@ export default function Auth() {
   };
 
   const handleGoogleRedirectLogin = async () => {
+    if (hasGuestData) {
+      routeThroughGuestUpgrade();
+      return;
+    }
     setRedirecting(true);
     setErrorState(null);
     try {
@@ -157,9 +183,10 @@ export default function Auth() {
     }
   };
 
-  const handleDemoLogin = () => {
-    localStorage.setItem('forge_demo_session', 'true');
-    setUser(DEMO_USER);
+  const handleGuestLogin = () => {
+    setGuestSessionActive(true);
+    localStorage.removeItem('forge_demo_session');
+    setUser(createGuestUser());
     navigate('/', { replace: true });
   };
 
@@ -194,9 +221,9 @@ export default function Auth() {
           
           {/* Header */}
           <div className="text-center space-y-1.5">
-            <h1 className="text-3xl font-display font-extrabold tracking-tight text-foreground">FORGE</h1>
+            <h1 className="text-3xl font-display font-extrabold tracking-tight text-foreground">Hardstate</h1>
             <p className="text-muted-foreground text-sm max-w-xs">
-              Autonomous Hypertrophy & Strength Intelligence System
+              Plan less. Train more.
             </p>
           </div>
 
@@ -210,7 +237,7 @@ export default function Auth() {
                   onClick={handleOpenInNewTab}
                   className="block mt-1 font-semibold text-primary hover:underline"
                 >
-                  Open FORGE in New Tab &rarr;
+                  Open Hardstate in New Tab &rarr;
                 </button>
               </div>
             </div>
@@ -312,7 +339,7 @@ export default function Auth() {
                       d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
                     />
                   </svg>
-                  <span>Continue with Google</span>
+                  <span>{hasGuestData ? 'Save Guest data with Google' : 'Continue with Google'}</span>
                 </>
               )}
             </Button>
@@ -323,23 +350,23 @@ export default function Auth() {
                 <div className="w-full border-t border-border/60" />
               </div>
               <span className="relative px-3 bg-card text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                or preview mode
+                or
               </span>
             </div>
 
-            {/* Instant Demo Athlete Access */}
+            {/* Local Guest access */}
             <Button
               variant="outline"
               size="lg"
               className="w-full flex items-center justify-center gap-2 border-border/80 hover:bg-secondary/60 hover:text-foreground group"
-              onClick={handleDemoLogin}
+              onClick={handleGuestLogin}
             >
               <Sparkles size={16} className="text-amber-500 group-hover:scale-110 transition-transform" />
-              <span className="font-semibold">Explore as Demo Athlete</span>
+              <span className="font-semibold">Continue as Guest</span>
               <ArrowRight size={14} className="text-muted-foreground group-hover:translate-x-0.5 transition-transform" />
             </Button>
             <p className="text-[11px] text-center text-muted-foreground">
-              Instant access with pre-configured workout logs, muscle heatmaps, and AI copilot.
+              No account needed. Your training stays on this device until you connect Google.
             </p>
           </div>
 

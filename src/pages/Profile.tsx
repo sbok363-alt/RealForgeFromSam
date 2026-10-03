@@ -1,22 +1,63 @@
 import React, { useState } from 'react';
 import { Button } from '../components/ui/Button';
-import { useAuthStore } from '../store/useAuthStore';
+import { createGuestUser, useAuthStore } from '../store/useAuthStore';
 import { useThemeStore } from '../store/useThemeStore';
 import { auth } from '../lib/firebase';
 import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
-import { LogOut, Moon, Sun, Sparkles, ShieldCheck, RefreshCw, AlertCircle, Volume2, VolumeX } from 'lucide-react';
+import {
+  getBodyweight,
+  getPersonalRecords,
+  getPlans,
+  getTarget1RMs,
+  getUserPermissions,
+  getUserProfile,
+  getWorkouts,
+  migrateLocalAuditHistory,
+  saveBodyweight,
+  savePersonalRecord,
+  savePlan,
+  saveTarget1RM,
+  saveUserProfile,
+  updateUserPermissions,
+  upsertWorkoutForCloudMigration,
+  verifyCloudMigration,
+} from '../lib/api';
+import {
+  beginGuestCloudMigration,
+  endGuestCloudMigration,
+  isGuestUserId,
+  retireGuestTrainingDataAfterUpgrade,
+  setGuestSessionActive,
+  updateGuestDisplayName,
+} from '../lib/guest-session';
+import { LogOut, Moon, Sun, Sparkles, ShieldCheck, RefreshCw, AlertCircle, Volume2, VolumeX, Pencil } from 'lucide-react';
 import { Card, CardContent } from '../components/ui/Card';
 import { soundFx } from '../lib/soundFx';
+
+const GOOGLE_SYNC_ERROR_KEY = 'hardstate_google_sync_error';
 
 export default function Profile() {
   const { user, setUser } = useAuthStore();
   const { theme, toggleTheme } = useThemeStore();
   const [connectingGoogle, setConnectingGoogle] = useState(false);
-  const [googleError, setGoogleError] = useState<string | null>(null);
+  const [googleError, setGoogleError] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    return window.sessionStorage.getItem(GOOGLE_SYNC_ERROR_KEY);
+  });
   const [soundEnabled, setSoundEnabled] = useState(soundFx.isEnabled());
+  const [editingName, setEditingName] = useState(false);
+  const [guestName, setGuestName] = useState(user?.displayName || 'Guest');
+
+  const setGoogleSyncError = (message: string | null) => {
+    setGoogleError(message);
+    if (typeof window === 'undefined') return;
+    if (message) window.sessionStorage.setItem(GOOGLE_SYNC_ERROR_KEY, message);
+    else window.sessionStorage.removeItem(GOOGLE_SYNC_ERROR_KEY);
+  };
 
   const handleSignOut = async () => {
     localStorage.removeItem('forge_demo_session');
+    setGuestSessionActive(false);
     try {
       await auth.signOut();
     } catch (e) {
@@ -26,25 +67,123 @@ export default function Profile() {
   };
 
   const handleConnectGoogle = async () => {
+    if (!user || !isGuestUserId(user.uid)) return;
     setConnectingGoogle(true);
-    setGoogleError(null);
+    setGoogleSyncError(null);
+
+    const guestUid = user.uid;
+    let migrationStarted = false;
+
     try {
+      const [
+        guestWorkouts,
+        guestProfile,
+        guestPlans,
+        guestBodyweight,
+        guestPersonalRecords,
+        guestTargets,
+        guestPermissions,
+      ] = await Promise.all([
+        getWorkouts(guestUid),
+        getUserProfile(guestUid),
+        getPlans(guestUid),
+        getBodyweight(guestUid),
+        getPersonalRecords(guestUid),
+        getTarget1RMs(guestUid),
+        getUserPermissions(guestUid),
+      ]);
+
+      beginGuestCloudMigration();
+      migrationStarted = true;
+
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
       const result = await signInWithPopup(auth, provider);
-      if (result?.user) {
-        localStorage.removeItem('forge_demo_session');
-        setUser(result.user);
+      if (!result?.user) throw new Error('Google sign-in did not return a user');
+
+      if (guestProfile) {
+        await saveUserProfile({
+          ...guestProfile,
+          userId: result.user.uid,
+          name: guestProfile.name || user.displayName || 'Athlete',
+        });
       }
+
+      for (const workout of guestWorkouts) {
+        await upsertWorkoutForCloudMigration(workout, result.user.uid, guestUid);
+      }
+      for (const plan of guestPlans) {
+        await savePlan(
+          { ...plan, userId: result.user.uid },
+          { requireCloud: true }
+        );
+      }
+      for (const entry of guestBodyweight) {
+        await saveBodyweight(
+          { ...entry, userId: result.user.uid },
+          { requireCloud: true }
+        );
+      }
+      for (const record of guestPersonalRecords) {
+        await savePersonalRecord(
+          { ...record, userId: result.user.uid },
+          { requireCloud: true }
+        );
+      }
+      for (const target of guestTargets) {
+        await saveTarget1RM(
+          { ...target, userId: result.user.uid },
+          { requireCloud: true }
+        );
+      }
+
+      await updateUserPermissions(
+        result.user.uid,
+        guestPermissions.autonomyLevel,
+        { requireCloud: true }
+      );
+
+      await verifyCloudMigration(result.user.uid, {
+        workoutIds: guestWorkouts.map((item) => item.id),
+        planIds: guestPlans.map((item) => item.id),
+        bodyweightIds: guestBodyweight.map((item) => item.id),
+        personalRecordIds: guestPersonalRecords.map((item) => item.id),
+        targetIds: guestTargets.map((item) => item.id),
+        requireCompletedProfile: Boolean(guestProfile?.onboardingCompleted),
+        autonomyLevel: guestPermissions.autonomyLevel,
+      });
+
+      migrateLocalAuditHistory(guestUid, result.user.uid);
+      retireGuestTrainingDataAfterUpgrade(guestUid);
+
+      endGuestCloudMigration();
+      migrationStarted = false;
+      setGuestSessionActive(false);
+      localStorage.removeItem('forge_demo_session');
+      setUser(result.user);
     } catch (err: any) {
-      console.error("Connect Google error:", err);
-      setGoogleError(err.message || 'Failed to connect Google account');
+      console.error("Connect Google migration error:", err);
+      if (migrationStarted) {
+        endGuestCloudMigration();
+        migrationStarted = false;
+      }
+      setGuestSessionActive(true);
+      try {
+        await auth.signOut();
+      } catch {}
+      setUser(createGuestUser());
+
+      const cause = err?.message ? ` Reason: ${err.message}` : '';
+      setGoogleSyncError(
+        `Google sync was not completed. Your local Guest data is still on this device.${cause}`
+      );
     } finally {
+      if (migrationStarted) endGuestCloudMigration();
       setConnectingGoogle(false);
     }
   };
 
-  const isDemo = Boolean(user && 'isDemo' in user && (user as any).isDemo);
+  const isGuest = Boolean(user && isGuestUserId(user.uid));
 
   return (
     <div className="space-y-6 max-w-2xl mx-auto">
@@ -64,31 +203,75 @@ export default function Profile() {
                 {user?.photoURL ? (
                   <img src={user.photoURL} alt="Profile" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
                 ) : (
-                  <span className="text-2xl font-bold">{user?.email?.charAt(0).toUpperCase() || 'A'}</span>
+                  <span className="text-2xl font-bold">{(user?.displayName || user?.email || 'A').charAt(0).toUpperCase()}</span>
                 )}
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h2 className="text-lg font-bold">{user?.displayName || "Athlete"}</h2>
-                  {isDemo ? (
+                  {isGuest && editingName ? (
+                    <div className="flex items-center gap-2">
+                      <input
+                        value={guestName}
+                        onChange={(event) => setGuestName(event.target.value)}
+                        maxLength={40}
+                        autoFocus
+                        className="h-9 min-w-0 rounded-lg border border-border bg-background px-2 text-sm font-semibold"
+                      />
+                      <Button
+                        size="sm"
+                        onClick={async () => {
+                          const identity = updateGuestDisplayName(guestName);
+                          const profile = await getUserProfile(identity.uid);
+                          if (profile) {
+                            await saveUserProfile({
+                              ...profile,
+                              name: identity.displayName,
+                            });
+                          }
+                          setUser(createGuestUser());
+                          setGuestName(identity.displayName);
+                          setEditingName(false);
+                        }}
+                      >
+                        Save
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-lg font-bold">{user?.displayName || "Athlete"}</h2>
+                      {isGuest && (
+                        <button
+                          type="button"
+                          onClick={() => setEditingName(true)}
+                          className="rounded-lg p-1.5 text-muted-foreground hover:bg-secondary"
+                          aria-label="Edit guest name"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  {isGuest ? (
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-500 border border-amber-500/30 flex items-center gap-1">
                       <Sparkles size={11} />
-                      Demo Session
+                      Local only
                     </span>
                   ) : (
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-500 border border-emerald-500/30 flex items-center gap-1">
                       <ShieldCheck size={11} />
-                      Google Verified
+                      Cloud synced
                     </span>
                   )}
                 </div>
-                <p className="text-sm text-muted-foreground">{user?.email || "No email associated"}</p>
+                <p className="text-sm text-muted-foreground">
+                  {isGuest ? 'Stored on this device only' : user?.email || "No email associated"}
+                </p>
                 <p className="text-[11px] text-muted-foreground font-mono mt-0.5">UID: {user?.uid}</p>
               </div>
             </div>
 
-            {/* If in demo mode, provide Connect Google Account button */}
-            {isDemo && (
+            {/* Guest upgrade: verified cloud sync plus local audit-history preservation. */}
+            {isGuest && (
               <div className="w-full sm:w-auto">
                 <Button
                   size="sm"
@@ -119,13 +302,17 @@ export default function Profile() {
                       />
                     </svg>
                   )}
-                  <span>Connect Google Account</span>
+                  <span>Save & sync with Google</span>
                 </Button>
                 {googleError && (
-                  <p className="text-[11px] text-destructive mt-1 flex items-center gap-1">
-                    <AlertCircle size={12} />
-                    {googleError}
-                  </p>
+                  <div
+                    role="alert"
+                    aria-live="assertive"
+                    className="mt-2 flex max-w-sm items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+                  >
+                    <AlertCircle size={14} className="mt-0.5 shrink-0" />
+                    <span>{googleError}</span>
+                  </div>
                 )}
               </div>
             )}
@@ -148,13 +335,13 @@ export default function Profile() {
           
           <div className="flex items-center justify-between">
             <div className="flex flex-col">
-              <span className="font-semibold text-[#FF7A32]">Cyber-Forge Haptics</span>
+              <span className="font-semibold text-primary">Hardstate Haptics</span>
               <span className="text-sm text-muted-foreground">Synthesized cybernetic feedback & metallic lock sounds</span>
             </div>
             <Button 
               variant="outline" 
               size="icon" 
-              className={soundEnabled ? 'text-[#FF7A32] border-[#FF7A32]/50 hover:bg-[#FF7A32]/10' : ''}
+              className={soundEnabled ? 'text-primary border-primary/50 hover:bg-primary/10' : ''}
               onClick={() => {
                 const newState = soundFx.toggle();
                 setSoundEnabled(newState);
@@ -170,7 +357,7 @@ export default function Profile() {
       <div className="pt-2">
         <Button variant="danger" className="w-full flex items-center justify-center gap-2" onClick={handleSignOut}>
           <LogOut size={18} />
-          {isDemo ? 'Exit Demo Session' : 'Sign Out'}
+          {isGuest ? 'Exit Guest Session' : 'Sign Out'}
         </Button>
       </div>
     </div>

@@ -162,6 +162,9 @@ export interface MutationAuditLog {
   inverseDelta: Record<string, any>;
   createdAt: string;
   proposalId?: string;
+  action?: string;
+  mutationType?: string;
+  storageScope?: 'LOCAL' | 'LOCAL_MIGRATED' | 'SERVER';
 }
 
 export type ThreadStatus = 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'ARCHIVED' | 'EXPIRED';

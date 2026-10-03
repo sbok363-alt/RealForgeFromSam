@@ -181,27 +181,65 @@ export async function handleMutationsExecute(req: any, res: any) {
     let payloadSchema: any;
     let targetEntityType: string;
     let defaultTargetId: string | undefined;
+    // B1: audit-facing entity type and the physical storage collection can differ.
+    // When they do, the ownership probe must be pointed at the collection that is
+    // actually written, otherwise the guard silently resolves null and is skipped.
+    let ownershipEntityCollection: string | undefined;
 
     switch (mutationType) {
-      case 'LOG_SET':
+      case 'LOG_SET': {
         payloadSchema = LogSetInputSchema;
-        targetEntityType = envelope.payload?.workoutId ? 'workouts' : 'WORKOUT_SET';
-        defaultTargetId = envelope.payload?.workoutId || envelope.payload?.exerciseId;
+        const rawWorkoutId = envelope.payload?.workoutId;
+        const rawExerciseId = envelope.payload?.exerciseId;
+        const normalizedWorkoutId =
+          typeof rawWorkoutId === 'string' ? rawWorkoutId.trim() : '';
+        const normalizedExerciseId =
+          typeof rawExerciseId === 'string' ? rawExerciseId.trim() : '';
+        targetEntityType = normalizedWorkoutId ? 'WORKOUT' : 'WORKOUT_SET';
+        defaultTargetId = normalizedWorkoutId || normalizedExerciseId || undefined;
+        if (normalizedWorkoutId) {
+          ownershipEntityCollection = 'workouts';
+        }
         break;
-      case 'CREATE_WORKOUT_SESSION':
+      }
+      case 'CREATE_WORKOUT_SESSION': {
         payloadSchema = CreateWorkoutSessionSchema;
         targetEntityType = 'WORKOUT';
+        const rawIdempotencyKey = envelope.idempotencyKey;
+        defaultTargetId =
+          typeof rawIdempotencyKey === 'string' && rawIdempotencyKey.trim()
+            ? `w_${rawIdempotencyKey.trim()}`
+            : undefined;
+        // Creation identity must be stable before execution so ownership, audit,
+        // idempotency, and the physical workout write all reference one document.
+        ownershipEntityCollection = 'workouts';
         break;
-      case 'UPDATE_TARGET_PROGRESSION':
+      }
+      case 'UPDATE_TARGET_PROGRESSION': {
         payloadSchema = UpdateTargetProgressionSchema;
         targetEntityType = 'TARGET_PROGRESSION';
-        defaultTargetId = envelope.payload?.exerciseId;
+        const rawExerciseId = envelope.payload?.exerciseId;
+        const normalizedExerciseId =
+          typeof rawExerciseId === 'string' ? rawExerciseId.trim() : '';
+        defaultTargetId = normalizedExerciseId
+          ? `target_${uid}_${normalizedExerciseId}`
+          : undefined;
+        // TARGET_PROGRESSION is audit-facing; persisted target documents live in targets_1rm.
+        ownershipEntityCollection = 'targets_1rm';
         break;
-      case 'MODIFY_TRAINING_PLAN':
+      }
+      case 'MODIFY_TRAINING_PLAN': {
         payloadSchema = ModifyTrainingPlanSchema;
         targetEntityType = 'TRAINING_PLAN';
-        defaultTargetId = envelope.payload?.planId;
+        const rawPlanId = envelope.payload?.planId;
+        const normalizedPlanId =
+          typeof rawPlanId === 'string' ? rawPlanId.trim() : '';
+        defaultTargetId = normalizedPlanId || undefined;
+        // Plans live in the 'plans' collection; the audit entity type stays TRAINING_PLAN.
+        // Normalize before the ownership probe so the checked document is exactly the one written.
+        ownershipEntityCollection = 'plans';
         break;
+      }
       default:
         return res.status(400).json({
           success: false,
@@ -224,6 +262,11 @@ export async function handleMutationsExecute(req: any, res: any) {
       targetEntityType,
       targetEntityId: defaultTargetId,
       storageAdapter,
+      // B1: resolve ownership against the collection that is actually written.
+      getExistingEntity: ownershipEntityCollection
+        ? async (targetEntityId: string, txStorage: any) =>
+            txStorage.findExistingEntity(ownershipEntityCollection, targetEntityId)
+        : undefined,
       execute: async (validatedPayload: any, ctx: MutationExecutionContext) => {
         if (mutationType === 'LOG_SET') {
           const workoutId = validatedPayload.workoutId;
@@ -260,7 +303,10 @@ export async function handleMutationsExecute(req: any, res: any) {
         }
 
         if (mutationType === 'CREATE_WORKOUT_SESSION') {
-          const sessionId = `w_${crypto.randomUUID()}`;
+          if (!defaultTargetId) {
+            throw new Error("INVALID_CREATE_TARGET");
+          }
+          const sessionId = defaultTargetId;
           const newWorkout = {
             id: sessionId,
             userId: uid,
@@ -285,9 +331,7 @@ export async function handleMutationsExecute(req: any, res: any) {
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
           };
-          if (!isDemo && adminDb) {
-            await adminDb.collection("workouts").doc(sessionId).set(newWorkout);
-          }
+          await ctx.storage.commitMutation('workouts', sessionId, newWorkout);
           return newWorkout;
         }
 
@@ -305,25 +349,27 @@ export async function handleMutationsExecute(req: any, res: any) {
             rationale: validatedPayload.rationale,
             updatedAt: new Date().toISOString()
           };
-          if (!isDemo && adminDb) {
-            await adminDb.collection("targets_1rm").doc(targetId).set(targetData, { merge: true });
-          }
+          await ctx.storage.commitMutation('targets_1rm', targetId, targetData);
           return targetData;
         }
 
         if (mutationType === 'MODIFY_TRAINING_PLAN') {
+          const planId = validatedPayload.planId;
           const planData = {
-            id: validatedPayload.planId,
+            id: planId,
             userId: uid,
             name: validatedPayload.name,
             weeklyFrequency: validatedPayload.weeklyFrequency,
-            isActive: validatedPayload.isActive !== undefined ? validatedPayload.isActive : true,
+            isActive:
+              validatedPayload.isActive !== undefined
+                ? validatedPayload.isActive
+                : (ctx.existingEntity?.isActive ?? true),
             days: validatedPayload.days,
             updatedAt: new Date().toISOString()
           };
-          if (!isDemo && adminDb) {
-            await adminDb.collection("plans").doc(validatedPayload.planId).set(planData, { merge: true });
-          }
+          // B1: write through the transactional storage adapter so the ownership check
+          // and the mutation commit inside the same authoritative transaction.
+          await ctx.storage.commitMutation('plans', planId, planData);
           return planData;
         }
 

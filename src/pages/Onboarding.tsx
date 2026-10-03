@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/useAuthStore';
-import { saveUserProfile, seedForgeData, saveWorkout } from '../lib/api';
+import { getWorkout, saveUserProfile, saveWorkout } from '../lib/api';
 import { UserProfile, ExperienceLevel, PrimaryGoal, EquipmentAccess, Workout } from '../types';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent } from '../components/ui/Card';
@@ -118,14 +118,48 @@ function buildStarterWorkout(
     }
   }
 
-  return {
+  const groupedExercises = Array.from(
+    sets.reduce((map, set) => {
+      const key = set.exercise;
+      const existing = map.get(key) || [];
+      existing.push({
+        id: set.id,
+        weight: set.weight,
+        reps: set.reps,
+        rir: set.rir,
+        rpe: set.rpe,
+        notes: set.notes,
+        setType: set.setType,
+        completed: false,
+      });
+      map.set(key, existing);
+      return map;
+    }, new Map<string, Array<{
+      id: string;
+      weight: number;
+      reps: number;
+      rir?: number;
+      rpe?: number;
+      notes?: string;
+      setType?: 'N' | 'W' | 'D' | 'F' | 'normal';
+      completed: boolean;
+    }>>())
+  ).map(([exerciseName, exerciseSets]) => ({
     id: crypto.randomUUID(),
+    exerciseId: exerciseName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+    name: exerciseName,
+    sets: exerciseSets,
+  }));
+
+  return {
+    id: `onboarding-starter-${userId}`,
     userId,
     title,
     scheduledDate: today,
     status: 'PLANNED',
     version: 1,
     sets,
+    exercises: groupedExercises,
     updatedAt: new Date().toISOString(),
   };
 }
@@ -140,6 +174,7 @@ export default function Onboarding() {
   const [daysPerWeek, setDaysPerWeek] = useState<number | null>(null);
   const [equipment, setEquipment] = useState<EquipmentAccess | null>(null);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const canNext =
     (step === 1 && goal) ||
@@ -150,8 +185,23 @@ export default function Onboarding() {
   const handleFinish = async () => {
     if (!user || !goal || !experience || !daysPerWeek || !equipment) return;
     setSaving(true);
+    setSaveError(null);
 
     try {
+      const firstWorkout = buildStarterWorkout(user.uid, goal, experience, equipment);
+
+      // Durable-first and retry-safe: create the stable starter workout before
+      // declaring onboarding complete. A retry reuses the same workout id.
+      const existingStarter = await getWorkout(firstWorkout.id, user.uid);
+      if (!existingStarter) {
+        await saveWorkout(
+          firstWorkout,
+          'SYSTEM_AUTONOMOUS',
+          'Onboarding starter session'
+        );
+      }
+
+      const existingProfileCreatedAt = Date.now();
       const profile: UserProfile = {
         userId: user.uid,
         name: user.displayName || 'Athlete',
@@ -162,36 +212,28 @@ export default function Onboarding() {
         equipment,
         onboardingCompleted: true,
         onboardingCompletedAt: Date.now(),
-        createdAt: Date.now(),
+        createdAt: existingProfileCreatedAt,
       };
 
       await saveUserProfile(profile);
 
-      // Mark as seeded so Home doesn't overwrite with demo data
-      localStorage.setItem(`forge_seeded_${user.uid}`, 'true');
+      // Only publish completion markers after both durable writes succeeded.
       localStorage.setItem(`forge_onboarded_${user.uid}`, 'true');
 
-      // Create a real first workout tailored to answers
-      const firstWorkout = buildStarterWorkout(user.uid, goal, experience, equipment);
-      await saveWorkout(firstWorkout, 'SYSTEM_AUTONOMOUS', 'Onboarding starter session');
-
-      // Optional: still seed some history if empty (non-destructive)
-      await seedForgeData(user.uid);
-
-      // Land on Home with a strong first Brain prompt ready
-      navigate('/', { 
+      navigate('/', {
         replace: true,
-        state: { 
+        state: {
           justOnboarded: true,
           firstWorkoutId: firstWorkout.id,
-          autoBrainPrompt: `I just finished onboarding. Goal: ${goal}. Experience: ${experience}. ${daysPerWeek} days/week. Equipment: ${equipment}. Analyze my starter session and give me the single best progressive overload tip for my first real workout.`
         }
       });
-    } catch (e) {
+    } catch (e: any) {
       console.error('Onboarding save failed:', e);
-      // Still proceed so user is not stuck
-      localStorage.setItem(`forge_onboarded_${user.uid}`, 'true');
-      navigate('/', { replace: true });
+      setSaveError(
+        e?.message
+          ? `Could not finish setup: ${e.message}`
+          : 'Could not finish setup. Your answers are still here — retry when ready.'
+      );
     } finally {
       setSaving(false);
     }
@@ -222,7 +264,7 @@ export default function Onboarding() {
             {step === 4 && "What equipment do you have?"}
           </h1>
           <p className="text-sm text-muted-foreground">
-            {step === 1 && "This shapes every proposal FORGE makes."}
+            {step === 1 && "This shapes every proposal Hardstate makes."}
             {step === 2 && "We adjust volume, intensity and progression speed."}
             {step === 3 && "We'll build a realistic schedule around your life."}
             {step === 4 && "Exercises will match what you can actually do."}
@@ -333,6 +375,15 @@ export default function Onboarding() {
           ))}
         </div>
 
+        {saveError && (
+          <div
+            role="alert"
+            className="w-full mb-4 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive"
+          >
+            {saveError}
+          </div>
+        )}
+
         {/* Navigation */}
         <div className="w-full flex items-center gap-3">
           {step > 1 ? (
@@ -376,7 +427,7 @@ export default function Onboarding() {
 
         {/* Tiny trust line */}
         <p className="text-[11px] text-muted-foreground text-center mt-6 max-w-xs">
-          FORGE never changes your program without your approval. Every suggestion is a versioned proposal.
+          Hardstate never changes your program without your approval. Every suggestion is a versioned proposal.
         </p>
       </div>
     </div>

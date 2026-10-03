@@ -103,8 +103,11 @@ export default function Progress() {
 
   if (loading) return <div>Loading progress...</div>;
 
-  const totalVolume = workouts.reduce((sum, w) => sum + (w.totalVolume || 0), 0);
-  const workoutCount = workouts.length;
+  const completedWorkouts = workouts.filter(
+    (workout) => workout.status === 'COMPLETED' || workout.status === 'completed'
+  );
+  const totalVolume = completedWorkouts.reduce((sum, workout) => sum + (workout.totalVolume || 0), 0);
+  const workoutCount = completedWorkouts.length;
 
   // PR extraction for recent workouts
   interface PR {
@@ -125,7 +128,9 @@ export default function Progress() {
   };
 
   // Sort workouts oldest to newest for PR chronological calculation
-  const sortedWorkouts = [...workouts].filter(w => w.status === 'completed').sort((a, b) => a.startedAt - b.startedAt);
+  const sortedWorkouts = [...completedWorkouts].sort(
+    (a, b) => (a.startedAt || a.completedAt || 0) - (b.startedAt || b.completedAt || 0)
+  );
   
   for (const w of sortedWorkouts) {
     const workoutVolumes: Record<string, number> = {};
